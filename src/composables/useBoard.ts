@@ -1,8 +1,14 @@
 import { computed, reactive, ref, toRaw } from 'vue'
 import type { Ball, Counter, CounterColor, Drawing, PitchType, Vec } from '../types'
-import { PITCH_H, PITCH_W, clampToPitch } from '../geometry'
+import { PITCH_H, PITCH_W, clampToPitch, distance } from '../geometry'
 
 export const UNDO_LIMIT = 50
+
+/** How close to a counter the ball must land to be taken into possession, in pitch units. */
+export const SNAP_RADIUS = 3.5
+
+/** Where an attached ball sits relative to its holder, in pitch units. */
+export const BALL_OFFSET: Vec = { x: 1.8, y: 1.8 }
 
 export type BoardState = {
   counters: Counter[]
@@ -162,7 +168,46 @@ function deleteCounter(id: string): void {
   const index = state.counters.findIndex((c) => c.id === id)
   if (index === -1) return
   commit()
+  if (state.ball.attachedTo === id) {
+    state.ball.pos = { ...state.counters[index].pos }
+    state.ball.attachedTo = null
+  }
   state.counters.splice(index, 1)
+}
+
+/** Drag-time move. Detaches from any holder; does not commit. */
+function moveBall(pos: Vec): void {
+  state.ball.attachedTo = null
+  state.ball.pos = clampToPitch(pos)
+}
+
+/** Pointer-up. Resolves possession; does not commit. */
+function dropBall(pos: Vec): void {
+  const at = clampToPitch(pos)
+  state.ball.pos = at
+
+  let nearest: Counter | undefined
+  let nearestDistance = Infinity
+  for (const counter of state.counters) {
+    const d = distance(at, counter.pos)
+    if (d < nearestDistance) {
+      nearestDistance = d
+      nearest = counter
+    }
+  }
+
+  state.ball.attachedTo = nearest && nearestDistance <= SNAP_RADIUS ? nearest.id : null
+}
+
+/** Where the ball should actually be drawn. */
+function ballPosition(): Vec {
+  if (state.ball.attachedTo) {
+    const holder = counterById(state.ball.attachedTo)
+    if (holder) {
+      return { x: holder.pos.x + BALL_OFFSET.x, y: holder.pos.y + BALL_OFFSET.y }
+    }
+  }
+  return state.ball.pos
 }
 
 const canUndo = computed(() => undoStack.value.length > 0)
@@ -188,6 +233,9 @@ const board = {
   deleteCounter,
   counterById,
   nextLabelFor,
+  moveBall,
+  dropBall,
+  ballPosition,
 }
 
 export function useBoard() {
