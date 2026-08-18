@@ -282,9 +282,15 @@ function importPatterns(json: string): Pattern[] {
 
   if (!Array.isArray(raw)) throw new Error('That file does not contain a list of patterns.')
 
+  const { patterns, unreadable } = readLibrary()
+  if (unreadable) {
+    throw new Error(
+      'Your saved patterns could not be read, so importing now would overwrite them. Export or clear your saved patterns first, then try again.',
+    )
+  }
+
   const incoming = raw.map((entry) => parsePattern(entry))
 
-  const patterns = listPatterns()
   // Tracked incrementally: a collision can be with the existing library OR
   // with an earlier entry in this same file. Either way the id must be
   // unique before it lands in localStorage.

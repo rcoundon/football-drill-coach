@@ -323,4 +323,33 @@ describe('import and export', () => {
     expect(listed).toHaveLength(2)
     expect(new Set(listed.map((p) => p.id)).size).toBe(2)
   })
+
+  it('refuses to import over an unreadable library, leaving the bad bytes intact', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Drill', snap())
+    const json = store.exportPatternsJson([saved])
+
+    localStorage.setItem(PATTERNS_KEY, '{not json at all')
+
+    expect(() => store.importPatterns(json)).toThrow(/could not be read/i)
+    expect(localStorage.getItem(PATTERNS_KEY)).toBe('{not json at all')
+  })
+
+  it('still imports normally when the library merely has a skippable malformed entry', () => {
+    const store = useStorage()
+    const existing = store.savePattern('Existing', snap())
+    const raw = JSON.parse(localStorage.getItem(PATTERNS_KEY)!)
+    raw.push({ id: 'junk', name: 'Bad' })
+    localStorage.setItem(PATTERNS_KEY, JSON.stringify(raw))
+
+    const toImport = { ...existing, id: 'incoming-id', name: 'Incoming' }
+    const json = JSON.stringify([toImport])
+
+    const imported = store.importPatterns(json)
+
+    expect(imported).toHaveLength(1)
+    const listed = store.listPatterns()
+    expect(listed.map((p) => p.id)).toContain(existing.id)
+    expect(listed.map((p) => p.id)).toContain(imported[0].id)
+  })
 })
