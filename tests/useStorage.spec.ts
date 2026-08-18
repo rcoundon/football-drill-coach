@@ -140,6 +140,47 @@ describe('corrupt storage', () => {
     expect(listed).toHaveLength(1)
     expect(listed[0].id).toBe(good.id)
   })
+
+  it('refuses to save over an unreadable library, leaving the bad bytes intact', () => {
+    localStorage.setItem(PATTERNS_KEY, '{not json at all')
+    const store = useStorage()
+    store.savePattern('Drill', snap())
+    expect(localStorage.getItem(PATTERNS_KEY)).toBe('{not json at all')
+    expect(store.lastError.value).toMatch(/could not be read/i)
+    expect(store.lastError.value).toMatch(/overwrite/i)
+  })
+
+  it('refuses to delete over an unreadable library, leaving the bad bytes intact', () => {
+    localStorage.setItem(PATTERNS_KEY, '{not json at all')
+    const store = useStorage()
+    store.deletePattern('some-id')
+    expect(localStorage.getItem(PATTERNS_KEY)).toBe('{not json at all')
+    expect(store.lastError.value).toMatch(/could not be read/i)
+  })
+
+  it('refuses to rename over an unreadable library, leaving the bad bytes intact', () => {
+    localStorage.setItem(PATTERNS_KEY, '{not json at all')
+    const store = useStorage()
+    store.renamePattern('some-id', 'New name')
+    expect(localStorage.getItem(PATTERNS_KEY)).toBe('{not json at all')
+    expect(store.lastError.value).toMatch(/could not be read/i)
+  })
+
+  it('still saves normally when the library merely has a skippable malformed entry', () => {
+    const store = useStorage()
+    const good = store.savePattern('Good', snap())
+    const raw = JSON.parse(localStorage.getItem(PATTERNS_KEY)!)
+    raw.push({ id: 'junk', name: 'Bad' })
+    localStorage.setItem(PATTERNS_KEY, JSON.stringify(raw))
+
+    const second = store.savePattern('Second', snap())
+
+    const stored = JSON.parse(localStorage.getItem(PATTERNS_KEY)!)
+    expect(Array.isArray(stored)).toBe(true)
+    const ids = stored.map((p: { id: string }) => p.id)
+    expect(ids).toContain(good.id)
+    expect(ids).toContain(second.id)
+  })
 })
 
 describe('parsePattern', () => {

@@ -109,22 +109,35 @@ function writeRaw(key: string, value: unknown): boolean {
   }
 }
 
-function listPatterns(): Pattern[] {
-  lastError.value = null
+const UNREADABLE_LIBRARY_MESSAGE =
+  'Your saved patterns could not be read, so saving now would overwrite them. Export or clear your saved patterns first, then try again.'
+
+type LibraryRead = {
+  patterns: Pattern[]
+  /** True when the top-level stored value itself could not be trusted (bad JSON, or not an array). */
+  unreadable: boolean
+  /** Count of individual entries that failed to parse even though the top-level value was fine. */
+  dropped: number
+}
+
+/**
+ * Read the library and say what kind of problem, if any, was found.
+ *
+ * `unreadable` is the disaster case: the stored bytes could not be trusted
+ * at all, and a caller that goes on to write would permanently destroy them.
+ * A merely `dropped` entry, by contrast, is a partial read of an otherwise
+ * good library — writing over it is fine and expected.
+ */
+function readLibrary(): LibraryRead {
   let raw: unknown
   try {
     raw = readRaw(PATTERNS_KEY)
   } catch {
-    lastError.value =
-      'Your saved patterns could not be read. The stored data has been left untouched so it can be recovered.'
-    return []
+    return { patterns: [], unreadable: true, dropped: 0 }
   }
 
-  if (raw === null) return []
-  if (!Array.isArray(raw)) {
-    lastError.value = 'Your saved patterns could not be read.'
-    return []
-  }
+  if (raw === null) return { patterns: [], unreadable: false, dropped: 0 }
+  if (!Array.isArray(raw)) return { patterns: [], unreadable: true, dropped: 0 }
 
   const patterns: Pattern[] = []
   let dropped = 0
@@ -135,6 +148,19 @@ function listPatterns(): Pattern[] {
       dropped += 1
     }
   }
+  return { patterns, unreadable: false, dropped }
+}
+
+function listPatterns(): Pattern[] {
+  lastError.value = null
+  const { patterns, unreadable, dropped } = readLibrary()
+
+  if (unreadable) {
+    lastError.value =
+      'Your saved patterns could not be read. The stored data has been left untouched so it can be recovered.'
+    return []
+  }
+
   if (dropped > 0) {
     lastError.value = `${dropped} damaged pattern(s) could not be read and were skipped.`
   }
@@ -169,7 +195,13 @@ function toPattern(name: string, snap: BoardSnapshot, id: string, createdAt: str
 
 function savePattern(name: string, snap: BoardSnapshot, id?: string): Pattern {
   lastError.value = null
-  const patterns = listPatterns()
+  const { patterns, unreadable } = readLibrary()
+
+  if (unreadable) {
+    lastError.value = UNREADABLE_LIBRARY_MESSAGE
+    return toPattern(name, snap, id ?? makeId(), nowIso())
+  }
+
   const existing = id ? patterns.find((p) => p.id === id) : undefined
   const pattern = toPattern(name, snap, existing?.id ?? id ?? makeId(), existing?.createdAt ?? nowIso())
 
@@ -183,12 +215,21 @@ function savePattern(name: string, snap: BoardSnapshot, id?: string): Pattern {
 
 function deletePattern(id: string): void {
   lastError.value = null
-  writePatterns(listPatterns().filter((p) => p.id !== id))
+  const { patterns, unreadable } = readLibrary()
+  if (unreadable) {
+    lastError.value = UNREADABLE_LIBRARY_MESSAGE
+    return
+  }
+  writePatterns(patterns.filter((p) => p.id !== id))
 }
 
 function renamePattern(id: string, name: string): void {
   lastError.value = null
-  const patterns = listPatterns()
+  const { patterns, unreadable } = readLibrary()
+  if (unreadable) {
+    lastError.value = UNREADABLE_LIBRARY_MESSAGE
+    return
+  }
   const pattern = patterns.find((p) => p.id === id)
   if (!pattern) return
   pattern.name = name
