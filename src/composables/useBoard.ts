@@ -1,6 +1,6 @@
 import { computed, reactive, ref, toRaw } from 'vue'
-import type { Ball, Counter, Drawing, PitchType } from '../types'
-import { PITCH_H, PITCH_W } from '../geometry'
+import type { Ball, Counter, CounterColor, Drawing, PitchType, Vec } from '../types'
+import { PITCH_H, PITCH_W, clampToPitch } from '../geometry'
 
 export const UNDO_LIMIT = 50
 
@@ -111,6 +111,60 @@ function loadSnapshot(snap: BoardSnapshot): void {
   apply(snap)
 }
 
+function counterById(id: string): Counter | undefined {
+  return state.counters.find((c) => c.id === id)
+}
+
+/**
+ * The lowest positive integer not currently used as a label by this colour.
+ * Deleting a counter therefore frees its number for reuse, while surviving
+ * counters keep the labels the coach has been calling them by.
+ */
+function nextLabelFor(color: CounterColor): string {
+  const used = new Set(
+    state.counters
+      .filter((c) => c.color === color)
+      .map((c) => Number(c.label))
+      .filter((n) => Number.isInteger(n) && n > 0),
+  )
+  let n = 1
+  while (used.has(n)) n += 1
+  return String(n)
+}
+
+function addCounter(color: CounterColor): Counter {
+  commit()
+  const counter: Counter = {
+    id: newId(),
+    color,
+    label: nextLabelFor(color),
+    pos: { x: PITCH_W / 2, y: PITCH_H / 2 },
+  }
+  state.counters.push(counter)
+  return counter
+}
+
+/** Called on every pointer-move of a drag, so it deliberately does not commit. */
+function moveCounter(id: string, pos: Vec): void {
+  const counter = counterById(id)
+  if (!counter) return
+  counter.pos = clampToPitch(pos)
+}
+
+function setCounterLabel(id: string, label: string): void {
+  const counter = counterById(id)
+  if (!counter) return
+  commit()
+  counter.label = label.trim().slice(0, 4)
+}
+
+function deleteCounter(id: string): void {
+  const index = state.counters.findIndex((c) => c.id === id)
+  if (index === -1) return
+  commit()
+  state.counters.splice(index, 1)
+}
+
 const canUndo = computed(() => undoStack.value.length > 0)
 const canRedo = computed(() => redoStack.value.length > 0)
 
@@ -128,6 +182,12 @@ const board = {
   setRotated,
   toggleRotated,
   newId,
+  addCounter,
+  moveCounter,
+  setCounterLabel,
+  deleteCounter,
+  counterById,
+  nextLabelFor,
 }
 
 export function useBoard() {
