@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, type DOMWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
-import PitchBoard, { DOUBLE_PRESS_MS } from '../src/components/PitchBoard.vue'
+import PitchBoard, { DOUBLE_PRESS_MS, STALE_DRAG_MS } from '../src/components/PitchBoard.vue'
 import { useBoard, __resetBoardForTests } from '../src/composables/useBoard'
+import { BALL_HIT_RADIUS_ATTACHED } from '../src/components/BallToken.vue'
 import { PITCH_H, PITCH_W } from '../src/geometry'
 import type { ToolMode } from '../src/types'
 
@@ -48,7 +49,16 @@ function mountBoard(tool: ToolMode = 'select') {
   // jsdom does not implement pointer capture.
   ;(svg as unknown as { setPointerCapture: (id: number) => void }).setPointerCapture = vi.fn()
   ;(svg as unknown as { releasePointerCapture: (id: number) => void }).releasePointerCapture = vi.fn()
+  // By default every drag still holds its capture, i.e. no pointerup was lost.
+  ;(svg as unknown as { hasPointerCapture: (id: number) => boolean }).hasPointerCapture = () => true
   return wrapper
+}
+
+function svgOf(wrapper: ReturnType<typeof mountBoard>) {
+  return wrapper.find('svg').element as unknown as SVGSVGElement & {
+    hasPointerCapture: (id: number) => boolean
+    setPointerCapture: (id: number) => void
+  }
 }
 
 /** Client coordinates for a given pitch position, matching RECT above. */
@@ -403,5 +413,160 @@ describe('rotation', () => {
     const wrapper = mountBoard()
     await wrapper.vm.$nextTick()
     expect(wrapper.find('svg').attributes('viewBox')).toBe(`0 0 ${PITCH_H} ${PITCH_W}`)
+  })
+})
+
+/**
+ * An attached ball is drawn one BALL_OFFSET from its holder, so a press
+ * anywhere on it is off the holder's centre and can be nearer a neighbour's.
+ * A tap that never moves is not a re-placement of the ball at all, so it must
+ * leave possession exactly as it found it.
+ */
+describe('tapping the ball without moving it', () => {
+  it('leaves possession with the holder even when pressed towards a neighbour', async () => {
+    const board = useBoard()
+    const holder = board.addCounter('red')
+    const neighbour = board.addCounter('blue')
+    board.dropBall({ ...holder.pos })
+    expect(board.state.ball.attachedTo).toBe(holder.id)
+
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    // The far edge of the ball's hit circle, on the side facing the neighbour.
+    const drawn = board.ballPosition()
+    const toNeighbour = {
+      x: neighbour.pos.x - drawn.x,
+      y: neighbour.pos.y - drawn.y,
+    }
+    const length = Math.hypot(toNeighbour.x, toNeighbour.y)
+    const press = {
+      x: drawn.x + (toNeighbour.x / length) * BALL_HIT_RADIUS_ATTACHED,
+      y: drawn.y + (toNeighbour.y / length) * BALL_HIT_RADIUS_ATTACHED,
+    }
+
+    await firePointer(wrapper.find('[data-ball]'), 'pointerdown', clientFor(press.x, press.y))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(press.x, press.y))
+
+    expect(board.state.ball.attachedTo).toBe(holder.id)
+  })
+
+  it('still drops the ball where a real drag releases it', async () => {
+    const board = useBoard()
+    const c = board.addCounter('red')
+    board.moveCounter(c.id, { x: 70, y: 40 })
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-ball]'), 'pointerdown', clientFor(20, 20))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(45, 30))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(45, 30))
+
+    expect(board.state.ball.attachedTo).toBeNull()
+    expect(board.state.ball.pos.x).toBeCloseTo(45, 4)
+  })
+})
+
+/**
+ * Nudging a player, releasing and re-grabbing straight away is an ordinary
+ * positioning rhythm. Arming the double press on every release turned the
+ * second grab into a rename prompt and refused the drag.
+ */
+describe('a second grab that follows a drag', () => {
+  it('drags normally rather than opening rename', async () => {
+    const board = useBoard()
+    const c = board.addCounter('red')
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    // Nudge the player a little and let go.
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(50, 32))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(53, 34))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(53, 34))
+
+    // Straight back in, well inside the double-press window.
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(53, 34))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(20, 12))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(20, 12))
+
+    expect(wrapper.emitted('rename')).toBeUndefined()
+    expect(board.counterById(c.id)!.pos.x).toBeCloseTo(20, 4)
+  })
+
+  it('does not open rename when the second press lands away from the first', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(50, 32))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(50, 32))
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(54, 32))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(54, 32))
+
+    expect(wrapper.emitted('rename')).toBeUndefined()
+  })
+})
+
+/**
+ * Ignoring presses while a drag is live removed the old self-healing, where a
+ * fresh pointerdown simply replaced a stale drag. A pointerup lost to a
+ * browser quirk or a pointercancel that never arrived would then brick the
+ * board for the rest of the session.
+ */
+describe('recovering from a lost pointerup', () => {
+  it('takes over when the stuck drag no longer holds its capture', async () => {
+    const board = useBoard()
+    const first = board.addCounter('red')
+    const second = board.addCounter('blue')
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+    svgOf(wrapper).hasPointerCapture = () => false
+
+    const counters = wrapper.findAll('[data-counter]')
+    await firePointer(counters[0], 'pointerdown', { ...clientFor(50, 32), pointerId: 1 })
+    // pointerup for pointer 1 never arrives.
+    await firePointer(counters[1], 'pointerdown', { ...clientFor(50, 32), pointerId: 2 })
+    await firePointer(wrapper.find('svg'), 'pointermove', { ...clientFor(20, 10), pointerId: 2 })
+
+    expect(board.counterById(second.id)!.pos.x).toBeCloseTo(20, 4)
+    expect(board.counterById(first.id)!.pos.x).not.toBeCloseTo(20, 4)
+  })
+
+  it('takes over after a timeout when the browser cannot report capture', async () => {
+    vi.useFakeTimers()
+    try {
+      const board = useBoard()
+      board.addCounter('red')
+      const second = board.addCounter('blue')
+      const wrapper = mountBoard('select')
+      await wrapper.vm.$nextTick()
+      delete (svgOf(wrapper) as unknown as { hasPointerCapture?: unknown }).hasPointerCapture
+
+      const counters = wrapper.findAll('[data-counter]')
+      await firePointer(counters[0], 'pointerdown', { ...clientFor(50, 32), pointerId: 1 })
+      vi.advanceTimersByTime(STALE_DRAG_MS + 1)
+      await firePointer(counters[1], 'pointerdown', { ...clientFor(50, 32), pointerId: 2 })
+      await firePointer(wrapper.find('svg'), 'pointermove', { ...clientFor(20, 10), pointerId: 2 })
+
+      expect(board.counterById(second.id)!.pos.x).toBeCloseTo(20, 4)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('drags anyway when the browser refuses to give up pointer capture', async () => {
+    const board = useBoard()
+    const c = board.addCounter('red')
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+    svgOf(wrapper).setPointerCapture = () => {
+      throw new DOMException('InvalidStateError')
+    }
+
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(50, 32))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(20, 10))
+
+    expect(board.counterById(c.id)!.pos.x).toBeCloseTo(20, 4)
   })
 })

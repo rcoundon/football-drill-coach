@@ -39,6 +39,66 @@ describe('dropBall', () => {
     expect(board.state.ball.attachedTo).toBe(near.id)
   })
 
+  /**
+   * An attached ball is DRAWN at BALL_OFFSET from its holder, so a release
+   * where it sits is one offset away from the holder's centre but can be much
+   * closer to a neighbour's. Measuring to counter centres alone therefore
+   * hands the ball to the wrong player on the layout addCounter itself
+   * produces: the ring-1 neighbours sit 4.0 units from the drawn ball against
+   * 4.81 for the actual holder.
+   */
+  it('keeps possession with the holder, not a neighbour, when the ball is tapped where it sits', () => {
+    const board = useBoard()
+    const holder = board.addCounter('red')
+    const neighbour = board.addCounter('blue')
+    board.dropBall({ ...holder.pos })
+    expect(board.state.ball.attachedTo).toBe(holder.id)
+
+    const drawn = board.ballPosition()
+    board.moveBall(drawn)
+    board.dropBall(drawn)
+
+    expect(board.state.ball.attachedTo).toBe(holder.id)
+    expect(board.state.ball.attachedTo).not.toBe(neighbour.id)
+  })
+
+  it('keeps possession even when a neighbour is nearer the drawn ball than the holder is', () => {
+    const board = useBoard()
+    const holder = board.addCounter('red')
+    const neighbour = board.addCounter('blue')
+    board.moveCounter(holder.id, { x: 30, y: 30 })
+    board.dropBall({ x: 30, y: 30 })
+    expect(board.state.ball.attachedTo).toBe(holder.id)
+
+    // Right beside where the ball is drawn, and much nearer to it than the holder.
+    const drawn = board.ballPosition()
+    board.moveCounter(neighbour.id, { x: drawn.x + 0.6, y: drawn.y + 2.6 })
+
+    board.moveBall(drawn)
+    board.dropBall(drawn)
+
+    expect(board.state.ball.attachedTo).toBe(holder.id)
+  })
+
+  it('still attaches when the ball is dropped straight onto a player', () => {
+    const board = useBoard()
+    const c = board.addCounter('red')
+    board.moveCounter(c.id, { x: 30, y: 30 })
+    board.dropBall({ x: 30, y: 30 })
+    expect(board.state.ball.attachedTo).toBe(c.id)
+  })
+
+  /**
+   * The snap radius has to stay under COUNTER_SPACING, or a laid-out squad
+   * leaves the coach nowhere to put a ball down and have it stay free.
+   */
+  it('leaves the ball free when it is dropped in open space on a laid-out squad', () => {
+    const board = useBoard()
+    for (let i = 0; i < 11; i++) board.addCounter('red')
+    board.dropBall({ x: 10, y: 10 })
+    expect(board.state.ball.attachedTo).toBeNull()
+  })
+
   it('keeps possession when the attached ball is tapped and released where it sits', () => {
     const board = useBoard()
     const c = board.addCounter('red')

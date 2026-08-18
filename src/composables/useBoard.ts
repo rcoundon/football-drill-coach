@@ -17,11 +17,15 @@ export const BALL_OFFSET: Vec = { x: 3.4, y: 3.4 }
 
 /**
  * How close to a counter the ball must land to be taken into possession, in
- * pitch units. Deliberately wider than the offset above: the ball is drawn
- * at that offset while attached, so a tap on it and a release without
- * movement lands one offset away from its holder and must keep possession.
+ * pitch units.
+ *
+ * Deliberately SMALLER than COUNTER_SPACING: a snap radius wider than the gap
+ * between counters would leave a laid-out squad with nowhere on the pitch a
+ * coach could put the ball down and have it stay free. It does not need to
+ * reach BALL_OFFSET, because `dropBall` measures to where an attached ball is
+ * drawn as well as to the counter's centre.
  */
-export const SNAP_RADIUS = 6
+export const SNAP_RADIUS = 3.5
 
 /** The drawn radius of a counter, in pitch units. Mirrors PlayerCounter's own RADIUS. */
 export const COUNTER_RADIUS = 2.4
@@ -51,7 +55,10 @@ export type BoardSnapshot = BoardState
 function emptyState(): BoardState {
   return {
     counters: [],
-    ball: { pos: { x: PITCH_W / 2, y: PITCH_H / 2 }, attachedTo: null },
+    // Not the pitch centre: that is where the first counter lands, and the
+    // ball's hit circle would sit right on top of the counter's body, so the
+    // coach's first drag would grab the ball instead of the player.
+    ball: { pos: { x: PITCH_W / 4, y: PITCH_H / 2 }, attachedTo: null },
     drawings: [],
     pitch: { type: 'blank', rotated: false },
   }
@@ -293,6 +300,26 @@ function moveBall(pos: Vec): void {
   state.ball.pos = clampToPitch(pos)
 }
 
+/** Where this counter's ball would be drawn if it had possession. */
+function ballRestPosition(counter: Counter): Vec {
+  return { x: counter.pos.x + BALL_OFFSET.x, y: counter.pos.y + BALL_OFFSET.y }
+}
+
+/**
+ * How far a ball released at `at` is from belonging to `counter`.
+ *
+ * Measured to the counter's centre AND to where its ball would be drawn,
+ * whichever is nearer. Both matter: dropping the ball onto a player is the
+ * obvious way to give it to them, but an attached ball is DRAWN one
+ * BALL_OFFSET away, so releasing it where it already sits is a full offset
+ * from the holder's centre — and often much closer to a neighbour's. Measuring
+ * to centres alone therefore handed the ball to the wrong player on the very
+ * layout `nextCounterPosition` produces.
+ */
+function ballDistanceTo(counter: Counter, at: Vec): number {
+  return Math.min(distance(at, counter.pos), distance(at, ballRestPosition(counter)))
+}
+
 /** Pointer-up. Resolves possession; does not commit. */
 function dropBall(pos: Vec): void {
   const at = clampToPitch(pos)
@@ -301,7 +328,7 @@ function dropBall(pos: Vec): void {
   let nearest: Counter | undefined
   let nearestDistance = Infinity
   for (const counter of state.counters) {
-    const d = distance(at, counter.pos)
+    const d = ballDistanceTo(counter, at)
     if (d < nearestDistance) {
       nearestDistance = d
       nearest = counter
@@ -315,9 +342,7 @@ function dropBall(pos: Vec): void {
 function ballPosition(): Vec {
   if (state.ball.attachedTo) {
     const holder = counterById(state.ball.attachedTo)
-    if (holder) {
-      return { x: holder.pos.x + BALL_OFFSET.x, y: holder.pos.y + BALL_OFFSET.y }
-    }
+    if (holder) return ballRestPosition(holder)
   }
   return state.ball.pos
 }

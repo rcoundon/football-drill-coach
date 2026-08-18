@@ -1,10 +1,19 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import BallToken, {
   BALL_HIT_RADIUS_ATTACHED,
   BALL_HIT_RADIUS_FREE,
 } from '../src/components/BallToken.vue'
-import { BALL_OFFSET, COUNTER_RADIUS, SNAP_RADIUS } from '../src/composables/useBoard'
+import {
+  BALL_OFFSET,
+  COUNTER_RADIUS,
+  COUNTER_SPACING,
+  SNAP_RADIUS,
+  useBoard,
+  __resetBoardForTests,
+} from '../src/composables/useBoard'
+
+beforeEach(() => __resetBoardForTests())
 
 function hitRadius(attached: boolean): number {
   const wrapper = mount(BallToken, { props: { pos: { x: 50, y: 30 }, attached } })
@@ -37,9 +46,30 @@ describe('an attached ball does not cover the player holding it', () => {
     expect(BALL_HIT_RADIUS_FREE).toBeGreaterThan(BALL_HIT_RADIUS_ATTACHED)
   })
 
-  it('keeps the snap radius wide enough to reach the offset the ball rides at', () => {
-    // Otherwise a tap on an attached ball, released where it sits, drops
-    // possession: the release lands further from the counter than it snaps.
-    expect(SNAP_RADIUS).toBeGreaterThan(Math.hypot(BALL_OFFSET.x, BALL_OFFSET.y))
+  /**
+   * Possession is resolved against where the ball is DRAWN, not only against
+   * counter centres, so the snap radius does not have to reach the offset.
+   * It must stay under COUNTER_SPACING instead: a snap radius wider than the
+   * gap between counters leaves a laid-out squad with nowhere on the pitch a
+   * coach can put the ball down and have it stay free.
+   */
+  it('keeps the snap radius inside the gap between counters', () => {
+    expect(SNAP_RADIUS).toBeLessThan(COUNTER_SPACING)
+  })
+
+  /**
+   * The board's first counter lands at the pitch centre. A ball starting
+   * there sits its 3.2-unit hit circle right on top of the counter's 2.4-unit
+   * body, so the coach's very first action — drop a player, drag it — grabs
+   * the ball instead.
+   */
+  it('starts the ball clear of where the first counter lands', () => {
+    const board = useBoard()
+    const first = board.addCounter('red')
+    const gap = Math.hypot(
+      board.ballPosition().x - first.pos.x,
+      board.ballPosition().y - first.pos.y,
+    )
+    expect(gap).toBeGreaterThanOrEqual(COUNTER_RADIUS + BALL_HIT_RADIUS_FREE)
   })
 })
