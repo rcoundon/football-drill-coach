@@ -21,6 +21,53 @@ describe('useBoard singleton', () => {
     const ids = new Set([newId(), newId(), newId()])
     expect(ids.size).toBe(3)
   })
+
+  /**
+   * The draft is restored on every page load, so ids minted in one session
+   * meet ids minted in the next. A per-session counter restarts at zero and
+   * hands the new object an id the restored board is already using, after
+   * which counterById, deleteCounter and the possession ring all target the
+   * wrong object. `__resetBoardForTests` stands in for that reload.
+   */
+  it('mints ids that cannot collide with ids minted before a reload', () => {
+    const { newId } = useBoard()
+    const before = [newId(), newId(), newId()]
+    __resetBoardForTests()
+    const after = [newId(), newId(), newId()]
+    expect(new Set([...before, ...after]).size).toBe(6)
+  })
+
+  it('gives a new counter an id no restored counter is already using', () => {
+    const board = useBoard()
+    const first = board.addCounter('red')
+    const draft = board.snapshot()
+
+    __resetBoardForTests() // the coach reloads the page
+    board.loadSnapshot(draft)
+
+    const fresh = board.addCounter('blue')
+    expect(fresh.id).not.toBe(first.id)
+    expect(new Set(board.state.counters.map((c) => c.id)).size).toBe(2)
+
+    // Moving the new counter must not move the restored one.
+    board.moveCounter(fresh.id, { x: 10, y: 10 })
+    expect(board.counterById(first.id)!.pos).not.toEqual({ x: 10, y: 10 })
+  })
+
+  it('gives a new drawing an id no restored drawing is already using', () => {
+    const board = useBoard()
+    const arrow = board.startArrow({ x: 10, y: 10 }, '#fff', 'run')
+    board.updateArrow(arrow, { x: 60, y: 30 })
+    board.finishDrawing(arrow)
+    const draft = board.snapshot()
+
+    __resetBoardForTests()
+    board.loadSnapshot(draft)
+
+    const second = board.startArrow({ x: 20, y: 20 }, '#fff', 'run')
+    expect(second).not.toBe(arrow)
+    expect(new Set(board.state.drawings.map((d) => d.id)).size).toBe(2)
+  })
 })
 
 describe('pitch settings', () => {

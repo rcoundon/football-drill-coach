@@ -10,6 +10,15 @@ export const SNAP_RADIUS = 3.5
 /** Where an attached ball sits relative to its holder, in pitch units. */
 export const BALL_OFFSET: Vec = { x: 1.8, y: 1.8 }
 
+/** The drawn radius of a counter, in pitch units. Mirrors PlayerCounter's own RADIUS. */
+export const COUNTER_RADIUS = 2.4
+
+/**
+ * Centre-to-centre distance a new counter keeps from every counter already
+ * placed. Comfortably more than two drawn radii, so counters never touch.
+ */
+export const COUNTER_SPACING = 5.5
+
 /** Minimum spacing between recorded freehand points, in pitch units. */
 export const MIN_PEN_STEP = 0.6
 
@@ -94,9 +103,28 @@ function redo(): void {
   apply(next)
 }
 
+/**
+ * Mint an id that is unique by construction, across sessions as well as
+ * within one.
+ *
+ * A plain incrementing counter is not enough: the autosaved draft is
+ * restored on every page load, so the board already holds ids minted by an
+ * earlier run of this module while the counter has restarted at zero. The
+ * next id then collides with a live object and every lookup that follows
+ * (`counterById`, `deleteCounter`, the possession ring, Vue's `:key`,
+ * `DrawingLayer`'s marker ids) silently targets the wrong one.
+ *
+ * Time gives cross-session uniqueness, the counter gives uniqueness within
+ * a millisecond, and the random suffix covers two sessions starting in the
+ * same millisecond. Nothing has to remember to scan restored ids, so no
+ * future caller can forget to.
+ */
 function newId(): string {
   idCounter += 1
-  return `o${idCounter}`
+  const time = Date.now().toString(36)
+  const seq = idCounter.toString(36)
+  const random = Math.random().toString(36).slice(2, 6)
+  return `o${time}${seq}${random}`
 }
 
 function setPitchType(type: PitchType): void {
@@ -144,13 +172,60 @@ function nextLabelFor(color: CounterColor): string {
   return String(n)
 }
 
+/** True when no counter already sits close enough to hide a counter placed at `p`. */
+function isClearOfCounters(p: Vec): boolean {
+  return state.counters.every((c) => distance(c.pos, p) >= COUNTER_SPACING)
+}
+
+/** True when a counter drawn at `p` sits wholly inside the pitch. */
+function isInsidePitch(p: Vec): boolean {
+  return (
+    p.x >= COUNTER_RADIUS &&
+    p.x <= PITCH_W - COUNTER_RADIUS &&
+    p.y >= COUNTER_RADIUS &&
+    p.y <= PITCH_H - COUNTER_RADIUS
+  )
+}
+
+/**
+ * Where to drop the next counter.
+ *
+ * Straight to the centre while the centre is free, then outward in rings of
+ * candidate positions. Deterministic — the same board always yields the
+ * same spot — and it reuses the gap a deleted counter left rather than
+ * drifting outward forever. Candidates that would put a counter over the
+ * touchline are skipped, so the result is always inside the pitch.
+ */
+function nextCounterPosition(): Vec {
+  const centre = { x: PITCH_W / 2, y: PITCH_H / 2 }
+  if (isClearOfCounters(centre)) return centre
+
+  const rings = Math.ceil(Math.max(PITCH_W, PITCH_H) / COUNTER_SPACING)
+  for (let ring = 1; ring <= rings; ring++) {
+    const radius = ring * COUNTER_SPACING
+    const steps = ring * 8
+    for (let i = 0; i < steps; i++) {
+      const angle = (2 * Math.PI * i) / steps
+      const candidate = {
+        x: centre.x + radius * Math.cos(angle),
+        y: centre.y + radius * Math.sin(angle),
+      }
+      if (!isInsidePitch(candidate)) continue
+      if (isClearOfCounters(candidate)) return candidate
+    }
+  }
+
+  // A pitch this full has nowhere clear left; stacking beats refusing to add.
+  return centre
+}
+
 function addCounter(color: CounterColor): Counter {
   commit()
   const counter: Counter = {
     id: newId(),
     color,
     label: nextLabelFor(color),
-    pos: { x: PITCH_W / 2, y: PITCH_H / 2 },
+    pos: nextCounterPosition(),
   }
   state.counters.push(counter)
   return counter

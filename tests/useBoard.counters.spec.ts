@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useBoard, __resetBoardForTests } from '../src/composables/useBoard'
+import {
+  useBoard,
+  __resetBoardForTests,
+  COUNTER_RADIUS,
+  COUNTER_SPACING,
+} from '../src/composables/useBoard'
 import { PITCH_H, PITCH_W } from '../src/geometry'
 
 beforeEach(() => __resetBoardForTests())
@@ -31,6 +36,53 @@ describe('addCounter', () => {
     board.addCounter('red')
     board.undo()
     expect(board.state.counters).toHaveLength(0)
+  })
+})
+
+/**
+ * Dropping every counter at the pitch centre buries each new one under the
+ * last: a coach laying out a squad gets a single heap and has to drag them
+ * off it blind. Each counter must land clear of the ones already placed.
+ */
+describe('placement of a new counter', () => {
+  it('never lands on top of a counter already on the board', () => {
+    const board = useBoard()
+    const placed = Array.from({ length: 22 }, (_, i) =>
+      board.addCounter(i % 2 === 0 ? 'red' : 'blue'),
+    )
+
+    for (let i = 0; i < placed.length; i++) {
+      for (let j = i + 1; j < placed.length; j++) {
+        const a = board.counterById(placed[i].id)!.pos
+        const b = board.counterById(placed[j].id)!.pos
+        const gap = Math.hypot(a.x - b.x, a.y - b.y)
+        expect(gap, `counters ${i} and ${j} overlap`).toBeGreaterThanOrEqual(COUNTER_SPACING - 1e-9)
+      }
+    }
+  })
+
+  it('keeps every counter, drawn radius included, inside the pitch', () => {
+    const board = useBoard()
+    for (let i = 0; i < 22; i++) board.addCounter('red')
+
+    for (const counter of board.state.counters) {
+      expect(counter.pos.x).toBeGreaterThanOrEqual(COUNTER_RADIUS - 1e-9)
+      expect(counter.pos.x).toBeLessThanOrEqual(PITCH_W - COUNTER_RADIUS + 1e-9)
+      expect(counter.pos.y).toBeGreaterThanOrEqual(COUNTER_RADIUS - 1e-9)
+      expect(counter.pos.y).toBeLessThanOrEqual(PITCH_H - COUNTER_RADIUS + 1e-9)
+    }
+  })
+
+  it('fills the gap left by a deleted counter rather than drifting outward forever', () => {
+    const board = useBoard()
+    const first = board.addCounter('red')
+    const second = board.addCounter('red')
+    const spot = { ...board.counterById(second.id)!.pos }
+    board.deleteCounter(second.id)
+
+    const replacement = board.addCounter('blue')
+    expect(replacement.pos).toEqual(spot)
+    expect(board.counterById(first.id)!.pos).not.toEqual(spot)
   })
 })
 
