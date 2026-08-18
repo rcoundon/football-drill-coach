@@ -88,7 +88,16 @@ const arcHalfChord = Math.sqrt(arcRadius ** 2 - (penaltyDepth - spotFromGoal) **
         data-marking="penalty-arc"
         :d="`M ${penaltyDepth} ${PITCH_H / 2 - arcHalfChord} A ${arcRadius} ${arcRadius} 0 0 0 ${penaltyDepth} ${PITCH_H / 2 + arcHalfChord}`"
       />
-      <rect data-marking="goal" :x="-goalDepth" :y="goalTop" :width="goalDepth" :height="goalWidth" />
+      <!--
+        Goals are drawn INSIDE the goal line, not behind it. A real net sits
+        behind the line, but the board's view box is exactly the pitch box
+        (0..PITCH_W by 0..PITCH_H) and is shared by all three pitch types so
+        that switching view never moves a counter. A goal at x = -goalDepth
+        is therefore clipped away on a full pitch: in the DOM, invisible on
+        screen. Drawing it inward keeps it visible without touching the
+        coordinate space.
+      -->
+      <rect data-marking="goal" :x="0" :y="goalTop" :width="goalDepth" :height="goalWidth" />
       <path data-marking="corner" :d="`M 0 ${cornerRadius} A ${cornerRadius} ${cornerRadius} 0 0 0 ${cornerRadius} 0`" />
       <path
         data-marking="corner"
@@ -116,7 +125,13 @@ const arcHalfChord = Math.sqrt(arcRadius ** 2 - (penaltyDepth - spotFromGoal) **
           data-marking="penalty-arc"
           :d="`M ${PITCH_W - penaltyDepth} ${PITCH_H / 2 - arcHalfChord} A ${arcRadius} ${arcRadius} 0 0 1 ${PITCH_W - penaltyDepth} ${PITCH_H / 2 + arcHalfChord}`"
         />
-        <rect data-marking="goal" :x="PITCH_W" :y="goalTop" :width="goalDepth" :height="goalWidth" />
+        <rect
+          data-marking="goal"
+          :x="PITCH_W - goalDepth"
+          :y="goalTop"
+          :width="goalDepth"
+          :height="goalWidth"
+        />
         <path
           data-marking="corner"
           :d="`M ${PITCH_W} ${cornerRadius} A ${cornerRadius} ${cornerRadius} 0 0 1 ${PITCH_W - cornerRadius} 0`"

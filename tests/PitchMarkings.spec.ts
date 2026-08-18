@@ -34,6 +34,17 @@ describe('full pitch', () => {
   it('draws four corner arcs', () => {
     expect(render('full').findAll('[data-marking="corner"]')).toHaveLength(4)
   })
+
+  it('draws both goals where the view box can actually show them', () => {
+    const goals = render('full').findAll('[data-marking="goal"]')
+    expect(goals).toHaveLength(2)
+    for (const goal of goals) {
+      const x = Number(goal.attributes('x'))
+      const width = Number(goal.attributes('width'))
+      expect(x).toBeGreaterThanOrEqual(0)
+      expect(x + width).toBeLessThanOrEqual(PITCH_W + 1e-9)
+    }
+  })
 })
 
 describe('half pitch', () => {
@@ -52,15 +63,19 @@ describe('half pitch', () => {
  * requires a browser nobody performed) with an automated bounds check: every
  * marking coordinate must fall inside the 0..100 x 0..64.76 pitch box.
  *
- * Exception: `[data-marking="goal"]` rects sit outside the touchline by
- * design (a goal net is behind the goal line, so the left goal has a
- * negative x and the right goal starts at PITCH_W) and are excluded here
- * deliberately, not by accident.
+ * Goals used to be excluded here, drawn behind the goal line at x = -1.9 and
+ * x = PITCH_W as a real net is. That is honest geometry but the board's view
+ * box is exactly the pitch box, so on a full pitch both goals were clipped
+ * away: present in the DOM, invisible on screen. They only showed on the half
+ * pitch because of its 25-unit inset. The view box cannot grow — the
+ * coordinate space is shared by all three pitch types, and that is what stops
+ * counters moving when the coach switches view — so the goals are drawn
+ * inward instead, and are now bounds-checked like everything else.
  */
 describe('marking bounds', () => {
   function assertInBounds(type: 'full' | 'half') {
     const wrapper = render(type)
-    const markings = wrapper.findAll('[data-marking]').filter((el) => el.attributes('data-marking') !== 'goal')
+    const markings = wrapper.findAll('[data-marking]')
 
     expect(markings.length).toBeGreaterThan(0)
 
@@ -117,11 +132,11 @@ describe('marking bounds', () => {
     }
   }
 
-  it('keeps every full-pitch marking (except goals) inside the pitch box', () => {
+  it('keeps every full-pitch marking inside the pitch box', () => {
     assertInBounds('full')
   })
 
-  it('keeps every half-pitch marking (except goals) inside the pitch box', () => {
+  it('keeps every half-pitch marking inside the pitch box', () => {
     assertInBounds('half')
   })
 })

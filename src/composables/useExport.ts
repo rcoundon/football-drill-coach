@@ -15,10 +15,22 @@ function triggerDownload(url: string, filename: string): void {
   link.remove()
 }
 
+/**
+ * How long an object URL is left alive after the link is clicked.
+ *
+ * Revoking synchronously after `click()` is a long-standing cause of failed
+ * downloads outside Chromium — the browser has not started reading the blob
+ * when the URL is torn out from under it. The board is meant to work on a
+ * tablet, so iPad Safari is the likely victim, for the PNG and the JSON
+ * alike. Long enough for any browser to start the download, short enough not
+ * to hold a rasterised board in memory.
+ */
+const REVOKE_DELAY_MS = 10_000
+
 function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob)
   triggerDownload(url, filename)
-  URL.revokeObjectURL(url)
+  setTimeout(() => URL.revokeObjectURL(url), REVOKE_DELAY_MS)
 }
 
 function downloadText(text: string, filename: string, mime = 'application/json'): void {
@@ -67,20 +79,54 @@ function svgToPngBlob(svg: SVGSVGElement, pixelWidth = 1600): Promise<Blob> {
   })
 }
 
-/** Open a file picker and resolve with the chosen file's text. */
+/**
+ * How long to wait after the window regains focus before deciding the picker
+ * was dismissed. `change` can arrive slightly after `focus`, so it needs a
+ * grace period to win.
+ */
+const PICKER_CANCEL_GRACE_MS = 800
+
+/**
+ * Open a file picker and resolve with the chosen file's text.
+ *
+ * Cancellation has to settle the promise. A picker the coach dismisses fires
+ * no `change`, so without this the promise stayed pending forever: one leak
+ * per cancelled import, and the caller's `await` never returned, so the coach
+ * got no feedback at all. `cancel` covers browsers that report it; the focus
+ * fallback covers the ones that do not.
+ */
 function pickJsonFile(): Promise<string> {
   return new Promise((resolve, reject) => {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = 'application/json,.json'
-    input.onchange = () => {
+
+    let settled = false
+    const claim = (): boolean => {
+      if (settled) return false
+      settled = true
+      window.removeEventListener('focus', onFocus)
+      return true
+    }
+    const cancel = () => {
+      if (claim()) reject(new Error('No file was chosen.'))
+    }
+    function onFocus() {
+      setTimeout(cancel, PICKER_CANCEL_GRACE_MS)
+    }
+
+    input.addEventListener('change', () => {
       const file = input.files?.[0]
       if (!file) {
-        reject(new Error('No file was chosen.'))
+        cancel()
         return
       }
+      if (!claim()) return
       file.text().then(resolve, () => reject(new Error('That file could not be read.')))
-    }
+    })
+    input.addEventListener('cancel', cancel)
+    window.addEventListener('focus', onFocus)
+
     input.click()
   })
 }
