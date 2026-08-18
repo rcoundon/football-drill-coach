@@ -180,6 +180,67 @@ describe('corrupt storage', () => {
     const ids = stored.map((p: { id: string }) => p.id)
     expect(ids).toContain(good.id)
     expect(ids).toContain(second.id)
+    // The damaged row must survive the write: the spec promises corrupt data
+    // is "left untouched so it can be recovered", and a save that drops it
+    // destroys it permanently.
+    expect(ids).toContain('junk')
+  })
+
+  it('tells the coach when a save has left damaged rows behind', () => {
+    const store = useStorage()
+    store.savePattern('Good', snap())
+    const raw = JSON.parse(localStorage.getItem(PATTERNS_KEY)!)
+    raw.push({ id: 'junk', name: 'Bad' })
+    localStorage.setItem(PATTERNS_KEY, JSON.stringify(raw))
+
+    store.savePattern('Second', snap())
+    expect(store.lastError.value).toMatch(/could not be read/i)
+  })
+
+  it('preserves a damaged row when deleting another pattern', () => {
+    const store = useStorage()
+    const good = store.savePattern('Good', snap())
+    const raw = JSON.parse(localStorage.getItem(PATTERNS_KEY)!)
+    raw.push({ id: 'junk', name: 'Bad' })
+    localStorage.setItem(PATTERNS_KEY, JSON.stringify(raw))
+
+    store.deletePattern(good.id)
+
+    const stored = JSON.parse(localStorage.getItem(PATTERNS_KEY)!)
+    const ids = stored.map((p: { id: string }) => p.id)
+    expect(ids).not.toContain(good.id)
+    expect(ids).toContain('junk')
+    expect(store.lastError.value).toMatch(/could not be read/i)
+  })
+
+  it('preserves a damaged row when renaming another pattern', () => {
+    const store = useStorage()
+    const good = store.savePattern('Good', snap())
+    const raw = JSON.parse(localStorage.getItem(PATTERNS_KEY)!)
+    raw.push({ id: 'junk', name: 'Bad' })
+    localStorage.setItem(PATTERNS_KEY, JSON.stringify(raw))
+
+    store.renamePattern(good.id, 'Better name')
+
+    const stored = JSON.parse(localStorage.getItem(PATTERNS_KEY)!)
+    const ids = stored.map((p: { id: string }) => p.id)
+    expect(ids).toContain('junk')
+    expect(stored.find((p: { id: string }) => p.id === good.id).name).toBe('Better name')
+    expect(store.lastError.value).toMatch(/could not be read/i)
+  })
+
+  it('keeps a damaged row byte-for-byte, so it stays recoverable by hand', () => {
+    const store = useStorage()
+    store.savePattern('Good', snap())
+    const raw = JSON.parse(localStorage.getItem(PATTERNS_KEY)!)
+    const damaged = { id: 'junk', name: 'Bad', notes: 'the coach wants this back' }
+    raw.push(damaged)
+    localStorage.setItem(PATTERNS_KEY, JSON.stringify(raw))
+
+    store.savePattern('Second', snap())
+
+    const stored = JSON.parse(localStorage.getItem(PATTERNS_KEY)!)
+    expect(stored.find((p: { id: string }) => p.id === 'junk')).toEqual(damaged)
   })
 })
 
@@ -268,6 +329,38 @@ describe('draft autosave', () => {
     localStorage.setItem(DRAFT_KEY, 'garbage')
     expect(useStorage().loadDraft()).toBeNull()
   })
+
+  /**
+   * A draft is restored on every load, so an accepted-but-invalid draft
+   * bricks the app on every load with no in-app way out. It is transient
+   * working state, so the safe answer is to discard it and start clean —
+   * unlike the library, which must be preserved for recovery.
+   */
+  describe('rejects a draft that would break the board', () => {
+    const cases: [string, unknown][] = [
+      ['no ball', { ...snap(), ball: undefined }],
+      ['a ball with no position', { ...snap(), ball: { attachedTo: null } }],
+      ['a ball attached to a number', { ...snap(), ball: { pos: { x: 1, y: 1 }, attachedTo: 7 } }],
+      ['no drawings', { ...snap(), drawings: undefined }],
+      ['a damaged drawing', { ...snap(), drawings: ['oops'] }],
+      ['a damaged counter', { ...snap(), counters: [42] }],
+      ['no pitch type', { ...snap(), pitch: { rotated: false } }],
+      ['a non-boolean rotation', { ...snap(), pitch: { type: 'full', rotated: 'yes' } }],
+    ]
+
+    for (const [label, draft] of cases) {
+      it(`returns null for a draft with ${label}`, () => {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
+        expect(useStorage().loadDraft()).toBeNull()
+      })
+    }
+
+    it('still accepts a draft this module itself wrote', () => {
+      const store = useStorage()
+      store.saveDraft(snap())
+      expect(store.loadDraft()).not.toBeNull()
+    })
+  })
 })
 
 describe('import and export', () => {
@@ -351,5 +444,9 @@ describe('import and export', () => {
     const listed = store.listPatterns()
     expect(listed.map((p) => p.id)).toContain(existing.id)
     expect(listed.map((p) => p.id)).toContain(imported[0].id)
+
+    // Importing must not quietly destroy the row it could not parse either.
+    const stored = JSON.parse(localStorage.getItem(PATTERNS_KEY)!)
+    expect(stored.map((p: { id: string }) => p.id)).toContain('junk')
   })
 })

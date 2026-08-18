@@ -116,8 +116,12 @@ type LibraryRead = {
   patterns: Pattern[]
   /** True when the top-level stored value itself could not be trusted (bad JSON, or not an array). */
   unreadable: boolean
-  /** Count of individual entries that failed to parse even though the top-level value was fine. */
-  dropped: number
+  /**
+   * The individual entries that failed to parse even though the top-level
+   * value was fine, exactly as they were stored. Carried, not counted, so
+   * every write can put them back untouched.
+   */
+  damaged: unknown[]
 }
 
 /**
@@ -125,35 +129,44 @@ type LibraryRead = {
  *
  * `unreadable` is the disaster case: the stored bytes could not be trusted
  * at all, and a caller that goes on to write would permanently destroy them.
- * A merely `dropped` entry, by contrast, is a partial read of an otherwise
- * good library — writing over it is fine and expected.
+ *
+ * A `damaged` entry is the partial case: the rest of the library is good and
+ * the coach must still be able to save, delete and rename. But the damaged
+ * rows are the coach's work too, and the spec promises corrupt data is "left
+ * untouched so it can be recovered" — so they ride along with every write
+ * rather than being dropped on the first one. `writeLibrary` is the only
+ * supported way to write, and it takes them as an argument for that reason.
  */
 function readLibrary(): LibraryRead {
   let raw: unknown
   try {
     raw = readRaw(PATTERNS_KEY)
   } catch {
-    return { patterns: [], unreadable: true, dropped: 0 }
+    return { patterns: [], unreadable: true, damaged: [] }
   }
 
-  if (raw === null) return { patterns: [], unreadable: false, dropped: 0 }
-  if (!Array.isArray(raw)) return { patterns: [], unreadable: true, dropped: 0 }
+  if (raw === null) return { patterns: [], unreadable: false, damaged: [] }
+  if (!Array.isArray(raw)) return { patterns: [], unreadable: true, damaged: [] }
 
   const patterns: Pattern[] = []
-  let dropped = 0
+  const damaged: unknown[] = []
   for (const entry of raw) {
     try {
       patterns.push(parsePattern(entry))
     } catch {
-      dropped += 1
+      damaged.push(entry)
     }
   }
-  return { patterns, unreadable: false, dropped }
+  return { patterns, unreadable: false, damaged }
+}
+
+function damagedMessage(count: number): string {
+  return `${count} saved pattern(s) could not be read. They have been left untouched so they can be recovered.`
 }
 
 function listPatterns(): Pattern[] {
   lastError.value = null
-  const { patterns, unreadable, dropped } = readLibrary()
+  const { patterns, unreadable, damaged } = readLibrary()
 
   if (unreadable) {
     lastError.value =
@@ -161,14 +174,18 @@ function listPatterns(): Pattern[] {
     return []
   }
 
-  if (dropped > 0) {
-    lastError.value = `${dropped} damaged pattern(s) could not be read and were skipped.`
-  }
+  if (damaged.length > 0) lastError.value = damagedMessage(damaged.length)
   return patterns
 }
 
-function writePatterns(patterns: Pattern[]): boolean {
-  return writeRaw(PATTERNS_KEY, patterns)
+/**
+ * Write the library back, damaged rows included.
+ *
+ * Every write goes through here so that no code path can drop a row it
+ * merely failed to understand.
+ */
+function writeLibrary(patterns: Pattern[], damaged: unknown[]): boolean {
+  return writeRaw(PATTERNS_KEY, [...patterns, ...damaged])
 }
 
 function nowIso(): string {
@@ -195,7 +212,7 @@ function toPattern(name: string, snap: BoardSnapshot, id: string, createdAt: str
 
 function savePattern(name: string, snap: BoardSnapshot, id?: string): Pattern {
   lastError.value = null
-  const { patterns, unreadable } = readLibrary()
+  const { patterns, unreadable, damaged } = readLibrary()
 
   if (unreadable) {
     lastError.value = UNREADABLE_LIBRARY_MESSAGE
@@ -209,23 +226,27 @@ function savePattern(name: string, snap: BoardSnapshot, id?: string): Pattern {
   if (index === -1) patterns.push(pattern)
   else patterns[index] = pattern
 
-  writePatterns(patterns)
+  if (writeLibrary(patterns, damaged) && damaged.length > 0) {
+    lastError.value = damagedMessage(damaged.length)
+  }
   return pattern
 }
 
 function deletePattern(id: string): void {
   lastError.value = null
-  const { patterns, unreadable } = readLibrary()
+  const { patterns, unreadable, damaged } = readLibrary()
   if (unreadable) {
     lastError.value = UNREADABLE_LIBRARY_MESSAGE
     return
   }
-  writePatterns(patterns.filter((p) => p.id !== id))
+  if (writeLibrary(patterns.filter((p) => p.id !== id), damaged) && damaged.length > 0) {
+    lastError.value = damagedMessage(damaged.length)
+  }
 }
 
 function renamePattern(id: string, name: string): void {
   lastError.value = null
-  const { patterns, unreadable } = readLibrary()
+  const { patterns, unreadable, damaged } = readLibrary()
   if (unreadable) {
     lastError.value = UNREADABLE_LIBRARY_MESSAGE
     return
@@ -234,7 +255,9 @@ function renamePattern(id: string, name: string): void {
   if (!pattern) return
   pattern.name = name
   pattern.updatedAt = nowIso()
-  writePatterns(patterns)
+  if (writeLibrary(patterns, damaged) && damaged.length > 0) {
+    lastError.value = damagedMessage(damaged.length)
+  }
 }
 
 function patternToSnapshot(pattern: Pattern): BoardSnapshot {
@@ -253,10 +276,41 @@ function saveDraft(snap: BoardSnapshot): void {
   writeRaw(DRAFT_KEY, snap)
 }
 
+function isValidPitch(value: unknown): boolean {
+  return isObject(value) && typeof value.type === 'string' && typeof value.rotated === 'boolean'
+}
+
+/**
+ * Validate an untrusted value as a board snapshot, to the same standard the
+ * library path applies, reusing the same predicates.
+ *
+ * A draft that passes a weaker check than the library is worse than no check
+ * at all: a draft missing its ball is restored, `ballPosition` throws during
+ * render, and because the draft is reloaded on every start the app is
+ * bricked with no way back from inside it.
+ */
+function isValidSnapshot(value: unknown): boolean {
+  return (
+    isObject(value) &&
+    Array.isArray(value.counters) &&
+    value.counters.every(isValidCounter) &&
+    isValidBall(value.ball) &&
+    Array.isArray(value.drawings) &&
+    value.drawings.every(isValidDrawing) &&
+    isValidPitch(value.pitch)
+  )
+}
+
+/**
+ * The draft is transient working state, not the library, so a draft that
+ * fails validation is discarded rather than preserved: starting on an empty
+ * board loses at most the last few seconds, while restoring a broken one
+ * loses the app.
+ */
 function loadDraft(): BoardSnapshot | null {
   try {
     const raw = readRaw(DRAFT_KEY)
-    if (!isObject(raw) || !Array.isArray(raw.counters) || !isObject(raw.pitch)) return null
+    if (!isValidSnapshot(raw)) return null
     return raw as unknown as BoardSnapshot
   } catch {
     return null
@@ -282,7 +336,7 @@ function importPatterns(json: string): Pattern[] {
 
   if (!Array.isArray(raw)) throw new Error('That file does not contain a list of patterns.')
 
-  const { patterns, unreadable } = readLibrary()
+  const { patterns, unreadable, damaged } = readLibrary()
   if (unreadable) {
     throw new Error(
       'Your saved patterns could not be read, so importing now would overwrite them. Export or clear your saved patterns first, then try again.',
@@ -308,7 +362,7 @@ function importPatterns(json: string): Pattern[] {
     added.push(renamed)
   }
 
-  writePatterns([...patterns, ...added])
+  writeLibrary([...patterns, ...added], damaged)
   return added
 }
 
