@@ -6,12 +6,16 @@ import PitchBoard from './components/PitchBoard.vue'
 import PatternLibrary from './components/PatternLibrary.vue'
 import { useBoard } from './composables/useBoard'
 import { useStorage } from './composables/useStorage'
+import { useExport } from './composables/useExport'
 
 const board = useBoard()
 const storage = useStorage()
+const exporter = useExport()
 
 const tool = ref<ToolMode>('select')
 const drawColor = ref('#ffffff')
+const boardRef = ref<InstanceType<typeof PitchBoard> | null>(null)
+const notice = ref<string | null>(null)
 
 const libraryOpen = ref(false)
 const currentPatternId = ref<string | null>(null)
@@ -48,6 +52,36 @@ function openRenamePrompt(id: string) {
 function confirmRenameLabel() {
   if (renameCounterId.value) board.setCounterLabel(renameCounterId.value, renameLabelDraft.value)
   renamePromptOpen.value = false
+}
+
+async function exportPng() {
+  const svg = boardRef.value?.svgEl
+  if (!svg) return
+  try {
+    const blob = await exporter.svgToPngBlob(svg)
+    exporter.downloadBlob(blob, `${exporter.slugify(currentName.value || 'tactics-board')}.png`)
+  } catch (error) {
+    notice.value = error instanceof Error ? error.message : 'The image could not be created.'
+  }
+}
+
+function exportJson() {
+  const patterns = storage.listPatterns()
+  if (patterns.length === 0) {
+    notice.value = 'There are no saved patterns to export.'
+    return
+  }
+  exporter.downloadText(storage.exportPatternsJson(patterns), 'tactics-patterns.json')
+}
+
+async function importJson() {
+  try {
+    const text = await exporter.pickJsonFile()
+    const added = storage.importPatterns(text)
+    notice.value = `Imported ${added.length} pattern(s).`
+  } catch (error) {
+    notice.value = error instanceof Error ? error.message : 'That file could not be imported.'
+  }
 }
 
 function onKeydown(event: KeyboardEvent) {
@@ -91,9 +125,17 @@ watch(
 
 <template>
   <div class="app">
-    <Toolbar v-model:tool="tool" v-model:drawColor="drawColor" @save="openSavePrompt" @open="libraryOpen = true" />
+    <Toolbar
+      v-model:tool="tool"
+      v-model:drawColor="drawColor"
+      @save="openSavePrompt"
+      @open="libraryOpen = true"
+      @exportPng="exportPng"
+      @exportJson="exportJson"
+      @importJson="importJson"
+    />
     <div class="stage">
-      <PitchBoard :tool="tool" :draw-color="drawColor" @rename="openRenamePrompt" />
+      <PitchBoard ref="boardRef" :tool="tool" :draw-color="drawColor" @rename="openRenamePrompt" />
     </div>
 
     <PatternLibrary :open="libraryOpen" @close="libraryOpen = false" />
@@ -126,6 +168,7 @@ watch(
       </div>
     </div>
 
+    <p v-if="notice" class="notice" role="status" @click="notice = null">{{ notice }}</p>
     <p v-if="storage.lastError.value" class="error" role="status">{{ storage.lastError.value }}</p>
   </div>
 </template>
@@ -142,6 +185,7 @@ body { font-family: system-ui, sans-serif; background: #102010; }
 .error {
   margin: 0; padding: 0.6rem 0.9rem; background: #b71c1c; color: #fff; font-size: 0.85rem;
 }
+.notice { margin: 0; padding: 0.6rem 0.9rem; background: #1565c0; color: #fff; font-size: 0.85rem; cursor: pointer; }
 .overlay { position: fixed; inset: 0; background: #000000aa; display: flex; align-items: center; justify-content: center; }
 .prompt { background: #263238; color: #eceff1; padding: 1rem; border-radius: 0.6rem; display: grid; gap: 0.5rem; min-width: 18rem; }
 .prompt-actions { display: flex; gap: 0.4rem; }
