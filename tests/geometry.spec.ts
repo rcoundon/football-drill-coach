@@ -6,6 +6,9 @@ import {
   viewBoxOf,
   toView,
   fromView,
+  clientToPitch,
+  clampToPitch,
+  distance,
 } from '../src/geometry'
 
 describe('pitch dimensions', () => {
@@ -56,5 +59,75 @@ describe('toView / fromView', () => {
     const back = fromView(toView(p, true), true)
     expect(back.x).toBeCloseTo(p.x, 10)
     expect(back.y).toBeCloseTo(p.y, 10)
+  })
+})
+
+describe('clientToPitch', () => {
+  // An 800x600 element. The 100 x 64.76 view box fits by WIDTH:
+  // scale = 800/100 = 8, rendered height = 64.76*8 = 518.1, so there is
+  // (600 - 518.1)/2 = 40.95 of letterboxing above and below.
+  const rect = { left: 0, top: 0, width: 800, height: 600 }
+
+  it('maps the centre of the element to the centre of the pitch', () => {
+    const p = clientToPitch(rect, 400, 300, false)
+    expect(p.x).toBeCloseTo(PITCH_W / 2, 6)
+    expect(p.y).toBeCloseTo(PITCH_H / 2, 6)
+  })
+
+  it('maps the top-left of the rendered pitch to the pitch origin', () => {
+    const letterbox = (600 - PITCH_H * 8) / 2
+    const p = clientToPitch(rect, 0, letterbox, false)
+    expect(p.x).toBeCloseTo(0, 6)
+    expect(p.y).toBeCloseTo(0, 6)
+  })
+
+  it('accounts for the element being offset in the page', () => {
+    const offset = { left: 120, top: 45, width: 800, height: 600 }
+    const p = clientToPitch(offset, 120 + 400, 45 + 300, false)
+    expect(p.x).toBeCloseTo(PITCH_W / 2, 6)
+    expect(p.y).toBeCloseTo(PITCH_H / 2, 6)
+  })
+
+  it('maps the centre correctly when rotated', () => {
+    const p = clientToPitch({ left: 0, top: 0, width: 600, height: 800 }, 300, 400, true)
+    expect(p.x).toBeCloseTo(PITCH_W / 2, 6)
+    expect(p.y).toBeCloseTo(PITCH_H / 2, 6)
+  })
+
+  it('puts the pitch origin at the top-RIGHT of a rotated board', () => {
+    // Rotated view box is 64.76 wide x 100 tall in a 600x800 box:
+    // scale = min(600/64.76, 800/100) = min(9.265, 8) = 8.
+    const scale = 8
+    const renderedW = PITCH_H * scale
+    const offX = (600 - renderedW) / 2
+    const p = clientToPitch({ left: 0, top: 0, width: 600, height: 800 }, offX + renderedW, 0, true)
+    expect(p.x).toBeCloseTo(0, 6)
+    expect(p.y).toBeCloseTo(0, 6)
+  })
+
+  it('round-trips an arbitrary pitch position back to itself', () => {
+    const original = { x: 73.5, y: 12.25 }
+    const view = toView(original, false)
+    const scale = 8
+    const offY = (600 - PITCH_H * scale) / 2
+    const p = clientToPitch(rect, view.x * scale, offY + view.y * scale, false)
+    expect(p.x).toBeCloseTo(original.x, 6)
+    expect(p.y).toBeCloseTo(original.y, 6)
+  })
+})
+
+describe('clampToPitch', () => {
+  it('leaves an in-bounds point alone', () => {
+    expect(clampToPitch({ x: 50, y: 30 })).toEqual({ x: 50, y: 30 })
+  })
+
+  it('pulls an out-of-bounds point back onto the pitch', () => {
+    expect(clampToPitch({ x: -20, y: 999 })).toEqual({ x: 0, y: PITCH_H })
+  })
+})
+
+describe('distance', () => {
+  it('measures a 3-4-5 triangle', () => {
+    expect(distance({ x: 0, y: 0 }, { x: 3, y: 4 })).toBeCloseTo(5, 10)
   })
 })

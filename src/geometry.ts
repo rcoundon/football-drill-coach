@@ -1,4 +1,4 @@
-import type { CounterColor, Vec } from './types'
+import type { CounterColor, Rect, Vec } from './types'
 
 /**
  * A real pitch is 105m x 68m. We normalise the long side to 100 units and
@@ -32,4 +32,37 @@ export function toView(p: Vec, rotated: boolean): Vec {
 /** The inverse of toView. */
 export function fromView(p: Vec, rotated: boolean): Vec {
   return rotated ? { x: p.y, y: PITCH_H - p.x } : { x: p.x, y: p.y }
+}
+
+/**
+ * Convert a pointer event's client coordinates into pitch units.
+ *
+ * The SVG uses the default preserveAspectRatio ("xMidYMid meet"), so the
+ * view box is scaled by the smaller of the two axis ratios and centred,
+ * leaving letterboxing on the other axis. We reproduce that here rather
+ * than using getScreenCTM so the function stays pure and testable.
+ */
+export function clientToPitch(rect: Rect, clientX: number, clientY: number, rotated: boolean): Vec {
+  const vw = rotated ? PITCH_H : PITCH_W
+  const vh = rotated ? PITCH_W : PITCH_H
+
+  const scale = Math.min(rect.width / vw, rect.height / vh)
+  const offsetX = (rect.width - vw * scale) / 2
+  const offsetY = (rect.height - vh * scale) / 2
+
+  const viewX = (clientX - rect.left - offsetX) / scale
+  const viewY = (clientY - rect.top - offsetY) / scale
+
+  return fromView({ x: viewX, y: viewY }, rotated)
+}
+
+export function clampToPitch(p: Vec): Vec {
+  return {
+    x: Math.min(PITCH_W, Math.max(0, p.x)),
+    y: Math.min(PITCH_H, Math.max(0, p.y)),
+  }
+}
+
+export function distance(a: Vec, b: Vec): number {
+  return Math.hypot(a.x - b.x, a.y - b.y)
 }
