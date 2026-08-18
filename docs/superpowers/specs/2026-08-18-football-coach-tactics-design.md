@@ -53,8 +53,13 @@ objects; a tactics board has tens.
 
 ## Coordinate system
 
-All positions are stored in **pitch units on a 0–100 by 0–100 grid**, never in pixels.
-The board is an SVG with `viewBox="0 0 100 100"`.
+All positions are stored in **pitch units: 0–100 in x, 0–64.76 in y**, never in pixels.
+The board is an SVG with `viewBox="0 0 100 64.76"`.
+
+(Amended during implementation. The original square view box was wrong: a 105m x 68m
+pitch drawn into a square box either stretches the geometry, turning the centre circle
+into an ellipse, or needs non-uniform scaling. Normalising the long side to 100 at a
+uniform `100 / 105` scale gives a height of `68 x (100 / 105) = 64.76`.)
 
 This has three consequences worth stating explicitly:
 
@@ -67,9 +72,16 @@ Portrait and landscape are a single `rotated` boolean, applied as an SVG transfo
 pitch group, with an inverse transform on counter labels so numbers stay upright. Stored
 positions are unaffected by rotation.
 
-Converting a pointer event to pitch units uses the SVG's own screen coordinate transform
-matrix rather than manual arithmetic against the bounding rectangle, so it stays correct
-under CSS transforms and high-DPI displays.
+Converting a pointer event to pitch units reproduces `preserveAspectRatio` arithmetically
+against the bounding rectangle, rather than using the SVG's screen coordinate transform
+matrix as originally specified.
+
+(Amended during implementation. The matrix approach is more robust in principle — it stays
+correct under arbitrary CSS transforms — but `getScreenCTM` and `DOMPoint` are unimplemented
+in jsdom, which would have left the single most drag-critical function in the app untestable.
+The arithmetic version is pure and exhaustively tested in both rotations. It assumes the
+board carries no CSS transform and keeps the default `preserveAspectRatio`; both hold today,
+and changing either means revisiting this function.)
 
 ## Data model
 
@@ -77,7 +89,7 @@ under CSS transforms and high-DPI displays.
 type PitchType = 'blank' | 'full' | 'half'
 type CounterColor = 'red' | 'blue' | 'yellow' | 'green' | 'black'
 
-type Vec = { x: number; y: number }   // pitch units, 0..100
+type Vec = { x: number; y: number }   // pitch units: x 0..100, y 0..64.76
 
 type Counter = {
   id: string
@@ -249,8 +261,16 @@ Unit tests cover the places where bugs actually hide:
 Component tests cover counter dragging and arrow drawing through simulated pointer
 events.
 
-Pitch marking geometry is not unit tested — it is purely visual, and a test asserting
-circle radii would restate the implementation without catching a real defect.
+Pitch marking geometry *is* unit tested, contrary to this section's original position.
+The distinction that changed the decision: a test restating circle radii would indeed be
+worthless, but a test asserting *invariants* is not. The suite checks that every marking
+falls inside the coordinate space and that each arc's endpoints genuinely lie on the
+circle its own radius and centre claim. The second of those caught a real defect — the
+penalty arc's endpoints had been derived from the wrong quantity, so the rendered "D" was
+not centred on the penalty spot.
+
+What remains untested is whether the pitch *looks* right, which was verified by hand in a
+browser instead.
 
 ## Dependencies
 
@@ -261,7 +281,7 @@ Pinned to exact versions, no range prefixes.
 | vue | 3.5.41 |
 | vite | 8.2.1 |
 | @vitejs/plugin-vue | 6.0.8 |
-| typescript | 7.0.2 |
+| typescript | 6.0.3 |
 | vue-tsc | 3.3.10 |
 | vitest | 4.1.11 |
 | @vue/test-utils | 2.4.11 |
