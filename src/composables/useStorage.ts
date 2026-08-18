@@ -9,6 +9,18 @@ const SCHEMA_VERSION = 1
 
 const lastError = ref<string | null>(null)
 
+/**
+ * Whether the most recent LIBRARY write actually reached localStorage.
+ *
+ * `savePattern` deliberately writes nothing when the library is unreadable,
+ * and a write can also fail on quota, yet it still returns the pattern it
+ * built in memory. Callers that want to tell the coach "saved" — or to treat
+ * the pattern as the one now open — have to know which happened.
+ *
+ * Draft autosaves do not touch this: it answers for the library only.
+ */
+const lastWriteSucceeded = ref(true)
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -188,6 +200,15 @@ function writeLibrary(patterns: Pattern[], damaged: unknown[]): boolean {
   return writeRaw(PATTERNS_KEY, [...patterns, ...damaged])
 }
 
+/**
+ * Record whether a write landed, and say whether the coach should also be
+ * told that damaged rows were carried through it.
+ */
+function recordWrite(ok: boolean, damaged: unknown[]): boolean {
+  lastWriteSucceeded.value = ok
+  return ok && damaged.length > 0
+}
+
 function nowIso(): string {
   return new Date().toISOString()
 }
@@ -216,6 +237,7 @@ function savePattern(name: string, snap: BoardSnapshot, id?: string): Pattern {
 
   if (unreadable) {
     lastError.value = UNREADABLE_LIBRARY_MESSAGE
+    lastWriteSucceeded.value = false
     return toPattern(name, snap, id ?? makeId(), nowIso())
   }
 
@@ -226,7 +248,7 @@ function savePattern(name: string, snap: BoardSnapshot, id?: string): Pattern {
   if (index === -1) patterns.push(pattern)
   else patterns[index] = pattern
 
-  if (writeLibrary(patterns, damaged) && damaged.length > 0) {
+  if (recordWrite(writeLibrary(patterns, damaged), damaged)) {
     lastError.value = damagedMessage(damaged.length)
   }
   return pattern
@@ -237,9 +259,10 @@ function deletePattern(id: string): void {
   const { patterns, unreadable, damaged } = readLibrary()
   if (unreadable) {
     lastError.value = UNREADABLE_LIBRARY_MESSAGE
+    lastWriteSucceeded.value = false
     return
   }
-  if (writeLibrary(patterns.filter((p) => p.id !== id), damaged) && damaged.length > 0) {
+  if (recordWrite(writeLibrary(patterns.filter((p) => p.id !== id), damaged), damaged)) {
     lastError.value = damagedMessage(damaged.length)
   }
 }
@@ -249,13 +272,14 @@ function renamePattern(id: string, name: string): void {
   const { patterns, unreadable, damaged } = readLibrary()
   if (unreadable) {
     lastError.value = UNREADABLE_LIBRARY_MESSAGE
+    lastWriteSucceeded.value = false
     return
   }
   const pattern = patterns.find((p) => p.id === id)
   if (!pattern) return
   pattern.name = name
   pattern.updatedAt = nowIso()
-  if (writeLibrary(patterns, damaged) && damaged.length > 0) {
+  if (recordWrite(writeLibrary(patterns, damaged), damaged)) {
     lastError.value = damagedMessage(damaged.length)
   }
 }
@@ -362,7 +386,7 @@ function importPatterns(json: string): Pattern[] {
     added.push(renamed)
   }
 
-  writeLibrary([...patterns, ...added], damaged)
+  recordWrite(writeLibrary([...patterns, ...added], damaged), damaged)
   return added
 }
 
@@ -377,6 +401,7 @@ const storage = {
   importPatterns,
   exportPatternsJson,
   lastError,
+  lastWriteSucceeded,
 }
 
 export function useStorage() {

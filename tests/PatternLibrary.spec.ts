@@ -84,6 +84,15 @@ describe('deleting', () => {
     expect(wrapper.find('[data-confirm-delete]').exists()).toBe(true)
     expect(useStorage().listPatterns()).toHaveLength(1)
   })
+
+  it('reports the delete so the app can stay in step', async () => {
+    const saved = seed('Press trigger')
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    await wrapper.find('[data-delete]').trigger('click')
+    await wrapper.find('[data-confirm-delete]').trigger('click')
+
+    expect(wrapper.emitted('delete')).toEqual([[saved.id]])
+  })
 })
 
 describe('renaming', () => {
@@ -95,5 +104,21 @@ describe('renaming', () => {
     await input.setValue('Counter press')
     await wrapper.find('[data-rename-save]').trigger('click')
     expect(useStorage().listPatterns()[0].name).toBe('Counter press')
+  })
+
+  /**
+   * App owns which pattern is open. The library renames through useStorage,
+   * so without telling App the two drift apart: renaming the open pattern and
+   * pressing Save wrote the old name straight back over it, silently, because
+   * the in-place save no longer prompts.
+   */
+  it('reports the rename so the app can stay in step', async () => {
+    const saved = seed('Press trigger')
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    await wrapper.find('[data-rename]').trigger('click')
+    await wrapper.find('[data-rename-input]').setValue('Counter press')
+    await wrapper.find('[data-rename-save]').trigger('click')
+
+    expect(wrapper.emitted('rename')).toEqual([[{ id: saved.id, name: 'Counter press' }]])
   })
 })

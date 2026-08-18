@@ -3,7 +3,7 @@ import { mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import App from '../src/App.vue'
 import { useBoard, __resetBoardForTests, type BoardSnapshot } from '../src/composables/useBoard'
-import { useStorage } from '../src/composables/useStorage'
+import { useStorage, PATTERNS_KEY } from '../src/composables/useStorage'
 import { useExport } from '../src/composables/useExport'
 import { PITCH_H, PITCH_W } from '../src/geometry'
 
@@ -352,5 +352,93 @@ describe('the storage error message', () => {
 
     expect(wrapper.find('.error').exists()).toBe(false)
     expect(store.lastError.value).toBeNull()
+  })
+})
+
+/**
+ * The library renames and deletes through useStorage. App owns which pattern
+ * is open, so unless the library reports what it did, the two drift: Save
+ * wrote the stale name back over a renamed pattern, and resurrected a deleted
+ * one under its old id.
+ */
+describe('the library changing the open pattern', () => {
+  it('keeps the open name in step when the library renames it', async () => {
+    const store = useStorage()
+    const saved = store.savePattern('Press trigger', sampleSnapshot())
+    wrapper = mountApp()
+
+    await openLibraryAndLoad(wrapper)
+    await wrapper.find('[data-open]').trigger('click')
+    await wrapper.find('[data-rename]').trigger('click')
+    await wrapper.find('[data-rename-input]').setValue('Counter press')
+    await wrapper.find('[data-rename-save]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.find('[data-current-pattern]').text()).toContain('Counter press')
+
+    await wrapper.find('[data-save]').trigger('click')
+    await nextTick()
+
+    const listed = store.listPatterns()
+    expect(listed).toHaveLength(1)
+    expect(listed[0].id).toBe(saved.id)
+    expect(listed[0].name).toBe('Counter press')
+  })
+
+  it('closes the open pattern when the library deletes it, so Save cannot resurrect it', async () => {
+    const store = useStorage()
+    store.savePattern('Press trigger', sampleSnapshot())
+    wrapper = mountApp()
+
+    await openLibraryAndLoad(wrapper)
+    await wrapper.find('[data-open]').trigger('click')
+    await wrapper.find('[data-delete]').trigger('click')
+    await wrapper.find('[data-confirm-delete]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.find('[data-current-pattern]').text()).toMatch(/unsaved/i)
+
+    await wrapper.find('[data-save]').trigger('click')
+    await nextTick()
+
+    // Save must ask for a name rather than write the deleted pattern back.
+    expect(wrapper.find('#pattern-name').exists()).toBe(true)
+    expect(store.listPatterns()).toHaveLength(0)
+  })
+})
+
+/**
+ * savePattern deliberately writes nothing when the library is unreadable, so
+ * claiming success unconditionally showed the coach a "Saved" notice and an
+ * error banner at the same time.
+ */
+describe('a save that was refused', () => {
+  it('does not claim the open pattern was saved', async () => {
+    const store = useStorage()
+    store.savePattern('Press trigger', sampleSnapshot())
+    wrapper = mountApp()
+    await openLibraryAndLoad(wrapper)
+
+    localStorage.setItem(PATTERNS_KEY, '{not json at all')
+    await wrapper.find('[data-save]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.find('.notice').exists()).toBe(false)
+    expect(wrapper.find('.error').exists()).toBe(true)
+    expect(store.lastError.value).toMatch(/could not be read/i)
+  })
+
+  it('does not treat a pattern that was never written as the open one', async () => {
+    useBoard().addCounter('red')
+    localStorage.setItem(PATTERNS_KEY, '{not json at all')
+    wrapper = mountApp()
+
+    await wrapper.find('[data-save]').trigger('click')
+    await wrapper.find('#pattern-name').setValue('Press trigger')
+    await wrapper.find('[data-confirm-save]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.find('[data-current-pattern]').text()).toMatch(/unsaved/i)
+    expect(localStorage.getItem(PATTERNS_KEY)).toBe('{not json at all')
   })
 })

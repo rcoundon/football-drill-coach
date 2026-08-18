@@ -4,7 +4,18 @@ import type { Pattern } from '../types'
 import { useStorage } from '../composables/useStorage'
 
 const props = defineProps<{ open: boolean }>()
-const emit = defineEmits<{ close: []; load: [pattern: Pattern] }>()
+/**
+ * Rename and delete are reported as well as performed. App owns which pattern
+ * is open; the library writes through useStorage, so a rename or delete it
+ * keeps to itself leaves App holding a stale name — which its in-place Save
+ * then writes back — or a dead id it would resurrect.
+ */
+const emit = defineEmits<{
+  close: []
+  load: [pattern: Pattern]
+  rename: [change: { id: string; name: string }]
+  delete: [id: string]
+}>()
 
 const storage = useStorage()
 
@@ -49,6 +60,7 @@ function askDelete(id: string) {
 
 function confirmDelete(id: string) {
   storage.deletePattern(id)
+  emit('delete', id)
   confirmingId.value = null
   refresh()
 }
@@ -60,7 +72,10 @@ function startRename(pattern: Pattern) {
 
 function saveRename(id: string) {
   const name = renameDraft.value.trim()
-  if (name) storage.renamePattern(id, name)
+  if (name) {
+    storage.renamePattern(id, name)
+    emit('rename', { id, name })
+  }
   renamingId.value = null
   refresh()
 }

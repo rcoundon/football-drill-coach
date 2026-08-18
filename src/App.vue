@@ -49,6 +49,10 @@ const savePromptTitle = computed(() =>
 function openSavePrompt() {
   if (currentPatternId.value) {
     const saved = storage.savePattern(currentName.value, board.snapshot(), currentPatternId.value)
+    // savePattern writes nothing when the library is unreadable, and a write
+    // can fail on quota, so success is not something to claim on faith: the
+    // error banner is the message in that case.
+    if (!storage.lastWriteSucceeded.value) return
     currentName.value = saved.name
     notice.value = `Saved “${saved.name}”.`
     return
@@ -71,15 +75,33 @@ function confirmSave() {
   // A fork deliberately passes no id, so savePattern mints a new one.
   const id = savePromptMode.value === 'fork' ? undefined : currentPatternId.value ?? undefined
   const saved = storage.savePattern(name, board.snapshot(), id)
+  savePromptOpen.value = false
+  // A pattern that was never written is not the pattern that is open.
+  if (!storage.lastWriteSucceeded.value) return
   currentPatternId.value = saved.id
   currentName.value = saved.name
-  savePromptOpen.value = false
 }
 
 function onPatternLoaded(pattern: Pattern) {
   board.loadSnapshot(storage.patternToSnapshot(pattern))
   currentPatternId.value = pattern.id
   currentName.value = pattern.name
+}
+
+function onPatternRenamed(change: { id: string; name: string }) {
+  if (change.id === currentPatternId.value) currentName.value = change.name
+}
+
+/**
+ * The board keeps its contents, but it is no longer a saved pattern: Save
+ * must ask for a name rather than write the deleted pattern back under its
+ * old id.
+ */
+function onPatternDeleted(id: string) {
+  if (id !== currentPatternId.value) return
+  notice.value = `“${currentName.value}” was deleted. This board is no longer saved.`
+  currentPatternId.value = null
+  currentName.value = ''
 }
 
 const renameCounterId = ref<string | null>(null)
@@ -188,7 +210,13 @@ watch(
       <PitchBoard ref="boardRef" :tool="tool" :draw-color="drawColor" @rename="openRenamePrompt" />
     </div>
 
-    <PatternLibrary :open="libraryOpen" @close="libraryOpen = false" @load="onPatternLoaded" />
+    <PatternLibrary
+      :open="libraryOpen"
+      @close="libraryOpen = false"
+      @load="onPatternLoaded"
+      @rename="onPatternRenamed"
+      @delete="onPatternDeleted"
+    />
 
     <div v-if="savePromptOpen" class="overlay" @click.self="savePromptOpen = false">
       <div class="prompt" role="dialog" :aria-label="savePromptTitle">

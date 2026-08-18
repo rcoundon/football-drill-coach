@@ -57,8 +57,10 @@ function emptyState(): BoardState {
     counters: [],
     // Not the pitch centre: that is where the first counter lands, and the
     // ball's hit circle would sit right on top of the counter's body, so the
-    // coach's first drag would grab the ball instead of the player.
-    ball: { pos: { x: PITCH_W / 4, y: PITCH_H / 2 }, attachedTo: null },
+    // coach's first drag would grab the ball instead of the player. Just
+    // below the centre circle, which is clear of the centre on every pitch
+    // type and well inside the half pitch's 25..75 band.
+    ball: { pos: { x: PITCH_W / 2, y: PITCH_H / 2 + 10 }, attachedTo: null },
     drawings: [],
     pitch: { type: 'blank', rotated: false },
   }
