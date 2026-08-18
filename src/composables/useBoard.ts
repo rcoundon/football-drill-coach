@@ -10,6 +10,12 @@ export const SNAP_RADIUS = 3.5
 /** Where an attached ball sits relative to its holder, in pitch units. */
 export const BALL_OFFSET: Vec = { x: 1.8, y: 1.8 }
 
+/** Minimum spacing between recorded freehand points, in pitch units. */
+export const MIN_PEN_STEP = 0.6
+
+/** Arrows shorter than this are treated as an accidental tap. */
+export const MIN_ARROW_LENGTH = 2
+
 export type BoardState = {
   counters: Counter[]
   ball: Ball
@@ -210,6 +216,74 @@ function ballPosition(): Vec {
   return state.ball.pos
 }
 
+function drawingById(id: string): Drawing | undefined {
+  return state.drawings.find((d) => d.id === id)
+}
+
+function startPen(at: Vec, color: string): string {
+  commit()
+  const id = newId()
+  state.drawings.push({ id, kind: 'pen', color, points: [clampToPitch(at)] })
+  return id
+}
+
+/** Drag-time; does not commit. Skips points too close to the previous one. */
+function extendPen(id: string, at: Vec): void {
+  const drawing = drawingById(id)
+  if (!drawing || drawing.kind !== 'pen') return
+  const point = clampToPitch(at)
+  const last = drawing.points[drawing.points.length - 1]
+  if (last && distance(last, point) < MIN_PEN_STEP) return
+  drawing.points.push(point)
+}
+
+function startArrow(at: Vec, color: string, style: 'run' | 'pass'): string {
+  commit()
+  const id = newId()
+  const point = clampToPitch(at)
+  state.drawings.push({ id, kind: 'arrow', color, style, from: point, to: { ...point } })
+  return id
+}
+
+/** Drag-time; does not commit. */
+function updateArrow(id: string, to: Vec): void {
+  const drawing = drawingById(id)
+  if (!drawing || drawing.kind !== 'arrow') return
+  drawing.to = clampToPitch(to)
+}
+
+/**
+ * End a stroke. A stroke too small to be intentional is removed, and the
+ * undo entry its start pushed is popped, so a stray tap leaves no trace.
+ */
+function finishDrawing(id: string): void {
+  const drawing = drawingById(id)
+  if (!drawing) return
+
+  const degenerate =
+    drawing.kind === 'pen'
+      ? drawing.points.length < 2
+      : distance(drawing.from, drawing.to) < MIN_ARROW_LENGTH
+
+  if (!degenerate) return
+
+  state.drawings = state.drawings.filter((d) => d.id !== id)
+  undoStack.value.pop()
+}
+
+function deleteDrawing(id: string): void {
+  const index = state.drawings.findIndex((d) => d.id === id)
+  if (index === -1) return
+  commit()
+  state.drawings.splice(index, 1)
+}
+
+function clearDrawings(): void {
+  if (state.drawings.length === 0) return
+  commit()
+  state.drawings = []
+}
+
 const canUndo = computed(() => undoStack.value.length > 0)
 const canRedo = computed(() => redoStack.value.length > 0)
 
@@ -236,6 +310,14 @@ const board = {
   moveBall,
   dropBall,
   ballPosition,
+  startPen,
+  extendPen,
+  startArrow,
+  updateArrow,
+  finishDrawing,
+  deleteDrawing,
+  clearDrawings,
+  drawingById,
 }
 
 export function useBoard() {
