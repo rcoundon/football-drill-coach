@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import type { Counter } from '../types'
 
 const props = defineProps<{ counter: Counter; rotated: boolean; hasBall: boolean }>()
-defineEmits<{ grab: [event: PointerEvent] }>()
+defineEmits<{ grab: [event: PointerEvent]; rename: [id: string] }>()
 
 const FILLS: Record<Counter['color'], string> = {
   red: '#e53935',
@@ -49,6 +49,7 @@ const HIT_RADIUS = 4.2
       :r="HIT_RADIUS"
       fill="transparent"
       @pointerdown="$emit('grab', $event as PointerEvent)"
+      @dblclick="$emit('rename', counter.id)"
     />
   </g>
 </template>

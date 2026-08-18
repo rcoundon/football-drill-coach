@@ -216,6 +216,30 @@ describe('erase mode', () => {
   })
 })
 
+describe('renaming a counter', () => {
+  it('forwards rename with the counter id while the select tool is active', async () => {
+    const board = useBoard()
+    const c = board.addCounter('red')
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    await wrapper.find('[data-counter] circle:last-child').trigger('dblclick')
+
+    expect(wrapper.emitted('rename')).toEqual([[c.id]])
+  })
+
+  it('does not forward rename while the erase tool is active', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    const wrapper = mountBoard('erase')
+    await wrapper.vm.$nextTick()
+
+    await wrapper.find('[data-counter] circle:last-child').trigger('dblclick')
+
+    expect(wrapper.emitted('rename')).toBeUndefined()
+  })
+})
+
 describe('rotation', () => {
   it('swaps the view box when the board is rotated', async () => {
     const board = useBoard()

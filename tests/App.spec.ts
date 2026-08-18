@@ -67,3 +67,39 @@ describe('keyboard shortcuts', () => {
     }
   })
 })
+
+describe('renaming a counter label', () => {
+  it('opens pre-filled with the current label, saves the new one, and is undoable', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    wrapper = mount(App)
+    await wrapper.vm.$nextTick()
+
+    await wrapper.find('[data-counter] circle:last-child').trigger('dblclick')
+    await wrapper.vm.$nextTick()
+
+    const input = wrapper.find('#counter-label')
+    expect((input.element as HTMLInputElement).value).toBe('1')
+
+    await input.setValue('CB')
+    await wrapper.find('.prompt-actions .chip').trigger('click')
+
+    expect(board.state.counters[0].label).toBe('CB')
+
+    board.undo()
+    expect(board.state.counters[0].label).toBe('1')
+  })
+
+  it('does nothing on double-click while the erase tool is active', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    wrapper = mount(App)
+    fire({ key: 'e' })
+    await wrapper.vm.$nextTick()
+
+    await wrapper.find('[data-counter] circle:last-child').trigger('dblclick')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('#counter-label').exists()).toBe(false)
+  })
+})

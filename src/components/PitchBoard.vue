@@ -9,6 +9,7 @@ import BallToken from './BallToken.vue'
 import DrawingLayer from './DrawingLayer.vue'
 
 const props = defineProps<{ tool: ToolMode; drawColor: string }>()
+const emit = defineEmits<{ rename: [id: string] }>()
 
 const board = useBoard()
 const svgEl = ref<SVGSVGElement | null>(null)
@@ -61,6 +62,11 @@ function onBallGrab(event: PointerEvent) {
   board.commit()
   drag.value = { kind: 'ball' }
   board.moveBall(toPitch(event))
+}
+
+function onCounterRename(id: string) {
+  if (props.tool !== 'select') return
+  emit('rename', id)
 }
 
 function onDrawingHit(id: string) {
@@ -129,6 +135,7 @@ function onPointerUp(event: PointerEvent) {
         :rotated="board.state.pitch.rotated"
         :has-ball="board.state.ball.attachedTo === counter.id"
         @grab="onCounterGrab(counter.id, $event)"
+        @rename="onCounterRename"
       />
       <BallToken :pos="ballPos" @grab="onBallGrab" />
     </g>
