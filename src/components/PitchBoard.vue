@@ -1,3 +1,11 @@
+<script lang="ts">
+/**
+ * How close together two presses on the same counter must be to count as a
+ * double press. Roughly a platform double-click interval.
+ */
+export const DOUBLE_PRESS_MS = 400
+</script>
+
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { ToolMode } from '../types'
@@ -16,13 +24,30 @@ const svgEl = ref<SVGSVGElement | null>(null)
 
 defineExpose({ svgEl })
 
-type Drag =
+type DragTarget =
   | { kind: 'counter'; id: string }
   | { kind: 'ball' }
   | { kind: 'pen'; id: string }
   | { kind: 'arrow'; id: string }
 
+/**
+ * There is one drag at a time, and it belongs to one pointer.
+ *
+ * Without the pointerId, a second pointer going down mid-drag (a resting
+ * palm beside a stylus, a second finger) overwrites this value, leaks the
+ * first pointer's capture and misattributes its moves to the new target.
+ */
+type Drag = DragTarget & { pointerId: number }
+
 const drag = ref<Drag | null>(null)
+
+/** The last press on a counter, for detecting a double press. */
+let lastCounterPress: { id: string; at: number } | null = null
+
+/** True for a pointermove/up belonging to some pointer other than the dragging one. */
+function isOtherPointer(event: PointerEvent): boolean {
+  return drag.value !== null && drag.value.pointerId !== event.pointerId
+}
 
 const viewBox = computed(() => viewBoxOf(board.state.pitch.rotated))
 
@@ -44,29 +69,47 @@ function capture(event: PointerEvent) {
 
 function onCounterGrab(id: string, event: PointerEvent) {
   if (props.tool === 'erase') {
+    event.stopPropagation()
     board.deleteCounter(id)
     return
   }
   if (props.tool !== 'select') return
+  if (drag.value) return // a drag is already live; ignore the second pointer
   event.stopPropagation()
+
+  /*
+   * Rename is detected here rather than from a `dblclick` handler on the
+   * counter. `setPointerCapture` below retargets the compatibility mouse
+   * events at the capturing <svg>, so `click` and `dblclick` never reach the
+   * counter in a real browser and a handler there can never fire. Counting
+   * presses ourselves survives capture and matches double-tap on a tablet.
+   */
+  const now = Date.now()
+  const isSecondPress =
+    lastCounterPress !== null &&
+    lastCounterPress.id === id &&
+    now - lastCounterPress.at <= DOUBLE_PRESS_MS
+  lastCounterPress = isSecondPress ? null : { id, at: now }
+
+  if (isSecondPress) {
+    emit('rename', id)
+    return
+  }
+
   capture(event)
   board.commit() // one entry for the whole drag
-  drag.value = { kind: 'counter', id }
+  drag.value = { kind: 'counter', id, pointerId: event.pointerId }
   board.moveCounter(id, toPitch(event))
 }
 
 function onBallGrab(event: PointerEvent) {
   if (props.tool !== 'select') return
+  if (drag.value) return
   event.stopPropagation()
   capture(event)
   board.commit()
-  drag.value = { kind: 'ball' }
+  drag.value = { kind: 'ball', pointerId: event.pointerId }
   board.moveBall(toPitch(event))
-}
-
-function onCounterRename(id: string) {
-  if (props.tool !== 'select') return
-  emit('rename', id)
 }
 
 function onDrawingHit(id: string) {
@@ -74,20 +117,25 @@ function onDrawingHit(id: string) {
 }
 
 function onPointerDown(event: PointerEvent) {
+  if (drag.value) return
   const at = toPitch(event)
   if (props.tool === 'pen') {
     capture(event)
-    drag.value = { kind: 'pen', id: board.startPen(at, props.drawColor) }
+    drag.value = { kind: 'pen', id: board.startPen(at, props.drawColor), pointerId: event.pointerId }
   } else if (props.tool === 'arrow-run' || props.tool === 'arrow-pass') {
     capture(event)
     const style = props.tool === 'arrow-run' ? 'run' : 'pass'
-    drag.value = { kind: 'arrow', id: board.startArrow(at, props.drawColor, style) }
+    drag.value = {
+      kind: 'arrow',
+      id: board.startArrow(at, props.drawColor, style),
+      pointerId: event.pointerId,
+    }
   }
 }
 
 function onPointerMove(event: PointerEvent) {
   const active = drag.value
-  if (!active) return
+  if (!active || isOtherPointer(event)) return
   const at = toPitch(event)
   if (active.kind === 'counter') board.moveCounter(active.id, at)
   else if (active.kind === 'ball') board.moveBall(at)
@@ -97,7 +145,7 @@ function onPointerMove(event: PointerEvent) {
 
 function onPointerUp(event: PointerEvent) {
   const active = drag.value
-  if (!active) return
+  if (!active || isOtherPointer(event)) return
   const at = toPitch(event)
   if (active.kind === 'counter') board.moveCounter(active.id, at)
   else if (active.kind === 'ball') board.dropBall(at)
@@ -135,7 +183,6 @@ function onPointerUp(event: PointerEvent) {
         :rotated="board.state.pitch.rotated"
         :has-ball="board.state.ball.attachedTo === counter.id"
         @grab="onCounterGrab(counter.id, $event)"
-        @rename="onCounterRename"
       />
       <BallToken :pos="ballPos" @grab="onBallGrab" />
     </g>

@@ -1,9 +1,51 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, type VueWrapper } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import App from '../src/App.vue'
 import { useBoard, __resetBoardForTests } from '../src/composables/useBoard'
+import { PITCH_H, PITCH_W } from '../src/geometry'
 
 let wrapper: VueWrapper | undefined
+
+const RECT = { left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON: () => ({}) }
+
+/**
+ * Mount the whole app with a board that behaves like one on screen: jsdom
+ * gives every element a zero-sized rect and implements no pointer capture,
+ * so without these the coordinate conversion divides by zero.
+ */
+function mountApp() {
+  const app = mount(App, { attachTo: document.body })
+  const svg = app.find('svg').element as unknown as SVGSVGElement
+  svg.getBoundingClientRect = () => RECT as DOMRect
+  ;(svg as unknown as { setPointerCapture: (id: number) => void }).setPointerCapture = vi.fn()
+  ;(svg as unknown as { releasePointerCapture: (id: number) => void }).releasePointerCapture = vi.fn()
+  return app
+}
+
+/** Client coordinates for a given pitch position, matching RECT above. */
+function clientFor(x: number, y: number) {
+  const scale = 800 / PITCH_W
+  const offsetY = (600 - PITCH_H * scale) / 2
+  return { clientX: x * scale, clientY: offsetY + y * scale, pointerId: 1 }
+}
+
+async function firePointer(node: Element, type: string, opts: ReturnType<typeof clientFor>) {
+  node.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, ...opts }))
+  await nextTick()
+}
+
+/**
+ * One press on a counter, as a browser produces it: pointerdown on the
+ * counter's hit circle, pointerup on the captured svg. Renaming is driven
+ * from these, not from `dblclick`, which pointer capture retargets away from
+ * the counter and which therefore never reaches it in a real browser.
+ */
+async function pressCounter(app: VueWrapper) {
+  const hit = app.find('[data-counter]').element.lastElementChild as Element
+  await firePointer(hit, 'pointerdown', clientFor(50, 32))
+  await firePointer(app.find('svg').element, 'pointerup', clientFor(50, 32))
+}
 
 beforeEach(() => {
   localStorage.clear()
@@ -72,10 +114,11 @@ describe('renaming a counter label', () => {
   it('opens pre-filled with the current label, saves the new one, and is undoable', async () => {
     const board = useBoard()
     board.addCounter('red')
-    wrapper = mount(App)
+    wrapper = mountApp()
     await wrapper.vm.$nextTick()
 
-    await wrapper.find('[data-counter] circle:last-child').trigger('dblclick')
+    await pressCounter(wrapper)
+    await pressCounter(wrapper)
     await wrapper.vm.$nextTick()
 
     const input = wrapper.find('#counter-label')
@@ -90,14 +133,26 @@ describe('renaming a counter label', () => {
     expect(board.state.counters[0].label).toBe('1')
   })
 
-  it('does nothing on double-click while the erase tool is active', async () => {
-    const board = useBoard()
-    board.addCounter('red')
-    wrapper = mount(App)
+  it('does not open on a single press', async () => {
+    useBoard().addCounter('red')
+    wrapper = mountApp()
+    await wrapper.vm.$nextTick()
+
+    await pressCounter(wrapper)
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('#counter-label').exists()).toBe(false)
+  })
+
+  it('does nothing on a double press while the erase tool is active', async () => {
+    useBoard().addCounter('red')
+    useBoard().addCounter('red')
+    wrapper = mountApp()
     fire({ key: 'e' })
     await wrapper.vm.$nextTick()
 
-    await wrapper.find('[data-counter] circle:last-child').trigger('dblclick')
+    await pressCounter(wrapper)
+    await pressCounter(wrapper)
     await wrapper.vm.$nextTick()
 
     expect(wrapper.find('#counter-label').exists()).toBe(false)

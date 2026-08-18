@@ -82,11 +82,16 @@ function apply(snap: BoardSnapshot): void {
  *
  * Call this immediately before mutating. Everything that changes the board
  * goes through here — that is what makes undo correct by construction.
+ *
+ * Returns the entry it pushed, so a caller that may later need to take its
+ * own entry back can identify it without assuming where in the stack it sits.
  */
-function commit(): void {
-  undoStack.value.push(snapshot())
+function commit(): BoardSnapshot {
+  const entry = snapshot()
+  undoStack.value.push(entry)
   if (undoStack.value.length > UNDO_LIMIT) undoStack.value.shift()
   redoStack.value = []
+  return entry
 }
 
 function undo(): void {
@@ -295,9 +300,20 @@ function drawingById(id: string): Drawing | undefined {
   return state.drawings.find((d) => d.id === id)
 }
 
+/**
+ * The undo entry each in-progress stroke's start pushed, kept by drawing id.
+ *
+ * A stroke that turns out to be a stray tap has to take its own entry back.
+ * It cannot assume that entry is on top of the stack: the toolbar sits
+ * outside the board's pointer capture, so a second finger can change the
+ * pitch — pushing another entry — while the stroke is still down.
+ */
+const strokeUndoEntries = new Map<string, BoardSnapshot>()
+
 function startPen(at: Vec, color: string): string {
-  commit()
+  const entry = commit()
   const id = newId()
+  strokeUndoEntries.set(id, entry)
   state.drawings.push({ id, kind: 'pen', color, points: [clampToPitch(at)] })
   return id
 }
@@ -313,8 +329,9 @@ function extendPen(id: string, at: Vec): void {
 }
 
 function startArrow(at: Vec, color: string, style: 'run' | 'pass'): string {
-  commit()
+  const entry = commit()
   const id = newId()
+  strokeUndoEntries.set(id, entry)
   const point = clampToPitch(at)
   state.drawings.push({ id, kind: 'arrow', color, style, from: point, to: { ...point } })
   return id
@@ -327,12 +344,32 @@ function updateArrow(id: string, to: Vec): void {
   drawing.to = clampToPitch(to)
 }
 
+/** Erase every trace of a drawing from the undo and redo history. */
+function forgetDrawingInHistory(id: string): void {
+  for (const stack of [undoStack, redoStack]) {
+    for (const entry of stack.value) {
+      entry.drawings = entry.drawings.filter((d) => d.id !== id)
+    }
+  }
+}
+
 /**
- * End a stroke. A stroke too small to be intentional is removed, and the
- * undo entry its start pushed is popped, so a stray tap leaves no trace.
+ * End a stroke. A stroke too small to be intentional is removed, along with
+ * the undo entry its start pushed, so a stray tap leaves no trace.
+ *
+ * The invariant this relies on: `startPen`/`startArrow` recorded the exact
+ * entry object they pushed, so it is found by identity. It is deliberately
+ * NOT assumed to be on top of the stack — the toolbar lives outside the
+ * board's pointer capture, so a second finger can commit (a pitch change,
+ * say) between the press and the release, and popping blind would silently
+ * throw that unrelated entry away instead. Snapshots taken during the
+ * stroke are scrubbed of the discarded drawing too, so undoing back past
+ * the stroke cannot resurrect it.
  */
 function finishDrawing(id: string): void {
   const drawing = drawingById(id)
+  const startEntry = strokeUndoEntries.get(id)
+  strokeUndoEntries.delete(id)
   if (!drawing) return
 
   const degenerate =
@@ -343,7 +380,12 @@ function finishDrawing(id: string): void {
   if (!degenerate) return
 
   state.drawings = state.drawings.filter((d) => d.id !== id)
-  undoStack.value.pop()
+
+  if (startEntry) {
+    const index = undoStack.value.findIndex((entry) => toRaw(entry) === startEntry)
+    if (index !== -1) undoStack.value.splice(index, 1)
+  }
+  forgetDrawingInHistory(id)
 }
 
 function deleteDrawing(id: string): void {
@@ -404,5 +446,6 @@ export function __resetBoardForTests(): void {
   apply(emptyState())
   undoStack.value = []
   redoStack.value = []
+  strokeUndoEntries.clear()
   idCounter = 0
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, type DOMWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
-import PitchBoard from '../src/components/PitchBoard.vue'
+import PitchBoard, { DOUBLE_PRESS_MS } from '../src/components/PitchBoard.vue'
 import { useBoard, __resetBoardForTests } from '../src/composables/useBoard'
 import { PITCH_H, PITCH_W } from '../src/geometry'
 import type { ToolMode } from '../src/types'
@@ -216,27 +216,183 @@ describe('erase mode', () => {
   })
 })
 
+/**
+ * Rename is driven from `pointerdown`, not from `dblclick`.
+ *
+ * `setPointerCapture` on pointerdown retargets the compatibility mouse
+ * events at the capturing element, so in a real browser `click` and
+ * `dblclick` fire on the `<svg>` and never reach the counter — a `@dblclick`
+ * handler on the counter is dead code no coach can ever trigger. A test that
+ * dispatches `dblclick` straight at the element passes anyway, because it
+ * bypasses capture entirely, which is exactly how the defect survived.
+ *
+ * These tests therefore drive the same pointer sequence a real press
+ * produces, so they would fail again if capture retargeting broke it.
+ */
 describe('renaming a counter', () => {
-  it('forwards rename with the counter id while the select tool is active', async () => {
+  async function press(wrapper: ReturnType<typeof mountBoard>, pointerId = 1) {
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', { ...clientFor(50, 32), pointerId })
+    await firePointer(wrapper.find('svg'), 'pointerup', { ...clientFor(50, 32), pointerId })
+  }
+
+  it('forwards rename on a second press of the same counter, in the same window a double-click uses', async () => {
     const board = useBoard()
     const c = board.addCounter('red')
     const wrapper = mountBoard('select')
     await wrapper.vm.$nextTick()
 
-    await wrapper.find('[data-counter] circle:last-child').trigger('dblclick')
+    await press(wrapper)
+    expect(wrapper.emitted('rename')).toBeUndefined()
+    await press(wrapper)
 
     expect(wrapper.emitted('rename')).toEqual([[c.id]])
+  })
+
+  it('does not forward rename for two presses far apart in time', async () => {
+    vi.useFakeTimers()
+    try {
+      const board = useBoard()
+      board.addCounter('red')
+      const wrapper = mountBoard('select')
+      await wrapper.vm.$nextTick()
+
+      await press(wrapper)
+      vi.advanceTimersByTime(DOUBLE_PRESS_MS + 100)
+      await press(wrapper)
+
+      expect(wrapper.emitted('rename')).toBeUndefined()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not forward rename when the two presses are on different counters', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    board.addCounter('blue')
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    const counters = wrapper.findAll('[data-counter]')
+    for (const counter of counters) {
+      await firePointer(counter, 'pointerdown', clientFor(50, 32))
+      await firePointer(wrapper.find('svg'), 'pointerup', clientFor(50, 32))
+    }
+
+    expect(wrapper.emitted('rename')).toBeUndefined()
+  })
+
+  it('does not start a drag on the press that opens the rename', async () => {
+    const board = useBoard()
+    const c = board.addCounter('red')
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    await press(wrapper)
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(50, 32))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(10, 10))
+
+    expect(board.counterById(c.id)!.pos.x).not.toBeCloseTo(10, 4)
   })
 
   it('does not forward rename while the erase tool is active', async () => {
     const board = useBoard()
     board.addCounter('red')
+    board.addCounter('red')
     const wrapper = mountBoard('erase')
     await wrapper.vm.$nextTick()
 
-    await wrapper.find('[data-counter] circle:last-child').trigger('dblclick')
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(50, 32))
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(50, 32))
 
     expect(wrapper.emitted('rename')).toBeUndefined()
+  })
+})
+
+/**
+ * A stylus with a resting palm, or simply two fingers, produces overlapping
+ * pointers. `drag` is one global value, so without a pointerId a second
+ * pointer overwrites the first mid-drag, leaks its capture and misattributes
+ * its moves.
+ */
+describe('a second pointer during a drag', () => {
+  it('ignores a pointerdown from another pointer while a drag is live', async () => {
+    const board = useBoard()
+    const first = board.addCounter('red')
+    const second = board.addCounter('blue')
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    const counters = wrapper.findAll('[data-counter]')
+    await firePointer(counters[0], 'pointerdown', { ...clientFor(50, 32), pointerId: 1 })
+    await firePointer(counters[1], 'pointerdown', { ...clientFor(50, 32), pointerId: 2 })
+
+    // Pointer 1 is still the one being tracked, so its moves still move ITS counter.
+    await firePointer(wrapper.find('svg'), 'pointermove', { ...clientFor(20, 10), pointerId: 1 })
+    expect(board.counterById(first.id)!.pos.x).toBeCloseTo(20, 4)
+    expect(board.counterById(second.id)!.pos.x).not.toBeCloseTo(20, 4)
+  })
+
+  it('ignores pointermove from a pointer that is not the one dragging', async () => {
+    const board = useBoard()
+    const c = board.addCounter('red')
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', { ...clientFor(50, 32), pointerId: 1 })
+    await firePointer(wrapper.find('svg'), 'pointermove', { ...clientFor(90, 60), pointerId: 2 })
+
+    expect(board.counterById(c.id)!.pos.x).not.toBeCloseTo(90, 4)
+  })
+
+  it('ignores pointerup from a pointer that is not the one dragging', async () => {
+    const board = useBoard()
+    const c = board.addCounter('red')
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', { ...clientFor(50, 32), pointerId: 1 })
+    await firePointer(wrapper.find('svg'), 'pointerup', { ...clientFor(90, 60), pointerId: 2 })
+    await firePointer(wrapper.find('svg'), 'pointermove', { ...clientFor(20, 10), pointerId: 1 })
+
+    expect(board.counterById(c.id)!.pos.x).toBeCloseTo(20, 4)
+  })
+})
+
+/**
+ * The toolbar sits outside the SVG's pointer capture, so a second finger can
+ * commit while a stroke is in progress. `finishDrawing` used to pop the undo
+ * stack blindly, which then discarded whatever that other finger did.
+ */
+describe('discarding a stray stroke', () => {
+  it('leaves undo entries made by the toolbar mid-stroke intact', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    const wrapper = mountBoard('pen')
+    await wrapper.vm.$nextTick()
+
+    // Finger A presses in pen mode: startPen pushes an undo entry.
+    await firePointer(wrapper.find('svg'), 'pointerdown', clientFor(10, 10))
+    // Finger B taps the pitch buttons, which live outside the captured SVG.
+    board.setPitchType('full')
+    board.setPitchType('half')
+    // Finger A lifts without moving: the stroke is too short to keep.
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(10, 10))
+
+    expect(board.state.drawings).toHaveLength(0)
+    expect(board.state.pitch.type).toBe('half')
+
+    board.undo()
+    expect(board.state.pitch.type).toBe('full')
+    expect(board.state.drawings).toHaveLength(0)
+
+    board.undo()
+    expect(board.state.pitch.type).toBe('blank')
+    expect(board.state.counters).toHaveLength(1)
+
+    board.undo()
+    expect(board.state.counters).toHaveLength(0)
+    expect(board.canUndo.value).toBe(false)
   })
 })
 

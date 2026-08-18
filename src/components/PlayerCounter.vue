@@ -3,7 +3,15 @@ import { computed } from 'vue'
 import type { Counter } from '../types'
 
 const props = defineProps<{ counter: Counter; rotated: boolean; hasBall: boolean }>()
-defineEmits<{ grab: [event: PointerEvent]; rename: [id: string] }>()
+
+/*
+ * There is no `rename` event here. A double press is detected from
+ * `pointerdown` in PitchBoard instead: the board calls `setPointerCapture`
+ * on press, and pointer capture retargets the compatibility mouse events at
+ * the capturing <svg>, so a `@dblclick` handler on this counter would never
+ * fire in a real browser.
+ */
+defineEmits<{ grab: [event: PointerEvent] }>()
 
 const FILLS: Record<Counter['color'], string> = {
   red: '#e53935',
@@ -49,7 +57,6 @@ const HIT_RADIUS = 4.2
       :r="HIT_RADIUS"
       fill="transparent"
       @pointerdown="$emit('grab', $event as PointerEvent)"
-      @dblclick="$emit('rename', counter.id)"
     />
   </g>
 </template>
