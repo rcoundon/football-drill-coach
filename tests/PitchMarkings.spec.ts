@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import PitchMarkings from '../src/components/PitchMarkings.vue'
-import { PITCH_W, PITCH_H } from '../src/geometry'
+import { PITCH_W, PITCH_H, m } from '../src/geometry'
 
 function render(type: 'blank' | 'full' | 'half') {
   return mount(PitchMarkings, { props: { type } })
@@ -107,10 +107,13 @@ describe('marking bounds', () => {
           expect(y, `${label} endpoint y`).toBeLessThanOrEqual(PITCH_H + 1e-9)
         }
       }
-      // `path` elements (arcs) are not walked here: their geometry is fully
-      // determined by the same radii and centres already checked via the
-      // rect/circle/line markings they are drawn against, so path bounds
-      // would restate those numbers rather than test anything new.
+      // `path` elements (arcs) are not bounds-checked here: an arc's `d`
+      // string carries its own endpoints, independent of any rect/circle
+      // this loop already validates, so a bounds check here would not
+      // exercise them. They get their own check below, verifying each
+      // arc's endpoints actually lie on the circle its radius and centre
+      // claim (which a bounds check alone would not catch — see the
+      // penalty-arc fix this test suite caught).
     }
   }
 
@@ -120,5 +123,93 @@ describe('marking bounds', () => {
 
   it('keeps every half-pitch marking (except goals) inside the pitch box', () => {
     assertInBounds('half')
+  })
+})
+
+/**
+ * Arc markings are SVG `path` elements whose `d` attribute hard-codes two
+ * endpoints and a radius. Nothing in Vue or the DOM enforces that those
+ * endpoints actually lie on the circle of that radius, centred where the
+ * marking claims to be centred (the penalty spot, the halfway line, a
+ * pitch corner) — an arithmetic slip in either endpoint renders a visibly
+ * different, off-centre curve while every other check in this file still
+ * passes. These tests parse each arc's `d` string and verify both
+ * endpoints are exactly `radius` away from the claimed centre.
+ */
+describe('arc endpoints lie on their claimed circle', () => {
+  const spotFromGoal = m(11)
+  const arcRadius = m(9.15)
+  const cornerRadius = m(1)
+
+  function parseArcEndpoints(d: string) {
+    const nums = (d.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
+    // "M x1 y1 A rx ry x-axis-rotation large-arc-flag sweep-flag x2 y2"
+    return {
+      start: { x: nums[0], y: nums[1] },
+      end: { x: nums[7], y: nums[8] },
+    }
+  }
+
+  function distance(a: { x: number; y: number }, b: { x: number; y: number }) {
+    return Math.hypot(a.x - b.x, a.y - b.y)
+  }
+
+  function expectOnCircle(label: string, point: { x: number; y: number }, centre: { x: number; y: number }, radius: number) {
+    expect(distance(point, centre), `${label} distance from claimed centre`).toBeCloseTo(radius, 6)
+  }
+
+  it('penalty arcs are centred on their own penalty spot, on both pitch types', () => {
+    for (const type of ['full', 'half'] as const) {
+      const arcs = render(type).findAll('[data-marking="penalty-arc"]')
+      expect(arcs.length).toBeGreaterThan(0)
+
+      for (const arc of arcs) {
+        const { start, end } = parseArcEndpoints(arc.attributes('d')!)
+        // The left goal's arc endpoints sit left of centre, the right
+        // goal's sit right of centre; use that to pick the matching spot.
+        const isLeftGoal = start.x < PITCH_W / 2
+        const spot = isLeftGoal
+          ? { x: spotFromGoal, y: PITCH_H / 2 }
+          : { x: PITCH_W - spotFromGoal, y: PITCH_H / 2 }
+
+        expectOnCircle('penalty-arc start', start, spot, arcRadius)
+        expectOnCircle('penalty-arc end', end, spot, arcRadius)
+      }
+    }
+  })
+
+  it('the half-pitch centre-circle arc is centred on the halfway line', () => {
+    const arc = render('half').find('[data-marking="centre-circle"]')
+    expect(arc.exists()).toBe(true)
+
+    const { start, end } = parseArcEndpoints(arc.attributes('d')!)
+    const centre = { x: PITCH_W / 2, y: PITCH_H / 2 }
+
+    expectOnCircle('centre-circle start', start, centre, arcRadius)
+    expectOnCircle('centre-circle end', end, centre, arcRadius)
+  })
+
+  it('corner arcs are each centred on a pitch corner', () => {
+    const corners = [
+      { x: 0, y: 0 },
+      { x: 0, y: PITCH_H },
+      { x: PITCH_W, y: 0 },
+      { x: PITCH_W, y: PITCH_H },
+    ]
+
+    for (const type of ['full', 'half'] as const) {
+      const arcs = render(type).findAll('[data-marking="corner"]')
+      expect(arcs.length).toBeGreaterThan(0)
+
+      for (const arc of arcs) {
+        const d = arc.attributes('d')!
+        const { start, end } = parseArcEndpoints(d)
+        const centre = corners.find(
+          (c) =>
+            Math.abs(distance(start, c) - cornerRadius) < 1e-6 && Math.abs(distance(end, c) - cornerRadius) < 1e-6,
+        )
+        expect(centre, `corner arc d="${d}" has a matching corner centre`).toBeDefined()
+      }
+    }
   })
 })

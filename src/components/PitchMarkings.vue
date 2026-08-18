@@ -8,10 +8,10 @@ const props = defineProps<{ type: PitchType }>()
 const isHalf = computed(() => props.type === 'half')
 const showMarkings = computed(() => props.type !== 'blank')
 
-/** The left half is exactly 50 units wide, so centring it needs a 25-unit inset. */
-const groupTransform = computed(() => (isHalf.value ? 'translate(25 0)' : ''))
-
 const width = computed(() => (isHalf.value ? PITCH_W / 2 : PITCH_W))
+
+/** The left half is exactly 50 units wide; centring it needs an inset of half the remaining space. */
+const groupTransform = computed(() => (isHalf.value ? `translate(${(PITCH_W - width.value) / 2} 0)` : ''))
 
 const penaltyDepth = m(16.5)
 const penaltyWidth = m(40.32)
@@ -25,6 +25,13 @@ const cornerRadius = m(1)
 const goalWidth = m(7.32)
 const goalTop = (PITCH_H - goalWidth) / 2
 const goalDepth = m(2)
+
+/**
+ * Vertical half-chord where the penalty arc meets the box edge, derived by
+ * Pythagoras from the arc radius and the horizontal gap between the box
+ * edge and the penalty spot it is centred on (penaltyDepth - spotFromGoal).
+ */
+const arcHalfChord = Math.sqrt(arcRadius ** 2 - (penaltyDepth - spotFromGoal) ** 2)
 </script>
 
 <template>
@@ -79,7 +86,7 @@ const goalDepth = m(2)
       <circle data-marking="penalty-spot" :cx="spotFromGoal" :cy="PITCH_H / 2" r="0.4" fill="#ffffff" />
       <path
         data-marking="penalty-arc"
-        :d="`M ${penaltyDepth} ${PITCH_H / 2 - 5.5} A ${arcRadius} ${arcRadius} 0 0 0 ${penaltyDepth} ${PITCH_H / 2 + 5.5}`"
+        :d="`M ${penaltyDepth} ${PITCH_H / 2 - arcHalfChord} A ${arcRadius} ${arcRadius} 0 0 0 ${penaltyDepth} ${PITCH_H / 2 + arcHalfChord}`"
       />
       <rect data-marking="goal" :x="-goalDepth" :y="goalTop" :width="goalDepth" :height="goalWidth" />
       <path data-marking="corner" :d="`M 0 ${cornerRadius} A ${cornerRadius} ${cornerRadius} 0 0 0 ${cornerRadius} 0`" />
@@ -107,7 +114,7 @@ const goalDepth = m(2)
         <circle data-marking="penalty-spot" :cx="PITCH_W - spotFromGoal" :cy="PITCH_H / 2" r="0.4" fill="#ffffff" />
         <path
           data-marking="penalty-arc"
-          :d="`M ${PITCH_W - penaltyDepth} ${PITCH_H / 2 - 5.5} A ${arcRadius} ${arcRadius} 0 0 1 ${PITCH_W - penaltyDepth} ${PITCH_H / 2 + 5.5}`"
+          :d="`M ${PITCH_W - penaltyDepth} ${PITCH_H / 2 - arcHalfChord} A ${arcRadius} ${arcRadius} 0 0 1 ${PITCH_W - penaltyDepth} ${PITCH_H / 2 + arcHalfChord}`"
         />
         <rect data-marking="goal" :x="PITCH_W" :y="goalTop" :width="goalDepth" :height="goalWidth" />
         <path
