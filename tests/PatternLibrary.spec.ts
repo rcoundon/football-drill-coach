@@ -38,25 +38,32 @@ describe('listing', () => {
   })
 })
 
+/**
+ * The library reports what the coach chose and closes; App owns the board
+ * and owns which pattern is open. When the library loaded the snapshot
+ * itself, App never learned the pattern's id or name, so Save forked a
+ * second pattern with the same name, and the PNG filename and the save
+ * prompt both fell back to placeholders.
+ */
 describe('loading', () => {
-  it('puts the pattern on the board and closes', async () => {
-    seed('Press trigger')
-    const board = useBoard()
+  it('reports the chosen pattern and closes, rather than loading it behind Apps back', async () => {
+    const saved = seed('Press trigger')
     const wrapper = mount(PatternLibrary, { props: { open: true } })
     await wrapper.find('[data-load]').trigger('click')
-    expect(board.state.counters).toHaveLength(1)
-    expect(board.state.pitch.type).toBe('full')
+
+    const loaded = wrapper.emitted('load')
+    expect(loaded).toHaveLength(1)
+    expect((loaded![0][0] as { id: string; name: string }).id).toBe(saved.id)
+    expect((loaded![0][0] as { id: string; name: string }).name).toBe('Press trigger')
     expect(wrapper.emitted('close')).toBeTruthy()
   })
 
-  it('is undoable, so a mis-click does not lose the working board', async () => {
+  it('does not touch the board itself', async () => {
     seed('Press trigger')
     const board = useBoard()
-    board.addCounter('blue')
     const wrapper = mount(PatternLibrary, { props: { open: true } })
     await wrapper.find('[data-load]').trigger('click')
-    board.undo()
-    expect(board.state.counters[0].color).toBe('blue')
+    expect(board.state.counters).toHaveLength(0)
   })
 })
 

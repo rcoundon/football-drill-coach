@@ -2,13 +2,11 @@
 import { computed, ref, toRaw, watch } from 'vue'
 import type { Pattern } from '../types'
 import { useStorage } from '../composables/useStorage'
-import { useBoard } from '../composables/useBoard'
 
 const props = defineProps<{ open: boolean }>()
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: []; load: [pattern: Pattern] }>()
 
 const storage = useStorage()
-const board = useBoard()
 
 const patterns = ref<Pattern[]>([])
 const confirmingId = ref<string | null>(null)
@@ -23,15 +21,25 @@ watch(() => props.open, (open) => { if (open) refresh() }, { immediate: true })
 
 const isEmpty = computed(() => patterns.value.length === 0)
 
+/**
+ * Report what the coach chose; App puts it on the board.
+ *
+ * This component does not call `loadSnapshot` itself. There is one owner of
+ * "the pattern that is open", and it is App: when the library loaded the
+ * board directly, App never learned the id or name, so Save forked a second
+ * pattern with the same name and diverging content, and the PNG filename
+ * and save prompt fell back to placeholders.
+ *
+ * `pattern` arrives from a v-for over a ref-held array, so Vue has wrapped
+ * it (and its nested objects) in reactive Proxies. `patternToSnapshot` calls
+ * structuredClone directly, which throws DataCloneError on a Proxy, so the
+ * outer Proxy is peeled off before it crosses that boundary. toRaw only
+ * unwraps the OUTERMOST proxy, but that is enough here: the underlying
+ * object was never itself mutated through a proxy, so everything nested
+ * beneath it is already plain data.
+ */
 function load(pattern: Pattern) {
-  // `pattern` arrives from a v-for over a ref-held array, so Vue has wrapped
-  // it (and its nested objects) in reactive Proxies. patternToSnapshot calls
-  // structuredClone directly, which throws DataCloneError on a Proxy, so the
-  // outer Proxy must be peeled off before crossing that boundary. toRaw only
-  // unwraps the OUTERMOST proxy, but that is enough here: the underlying
-  // object was never itself mutated through a proxy, so everything nested
-  // beneath it is already plain data.
-  board.loadSnapshot(storage.patternToSnapshot(toRaw(pattern)))
+  emit('load', toRaw(pattern))
   emit('close')
 }
 

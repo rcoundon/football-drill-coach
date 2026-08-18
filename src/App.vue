@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import type { ToolMode } from './types'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import type { Pattern, ToolMode } from './types'
 import Toolbar from './components/Toolbar.vue'
 import PitchBoard from './components/PitchBoard.vue'
 import PatternLibrary from './components/PatternLibrary.vue'
@@ -18,23 +18,68 @@ const boardRef = ref<InstanceType<typeof PitchBoard> | null>(null)
 const notice = ref<string | null>(null)
 
 const libraryOpen = ref(false)
+
+/**
+ * The pattern the board came from, and the single owner of that fact.
+ *
+ * PatternLibrary reports what the coach chose rather than loading it itself,
+ * so these cannot drift out of step with what is on the board.
+ */
 const currentPatternId = ref<string | null>(null)
 const currentName = ref('')
+
 const savePromptOpen = ref(false)
 const saveNameDraft = ref('')
 
+/**
+ * Which save the open prompt will perform.
+ *
+ * 'new' writes a pattern the board has never been saved as; 'fork' copies
+ * the open pattern under a new name and leaves the original alone. Updating
+ * the open pattern in place needs no prompt at all — it keeps its name — so
+ * typing a new name can never silently rename and overwrite the source.
+ */
+const savePromptMode = ref<'new' | 'fork'>('new')
+
+const savePromptTitle = computed(() =>
+  savePromptMode.value === 'fork' ? 'Save a copy as' : 'Name this pattern',
+)
+
+/** Save: update the open pattern in place, or ask for a name if there is none. */
 function openSavePrompt() {
+  if (currentPatternId.value) {
+    const saved = storage.savePattern(currentName.value, board.snapshot(), currentPatternId.value)
+    currentName.value = saved.name
+    notice.value = `Saved “${saved.name}”.`
+    return
+  }
+  savePromptMode.value = 'new'
   saveNameDraft.value = currentName.value || 'New pattern'
+  savePromptOpen.value = true
+}
+
+/** Save as…: fork the board into a new pattern under a new name. */
+function openSaveAsPrompt() {
+  savePromptMode.value = 'fork'
+  saveNameDraft.value = currentName.value ? `${currentName.value} copy` : 'New pattern'
   savePromptOpen.value = true
 }
 
 function confirmSave() {
   const name = saveNameDraft.value.trim()
   if (!name) return
-  const saved = storage.savePattern(name, board.snapshot(), currentPatternId.value ?? undefined)
+  // A fork deliberately passes no id, so savePattern mints a new one.
+  const id = savePromptMode.value === 'fork' ? undefined : currentPatternId.value ?? undefined
+  const saved = storage.savePattern(name, board.snapshot(), id)
   currentPatternId.value = saved.id
   currentName.value = saved.name
   savePromptOpen.value = false
+}
+
+function onPatternLoaded(pattern: Pattern) {
+  board.loadSnapshot(storage.patternToSnapshot(pattern))
+  currentPatternId.value = pattern.id
+  currentName.value = pattern.name
 }
 
 const renameCounterId = ref<string | null>(null)
@@ -104,8 +149,11 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 onMounted(() => {
+  // restoreSnapshot, not loadSnapshot: putting the draft back is not
+  // something the coach did, so it must not become the one undo entry a
+  // freshly opened app offers.
   const draft = storage.loadDraft()
-  if (draft) board.loadSnapshot(draft)
+  if (draft) board.restoreSnapshot(draft)
   window.addEventListener('keydown', onKeydown)
 })
 
@@ -128,7 +176,9 @@ watch(
     <Toolbar
       v-model:tool="tool"
       v-model:drawColor="drawColor"
+      :pattern-name="currentName"
       @save="openSavePrompt"
+      @saveAs="openSaveAsPrompt"
       @open="libraryOpen = true"
       @exportPng="exportPng"
       @exportJson="exportJson"
@@ -138,14 +188,19 @@ watch(
       <PitchBoard ref="boardRef" :tool="tool" :draw-color="drawColor" @rename="openRenamePrompt" />
     </div>
 
-    <PatternLibrary :open="libraryOpen" @close="libraryOpen = false" />
+    <PatternLibrary :open="libraryOpen" @close="libraryOpen = false" @load="onPatternLoaded" />
 
     <div v-if="savePromptOpen" class="overlay" @click.self="savePromptOpen = false">
-      <div class="prompt" role="dialog" aria-label="Save pattern">
-        <label for="pattern-name">Name this pattern</label>
+      <div class="prompt" role="dialog" :aria-label="savePromptTitle">
+        <label for="pattern-name">{{ savePromptTitle }}</label>
         <input id="pattern-name" v-model="saveNameDraft" class="input" @keyup.enter="confirmSave" />
+        <p v-if="savePromptMode === 'fork' && currentName" class="hint">
+          “{{ currentName }}” stays as it is.
+        </p>
         <div class="prompt-actions">
-          <button class="chip" @click="confirmSave">Save</button>
+          <button data-confirm-save class="chip" @click="confirmSave">
+            {{ savePromptMode === 'fork' ? 'Save copy' : 'Save' }}
+          </button>
           <button class="chip" @click="savePromptOpen = false">Cancel</button>
         </div>
       </div>
@@ -168,8 +223,15 @@ watch(
       </div>
     </div>
 
+    <!-- Both messages dismiss on click; an error the coach cannot clear is worse than a notice. -->
     <p v-if="notice" class="notice" role="status" @click="notice = null">{{ notice }}</p>
-    <p v-if="storage.lastError.value" class="error" role="status">{{ storage.lastError.value }}</p>
+    <p
+      v-if="storage.lastError.value"
+      class="error"
+      role="status"
+      title="Dismiss"
+      @click="storage.lastError.value = null"
+    >{{ storage.lastError.value }}</p>
   </div>
 </template>
 
@@ -183,8 +245,9 @@ body { font-family: system-ui, sans-serif; background: #102010; }
 .app { display: flex; flex-direction: column; height: 100%; }
 .stage { flex: 1; min-height: 0; padding: 0.75rem; }
 .error {
-  margin: 0; padding: 0.6rem 0.9rem; background: #b71c1c; color: #fff; font-size: 0.85rem;
+  margin: 0; padding: 0.6rem 0.9rem; background: #b71c1c; color: #fff; font-size: 0.85rem; cursor: pointer;
 }
+.hint { margin: 0; font-size: 0.8rem; opacity: 0.7; }
 .notice { margin: 0; padding: 0.6rem 0.9rem; background: #1565c0; color: #fff; font-size: 0.85rem; cursor: pointer; }
 .overlay { position: fixed; inset: 0; background: #000000aa; display: flex; align-items: center; justify-content: center; }
 .prompt { background: #263238; color: #eceff1; padding: 1rem; border-radius: 0.6rem; display: grid; gap: 0.5rem; min-width: 18rem; }

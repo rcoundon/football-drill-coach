@@ -1,14 +1,24 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { CounterColor, PitchType, ToolMode } from '../types'
 import { COUNTER_COLORS } from '../geometry'
 import { useBoard } from '../composables/useBoard'
 
-defineProps<{ tool: ToolMode; drawColor: string }>()
+const props = withDefaults(
+  defineProps<{
+    tool: ToolMode
+    drawColor: string
+    /** The pattern currently open, or '' when the board has never been saved. */
+    patternName?: string
+  }>(),
+  { patternName: '' },
+)
 
 const emit = defineEmits<{
   'update:tool': [tool: ToolMode]
   'update:drawColor': [color: string]
   save: []
+  saveAs: []
   open: []
   exportPng: []
   exportJson: []
@@ -40,6 +50,11 @@ const PITCHES: { id: PitchType; label: string }[] = [
 ]
 
 const DRAW_COLORS = ['#ffffff', '#ffeb3b', '#212121', '#e53935']
+
+/** Says which of the two saves the button is about to perform. */
+const saveTitle = computed(() =>
+  props.patternName ? `Update “${props.patternName}”` : 'Save as a new pattern',
+)
 
 const DRAW_COLOR_NAMES: Record<string, string> = {
   '#ffffff': 'white',
@@ -105,7 +120,17 @@ const DRAW_COLOR_NAMES: Record<string, string> = {
     </div>
 
     <div class="group">
-      <button data-save class="chip" @click="emit('save')">Save</button>
+      <span class="group-label">Pattern</span>
+      <span data-current-pattern class="current" :class="{ 'is-unsaved': !patternName }">
+        {{ patternName || 'Unsaved' }}
+      </span>
+      <button data-save class="chip" :title="saveTitle" @click="emit('save')">Save</button>
+      <button
+        data-save-as
+        class="chip"
+        title="Save a copy under a new name"
+        @click="emit('saveAs')"
+      >Save as…</button>
       <button data-open class="chip" @click="emit('open')">Open</button>
       <button data-export-png class="chip" @click="emit('exportPng')">PNG</button>
       <button data-export-json class="chip" @click="emit('exportJson')">Export</button>
@@ -136,6 +161,8 @@ const DRAW_COLOR_NAMES: Record<string, string> = {
   border: 1px solid #ffffff40; background: #37474f; color: inherit;
   border-radius: 0.4rem; padding: 0.4rem 0.7rem; cursor: pointer; font-size: 0.85rem;
 }
+.current { font-size: 0.85rem; max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.current.is-unsaved { opacity: 0.6; font-style: italic; }
 .chip:disabled { opacity: 0.4; cursor: default; }
 .chip.is-active { background: #546e7a; }
 </style>

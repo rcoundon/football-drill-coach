@@ -169,6 +169,19 @@ function loadSnapshot(snap: BoardSnapshot): void {
   apply(snap)
 }
 
+/**
+ * Put a snapshot on the board WITHOUT an undo entry.
+ *
+ * For restoring the autosaved draft at startup, which is not something the
+ * coach did and so must not be undoable. Committing it leaves a freshly
+ * opened app with one undo entry — an empty board — so a reflexive Ctrl+Z
+ * wipes the restored work, and the debounced autosave then writes the empty
+ * board over the draft.
+ */
+function restoreSnapshot(snap: BoardSnapshot): void {
+  apply(snap)
+}
+
 function counterById(id: string): Counter | undefined {
   return state.counters.find((c) => c.id === id)
 }
@@ -426,6 +439,7 @@ const board = {
   canRedo,
   snapshot,
   loadSnapshot,
+  restoreSnapshot,
   resetBoard,
   setPitchType,
   setRotated,

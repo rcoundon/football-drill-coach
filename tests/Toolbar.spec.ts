@@ -82,4 +82,32 @@ describe('menu actions', () => {
     await wrapper.find('[data-export-png]').trigger('click')
     expect(wrapper.emitted('exportPng')).toBeTruthy()
   })
+
+  it('emits saveAs, which is a different action from save', async () => {
+    const wrapper = mountToolbar()
+    await wrapper.find('[data-save-as]').trigger('click')
+    expect(wrapper.emitted('saveAs')).toBeTruthy()
+    expect(wrapper.emitted('save')).toBeFalsy()
+  })
+})
+
+/**
+ * Save updates the open pattern and Save as… forks it. The coach has to be
+ * able to see which one they are about to get, so the toolbar names the
+ * pattern that is open.
+ */
+describe('the open pattern', () => {
+  it('names the pattern Save will update', () => {
+    const wrapper = mount(Toolbar, {
+      props: { tool: 'select' as ToolMode, drawColor: '#ffffff', patternName: 'Press trigger' },
+    })
+    expect(wrapper.find('[data-current-pattern]').text()).toContain('Press trigger')
+    expect(wrapper.find('[data-save]').attributes('title')).toContain('Press trigger')
+  })
+
+  it('says so when nothing is open, so Save cannot look like an update', () => {
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-current-pattern]').text()).toMatch(/unsaved/i)
+    expect(wrapper.find('[data-save]').attributes('title')).toMatch(/new pattern/i)
+  })
 })
