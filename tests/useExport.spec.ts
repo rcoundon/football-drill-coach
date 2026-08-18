@@ -99,22 +99,24 @@ describe('pickJsonFile when the coach cancels', () => {
 
   it('rejects when the picker reports a cancel', async () => {
     const input = captureInput()
-    const pending = useExport().pickJsonFile()
+    // The assertion is attached before the rejection is triggered, so the
+    // rejection is never momentarily unhandled.
+    const settled = expect(useExport().pickJsonFile()).rejects.toThrow(/no file/i)
 
     input().dispatchEvent(new Event('cancel'))
 
-    await expect(pending).rejects.toThrow(/no file/i)
+    await settled
   })
 
   it('rejects when the picker closes without reporting anything', async () => {
     captureInput()
-    const pending = useExport().pickJsonFile()
+    const settled = expect(useExport().pickJsonFile()).rejects.toThrow(/no file/i)
 
     // Every browser gives the window its focus back; not all fire `cancel`.
     window.dispatchEvent(new Event('focus'))
     await vi.advanceTimersByTimeAsync(2000)
 
-    await expect(pending).rejects.toThrow(/no file/i)
+    await settled
   })
 
   it('still resolves with the file when one is chosen', async () => {
