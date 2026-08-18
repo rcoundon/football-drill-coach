@@ -40,6 +40,13 @@ const PITCHES: { id: PitchType; label: string }[] = [
 ]
 
 const DRAW_COLORS = ['#ffffff', '#ffeb3b', '#212121', '#e53935']
+
+const DRAW_COLOR_NAMES: Record<string, string> = {
+  '#ffffff': 'white',
+  '#ffeb3b': 'yellow',
+  '#212121': 'black',
+  '#e53935': 'red',
+}
 </script>
 
 <template>
@@ -53,6 +60,7 @@ const DRAW_COLORS = ['#ffffff', '#ffeb3b', '#212121', '#e53935']
         class="swatch"
         :style="{ background: SWATCHES[color] }"
         :title="`Add a ${color} player`"
+        :aria-label="`Add a ${color} player`"
         @click="board.addCounter(color)"
       />
     </div>
@@ -72,7 +80,8 @@ const DRAW_COLORS = ['#ffffff', '#ffeb3b', '#212121', '#e53935']
         class="swatch swatch--sm"
         :class="{ 'is-active': drawColor === c }"
         :style="{ background: c }"
-        :title="'Draw in this colour'"
+        :title="`Draw in ${DRAW_COLOR_NAMES[c] ?? c}`"
+        :aria-label="`Draw in ${DRAW_COLOR_NAMES[c] ?? c}`"
         @click="emit('update:drawColor', c)"
       />
     </div>

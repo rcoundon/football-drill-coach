@@ -24,6 +24,8 @@ function onKeydown(event: KeyboardEvent) {
     return
   }
 
+  if (modifier) return
+
   const byKey: Record<string, ToolMode> = { v: 'select', p: 'pen', r: 'arrow-run', s: 'arrow-pass', e: 'erase' }
   const next = byKey[event.key.toLowerCase()]
   if (next) tool.value = next
