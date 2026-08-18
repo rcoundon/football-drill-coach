@@ -125,6 +125,21 @@ describe('corrupt storage', () => {
     expect(listed).toHaveLength(1)
     expect(listed[0].id).toBe(good.id)
   })
+
+  it('drops an entry with a corrupted counter but keeps the valid ones', () => {
+    const store = useStorage()
+    const good = store.savePattern('Good', snap())
+    const raw = JSON.parse(localStorage.getItem(PATTERNS_KEY)!)
+    raw.push({
+      ...good,
+      id: 'bad-counter',
+      frames: [{ counters: [42], ball: good.frames[0].ball }],
+    })
+    localStorage.setItem(PATTERNS_KEY, JSON.stringify(raw))
+    const listed = store.listPatterns()
+    expect(listed).toHaveLength(1)
+    expect(listed[0].id).toBe(good.id)
+  })
 })
 
 describe('parsePattern', () => {
@@ -144,6 +159,30 @@ describe('parsePattern', () => {
   it('rejects a non-object', () => {
     expect(() => parsePattern('nope')).toThrow()
   })
+
+  it('rejects a counter with malformed shape', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Drill', snap())
+    const corrupted = {
+      ...saved,
+      frames: [{ ...saved.frames[0], counters: [42] }],
+    }
+    expect(() => parsePattern(corrupted)).toThrow()
+  })
+
+  it('rejects a drawing with malformed shape', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Drill', snap())
+    const corrupted = { ...saved, drawings: ['oops'] }
+    expect(() => parsePattern(corrupted)).toThrow()
+  })
+
+  it('accepts a pattern this module itself saved', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Drill', snap())
+    expect(() => parsePattern(saved)).not.toThrow()
+    expect(parsePattern(saved).name).toBe('Drill')
+  })
 })
 
 describe('quota exceeded', () => {
@@ -156,6 +195,20 @@ describe('quota exceeded', () => {
     })
     expect(() => store.savePattern('Drill', snap())).not.toThrow()
     expect(store.lastError.value).toMatch(/out of space/i)
+  })
+
+  it('clears lastError after a successful save following a failed one', () => {
+    const store = useStorage()
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
+      const error = new Error('quota') as Error & { name: string }
+      error.name = 'QuotaExceededError'
+      throw error
+    })
+    store.savePattern('Drill', snap())
+    expect(store.lastError.value).toMatch(/out of space/i)
+
+    store.savePattern('Drill 2', snap())
+    expect(store.lastError.value).toBeNull()
   })
 })
 
@@ -210,5 +263,23 @@ describe('import and export', () => {
     const bad = JSON.stringify([saved, { id: 'x', name: 'broken' }])
     expect(() => store.importPatterns(bad)).toThrow()
     expect(store.listPatterns()).toHaveLength(1)
+  })
+
+  it('re-issues ids for duplicate ids within the same imported file', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Drill', snap())
+    const json = JSON.stringify([saved, { ...saved }])
+    localStorage.clear()
+
+    const imported = store.importPatterns(json)
+
+    expect(imported).toHaveLength(2)
+    expect(imported[0].id).toBe(saved.id)
+    expect(imported[1].id).not.toBe(saved.id)
+    expect(imported[1].name).toBe('Drill (imported)')
+
+    const listed = store.listPatterns()
+    expect(listed).toHaveLength(2)
+    expect(new Set(listed.map((p) => p.id)).size).toBe(2)
   })
 })

@@ -13,6 +13,36 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+/** A position in pitch units: { x: number, y: number }. */
+function isVec(value: unknown): boolean {
+  return isObject(value) && typeof value.x === 'number' && typeof value.y === 'number'
+}
+
+function isValidCounter(value: unknown): boolean {
+  return (
+    isObject(value) &&
+    typeof value.id === 'string' &&
+    typeof value.color === 'string' &&
+    typeof value.label === 'string' &&
+    isVec(value.pos)
+  )
+}
+
+function isValidBall(value: unknown): boolean {
+  return (
+    isObject(value) &&
+    isVec(value.pos) &&
+    (value.attachedTo === null || typeof value.attachedTo === 'string')
+  )
+}
+
+function isValidDrawing(value: unknown): boolean {
+  if (!isObject(value)) return false
+  if (value.kind === 'pen') return Array.isArray(value.points)
+  if (value.kind === 'arrow') return isVec(value.from) && isVec(value.to)
+  return false
+}
+
 /** Validate an untrusted value as a Pattern. Throws with a readable reason. */
 export function parsePattern(value: unknown): Pattern {
   if (!isObject(value)) throw new Error('That is not a saved pattern.')
@@ -27,11 +57,18 @@ export function parsePattern(value: unknown): Pattern {
     throw new Error('That pattern is missing its name or id.')
   }
 
-  if (!isObject(value.pitch) || typeof value.pitch.type !== 'string') {
+  if (
+    !isObject(value.pitch) ||
+    typeof value.pitch.type !== 'string' ||
+    typeof value.pitch.rotated !== 'boolean'
+  ) {
     throw new Error('That pattern is missing its pitch settings.')
   }
 
   if (!Array.isArray(value.drawings)) throw new Error('That pattern is missing its drawings.')
+  if (!value.drawings.every(isValidDrawing)) {
+    throw new Error('That pattern has a damaged drawing.')
+  }
 
   if (!Array.isArray(value.frames) || value.frames.length === 0) {
     throw new Error('That pattern has no frames.')
@@ -40,6 +77,12 @@ export function parsePattern(value: unknown): Pattern {
   for (const frame of value.frames) {
     if (!isObject(frame) || !Array.isArray(frame.counters) || !isObject(frame.ball)) {
       throw new Error('That pattern has a damaged frame.')
+    }
+    if (!frame.counters.every(isValidCounter)) {
+      throw new Error('That pattern has a damaged player position.')
+    }
+    if (!isValidBall(frame.ball)) {
+      throw new Error('That pattern has a damaged ball position.')
     }
   }
 
@@ -67,6 +110,7 @@ function writeRaw(key: string, value: unknown): boolean {
 }
 
 function listPatterns(): Pattern[] {
+  lastError.value = null
   let raw: unknown
   try {
     raw = readRaw(PATTERNS_KEY)
@@ -124,6 +168,7 @@ function toPattern(name: string, snap: BoardSnapshot, id: string, createdAt: str
 }
 
 function savePattern(name: string, snap: BoardSnapshot, id?: string): Pattern {
+  lastError.value = null
   const patterns = listPatterns()
   const existing = id ? patterns.find((p) => p.id === id) : undefined
   const pattern = toPattern(name, snap, existing?.id ?? id ?? makeId(), existing?.createdAt ?? nowIso())
@@ -137,10 +182,12 @@ function savePattern(name: string, snap: BoardSnapshot, id?: string): Pattern {
 }
 
 function deletePattern(id: string): void {
+  lastError.value = null
   writePatterns(listPatterns().filter((p) => p.id !== id))
 }
 
 function renamePattern(id: string, name: string): void {
+  lastError.value = null
   const patterns = listPatterns()
   const pattern = patterns.find((p) => p.id === id)
   if (!pattern) return
@@ -161,6 +208,7 @@ function patternToSnapshot(pattern: Pattern): BoardSnapshot {
 }
 
 function saveDraft(snap: BoardSnapshot): void {
+  lastError.value = null
   writeRaw(DRAFT_KEY, snap)
 }
 
@@ -196,12 +244,22 @@ function importPatterns(json: string): Pattern[] {
   const incoming = raw.map((entry) => parsePattern(entry))
 
   const patterns = listPatterns()
-  const existingIds = new Set(patterns.map((p) => p.id))
+  // Tracked incrementally: a collision can be with the existing library OR
+  // with an earlier entry in this same file. Either way the id must be
+  // unique before it lands in localStorage.
+  const seenIds = new Set(patterns.map((p) => p.id))
 
-  const added = incoming.map((pattern) => {
-    if (!existingIds.has(pattern.id)) return pattern
-    return { ...pattern, id: makeId(), name: `${pattern.name} (imported)` }
-  })
+  const added: Pattern[] = []
+  for (const pattern of incoming) {
+    if (!seenIds.has(pattern.id)) {
+      seenIds.add(pattern.id)
+      added.push(pattern)
+      continue
+    }
+    const renamed = { ...pattern, id: makeId(), name: `${pattern.name} (imported)` }
+    seenIds.add(renamed.id)
+    added.push(renamed)
+  }
 
   writePatterns([...patterns, ...added])
   return added
