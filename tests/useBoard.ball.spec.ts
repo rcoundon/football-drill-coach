@@ -39,6 +39,20 @@ describe('dropBall', () => {
     expect(board.state.ball.attachedTo).toBe(near.id)
   })
 
+  it('keeps possession when the attached ball is tapped and released where it sits', () => {
+    const board = useBoard()
+    const c = board.addCounter('red')
+    board.moveCounter(c.id, { x: 30, y: 30 })
+    board.dropBall({ x: 30, y: 30 })
+    expect(board.state.ball.attachedTo).toBe(c.id)
+
+    // A tap grabs the ball where it is drawn — at its offset from the holder —
+    // and a release without movement must put it straight back.
+    board.moveBall(board.ballPosition())
+    board.dropBall(board.state.ball.pos)
+    expect(board.state.ball.attachedTo).toBe(c.id)
+  })
+
   it('detaches when dragged off a player onto empty grass', () => {
     const board = useBoard()
     const c = board.addCounter('red')

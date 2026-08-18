@@ -58,6 +58,12 @@ const boardTransform = computed(() =>
 
 const ballPos = computed(() => board.ballPosition())
 
+/** True only when the ball is actually riding on a counter that still exists. */
+const ballAttached = computed(() => {
+  const holder = board.state.ball.attachedTo
+  return holder !== null && board.counterById(holder) !== undefined
+})
+
 function toPitch(event: PointerEvent) {
   const rect = svgEl.value!.getBoundingClientRect()
   return clientToPitch(rect, event.clientX, event.clientY, board.state.pitch.rotated)
@@ -184,7 +190,7 @@ function onPointerUp(event: PointerEvent) {
         :has-ball="board.state.ball.attachedTo === counter.id"
         @grab="onCounterGrab(counter.id, $event)"
       />
-      <BallToken :pos="ballPos" @grab="onBallGrab" />
+      <BallToken :pos="ballPos" :attached="ballAttached" @grab="onBallGrab" />
     </g>
   </svg>
 </template>

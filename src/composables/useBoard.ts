@@ -4,11 +4,24 @@ import { PITCH_H, PITCH_W, clampToPitch, distance } from '../geometry'
 
 export const UNDO_LIMIT = 50
 
-/** How close to a counter the ball must land to be taken into possession, in pitch units. */
-export const SNAP_RADIUS = 3.5
+/**
+ * Where an attached ball sits relative to its holder, in pitch units.
+ *
+ * Far enough out that the ball's own hit circle clears the whole drawn
+ * counter: the ball is painted after the counters, so any overlap steals the
+ * press, and an overlap reaching the counter's centre means pressing the
+ * middle of a player in possession grabs the ball instead of the player.
+ * See BALL_HIT_RADIUS_ATTACHED in BallToken.vue for the other half.
+ */
+export const BALL_OFFSET: Vec = { x: 3.4, y: 3.4 }
 
-/** Where an attached ball sits relative to its holder, in pitch units. */
-export const BALL_OFFSET: Vec = { x: 1.8, y: 1.8 }
+/**
+ * How close to a counter the ball must land to be taken into possession, in
+ * pitch units. Deliberately wider than the offset above: the ball is drawn
+ * at that offset while attached, so a tap on it and a release without
+ * movement lands one offset away from its holder and must keep possession.
+ */
+export const SNAP_RADIUS = 6
 
 /** The drawn radius of a counter, in pitch units. Mirrors PlayerCounter's own RADIUS. */
 export const COUNTER_RADIUS = 2.4
