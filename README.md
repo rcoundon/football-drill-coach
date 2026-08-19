@@ -38,7 +38,7 @@ for reuse.
 | Pass | `S` | Dashed arrow |
 | Line | `L` | Straight line for marking out zones, channels and thirds |
 | Cone | `C` | Tap the pitch to drop a cone; tap again for the next one |
-| Text | `T` | Tap the pitch to drop a label; double-press one to edit it |
+| Text | `T` | Tap the pitch to drop a label; drag or double-press one to adjust it |
 | Erase | `E` | Remove whatever you press |
 
 Undo is `Ctrl+Z` (`Cmd+Z` on a Mac), redo is `Ctrl+Shift+Z`.

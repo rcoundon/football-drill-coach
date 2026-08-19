@@ -216,7 +216,16 @@ function onLabelGrab(id: string, event: PointerEvent) {
     board.deleteLabel(id)
     return
   }
-  if (props.tool !== 'select' || dragIsLive()) return
+  /*
+   * The text tool adjusts labels as well as placing them. Placing one leaves
+   * that tool selected, so the next thing a coach does is usually nudge the
+   * label they just made; making them switch to Move for that makes the
+   * label feel stuck to the pitch.
+   */
+  if ((props.tool !== 'select' && props.tool !== 'text') || dragIsLive()) return
+
+  // Stop the board treating this as a tap on empty grass and queueing a
+  // second label on top of the one being dragged.
   event.stopPropagation()
 
   // Same double-press detection as a counter, and for the same reason:

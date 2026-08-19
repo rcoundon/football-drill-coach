@@ -815,3 +815,61 @@ describe('pitch labels', () => {
     expect(wrapper.find('[data-label]').exists()).toBe(false)
   })
 })
+
+describe('adjusting a label with the text tool still active', () => {
+  /**
+   * Placing a label leaves the text tool selected, so the very next thing a
+   * coach does is usually nudge the label they just made. Requiring a switch
+   * to Move for that makes the label feel stuck.
+   */
+  it('drags the label rather than ignoring the press', async () => {
+    const board = useBoard()
+    const label = board.addLabel({ x: 50, y: 32 }, 'Nudge me')!
+    const wrapper = mountBoard('text')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-label]'), 'pointerdown', clientFor(50, 32))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(20, 10))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(20, 10))
+
+    expect(board.labelById(label.id)!.pos.x).toBeCloseTo(20, 4)
+  })
+
+  it('does not drop a second label on top of the one being dragged', async () => {
+    const board = useBoard()
+    board.addLabel({ x: 50, y: 32 }, 'Only me')
+    const wrapper = mountBoard('text')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-label]'), 'pointerdown', clientFor(50, 32))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(50, 32))
+
+    expect(board.state.labels).toHaveLength(1)
+    expect(wrapper.emitted('addLabel')).toBeFalsy()
+  })
+
+  it('opens the editor on a double press, as Move does', async () => {
+    const board = useBoard()
+    const label = board.addLabel({ x: 50, y: 32 }, 'Edit me')!
+    const wrapper = mountBoard('text')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-label]'), 'pointerdown', clientFor(50, 32))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(50, 32))
+    await firePointer(wrapper.find('[data-label]'), 'pointerdown', clientFor(50, 32))
+
+    expect(wrapper.emitted('editLabel')![0]).toEqual([label.id])
+  })
+
+  it('still places a new label on empty grass', async () => {
+    const board = useBoard()
+    board.addLabel({ x: 10, y: 10 }, 'Existing')
+    const wrapper = mountBoard('text')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('svg'), 'pointerdown', clientFor(70, 45))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(70, 45))
+
+    expect(wrapper.emitted('addLabel')).toBeTruthy()
+  })
+})
