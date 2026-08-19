@@ -78,6 +78,12 @@ the toggles, clearing, and everything to do with saving. On a touch screen
 every control grows to a 44px target, which is the smallest that is
 reliably hittable with a finger.
 
+Between 769px and 1280px — tablet territory — the tools and player colours
+move to a rail down the left edge, where the thumb of the hand holding the
+device already is, and the notes go under the board rather than beside it.
+Measured on a 1194px tablet: side by side, the rail and a notes column left
+the pitch 663x430; stacked, it gets 936x606.
+
 A fresh board on a portrait screen starts rotated, so the pitch fills the
 width instead of sitting in a thin band. A saved pattern is never
 overridden — rotation belongs to the drill, so a pattern saved landscape

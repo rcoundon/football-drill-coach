@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { CounterColor, PitchType, ToolMode } from '../types'
+import type { ToolMode } from '../types'
 import { COUNTER_COLORS } from '../geometry'
 import { useBoard } from '../composables/useBoard'
 import { useViewport } from '../composables/useViewport'
+import { DRAW_COLORS, DRAW_COLOR_NAMES, PITCHES, SWATCHES, TOOLS } from './controls'
 
 const props = withDefaults(
   defineProps<{
@@ -11,8 +12,13 @@ const props = withDefaults(
     drawColor: string
     /** The pattern currently open, or '' when the board has never been saved. */
     patternName?: string
+    /**
+     * True when a ToolRail is showing the tools and player colours, so this
+     * bar must not repeat them.
+     */
+    railed?: boolean
   }>(),
-  { patternName: '' },
+  { patternName: '', railed: false },
 )
 
 const emit = defineEmits<{
@@ -49,49 +55,16 @@ function resetBoard() {
   emit('reset')
 }
 
-const SWATCHES: Record<CounterColor, string> = {
-  red: '#e53935',
-  blue: '#1e88e5',
-  yellow: '#fdd835',
-  purple: '#8e24aa',
-  black: '#212121',
-}
-
-const TOOLS: { id: ToolMode; label: string }[] = [
-  { id: 'select', label: 'Move' },
-  { id: 'pen', label: 'Draw' },
-  { id: 'arrow-run', label: 'Run' },
-  { id: 'arrow-pass', label: 'Pass' },
-  { id: 'line', label: 'Line' },
-  { id: 'cone', label: 'Cone' },
-  { id: 'text', label: 'Text' },
-  { id: 'erase', label: 'Erase' },
-]
-
-const PITCHES: { id: PitchType; label: string }[] = [
-  { id: 'blank', label: 'Blank' },
-  { id: 'full', label: 'Full' },
-  { id: 'half', label: 'Half' },
-]
-
-const DRAW_COLORS = ['#ffffff', '#ffeb3b', '#212121', '#e53935']
-
 /** Says which of the two saves the button is about to perform. */
 const saveTitle = computed(() =>
   props.patternName ? `Update “${props.patternName}”` : 'Save as a new pattern',
 )
 
-const DRAW_COLOR_NAMES: Record<string, string> = {
-  '#ffffff': 'white',
-  '#ffeb3b': 'yellow',
-  '#212121': 'black',
-  '#e53935': 'red',
-}
 </script>
 
 <template>
   <div class="toolbar">
-    <div class="group">
+    <div v-if="!railed" class="group">
       <span class="group-label">Players</span>
       <button
         v-for="color in COUNTER_COLORS"
@@ -105,7 +78,7 @@ const DRAW_COLOR_NAMES: Record<string, string> = {
       />
     </div>
 
-    <div class="group">
+    <div v-if="!railed" class="group">
       <span class="group-label">Tool</span>
       <button
         v-for="t in TOOLS"
@@ -132,7 +105,7 @@ const DRAW_COLOR_NAMES: Record<string, string> = {
     </div>
 
     <button
-      v-if="isNarrow"
+      v-if="isNarrow && !railed"
       data-more
       :class="['chip', 'more', { 'is-active': menuOpen }]"
       :aria-expanded="menuOpen"
@@ -147,8 +120,8 @@ const DRAW_COLOR_NAMES: Record<string, string> = {
       the toolbar.
     -->
     <div
-      v-if="!isNarrow || menuOpen"
-      :class="['secondary', { 'as-menu': isNarrow }]"
+      v-if="!isNarrow || railed || menuOpen"
+      :class="['secondary', { 'as-menu': isNarrow && !railed }]"
       @click="menuOpen = false"
     >
     <div class="group">

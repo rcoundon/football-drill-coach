@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { useViewport, NARROW_MAX_PX, __resetViewportForTests } from '../src/composables/useViewport'
+import {
+  useViewport,
+  NARROW_MAX_PX,
+  RAIL_MAX_PX,
+  __resetViewportForTests,
+} from '../src/composables/useViewport'
 
 type Listener = (event: { matches: boolean }) => void
 
@@ -29,6 +34,7 @@ function stubMatchMedia(initial: Record<string, boolean>) {
 
 const NARROW = `(max-width: ${NARROW_MAX_PX}px)`
 const PORTRAIT = '(orientation: portrait)'
+const RAIL = `(min-width: ${NARROW_MAX_PX + 1}px) and (max-width: ${RAIL_MAX_PX}px)`
 
 beforeEach(() => __resetViewportForTests())
 afterEach(() => vi.unstubAllGlobals())
@@ -57,6 +63,16 @@ describe('useViewport', () => {
     expect(viewport.isNarrow.value).toBe(false)
   })
 
+  it('reports a tablet-sized screen, where the rail layout applies', () => {
+    stubMatchMedia({ [NARROW]: false, [RAIL]: true })
+    expect(useViewport().isRail.value).toBe(true)
+  })
+
+  it('does not use the rail on a phone or a wide desktop', () => {
+    stubMatchMedia({ [NARROW]: true, [RAIL]: false })
+    expect(useViewport().isRail.value).toBe(false)
+  })
+
   /**
    * Rendering must not depend on matchMedia existing: jsdom and older
    * WebViews lack it, and a hard failure there would take the whole app
@@ -68,5 +84,6 @@ describe('useViewport', () => {
     const viewport = useViewport()
     expect(viewport.isNarrow.value).toBe(false)
     expect(viewport.isPortrait.value).toBe(false)
+    expect(viewport.isRail.value).toBe(false)
   })
 })

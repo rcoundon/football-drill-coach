@@ -715,3 +715,66 @@ describe('a fresh board on a portrait screen', () => {
     expect(board.state.pitch.rotated).toBe(false)
   })
 })
+
+describe('the tablet rail layout', () => {
+  function stubWidth(kind: 'narrow' | 'rail' | 'wide') {
+    window.matchMedia = ((query: string) => {
+      const isNarrowQuery = query.includes('max-width') && !query.includes('min-width')
+      const isRailQuery = query.includes('min-width')
+      return {
+        matches:
+          (isNarrowQuery && kind === 'narrow') || (isRailQuery && kind === 'rail'),
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }
+    }) as unknown as typeof window.matchMedia
+    __resetViewportForTests()
+  }
+
+  afterEach(() => __resetViewportForTests())
+
+  it('shows the rail beside the board at tablet width', async () => {
+    stubWidth('rail')
+    wrapper = mount(App)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findComponent({ name: 'ToolRail' }).exists()).toBe(true)
+  })
+
+  it('does not repeat the tools in the bar above it', async () => {
+    stubWidth('rail')
+    wrapper = mount(App)
+    await wrapper.vm.$nextTick()
+    // Exactly one control per tool across the whole app, and it is the rail's.
+    expect(wrapper.findAll('[data-tool="pen"]')).toHaveLength(1)
+    expect(wrapper.findComponent({ name: 'ToolRail' }).find('[data-tool="pen"]').exists()).toBe(
+      true,
+    )
+  })
+
+  it('keeps the tools in the bar on a wide screen, with no rail', async () => {
+    stubWidth('wide')
+    wrapper = mount(App)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findComponent({ name: 'ToolRail' }).exists()).toBe(false)
+    expect(wrapper.find('[data-tool="pen"]').exists()).toBe(true)
+  })
+
+  it('uses the compact bar rather than a rail on a phone', async () => {
+    stubWidth('narrow')
+    wrapper = mount(App)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findComponent({ name: 'ToolRail' }).exists()).toBe(false)
+    expect(wrapper.find('[data-more]').exists()).toBe(true)
+  })
+
+  it('changes tool from the rail', async () => {
+    stubWidth('rail')
+    wrapper = mount(App)
+    await wrapper.vm.$nextTick()
+    await wrapper.findComponent({ name: 'ToolRail' }).find('[data-tool="cone"]').trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(
+      wrapper.findComponent({ name: 'ToolRail' }).find('[data-tool="cone"]').classes(),
+    ).toContain('is-active')
+  })
+})

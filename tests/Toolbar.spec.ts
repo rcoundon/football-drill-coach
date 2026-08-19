@@ -307,3 +307,36 @@ describe('on a narrow screen', () => {
     expect(wrapper.find('[data-pitch="full"]').exists()).toBe(true)
   })
 })
+
+describe('when a rail is carrying the tools', () => {
+  function mountRailed() {
+    return mount(Toolbar, {
+      props: { tool: 'select' as ToolMode, drawColor: '#ffffff', railed: true },
+    })
+  }
+
+  /** The rail owns these; showing them twice would be two sources of truth. */
+  it('leaves the tools and player colours to the rail', () => {
+    const wrapper = mountRailed()
+    expect(wrapper.find('[data-tool="pen"]').exists()).toBe(false)
+    expect(wrapper.find('[data-add-counter="red"]').exists()).toBe(false)
+  })
+
+  it('keeps undo and redo, which the rail deliberately does not carry', () => {
+    const wrapper = mountRailed()
+    expect(wrapper.find('[data-undo]').exists()).toBe(true)
+    expect(wrapper.find('[data-redo]').exists()).toBe(true)
+  })
+
+  it('still carries everything the rail does not', () => {
+    const wrapper = mountRailed()
+    expect(wrapper.find('[data-pitch="full"]').exists()).toBe(true)
+    expect(wrapper.find('[data-save]').exists()).toBe(true)
+    expect(wrapper.find('[data-reset]').exists()).toBe(true)
+    expect(wrapper.find('[data-toggle-notes]').exists()).toBe(true)
+  })
+
+  it('needs no More menu, because what is left already fits', () => {
+    expect(mountRailed().find('[data-more]').exists()).toBe(false)
+  })
+})
