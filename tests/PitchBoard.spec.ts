@@ -677,3 +677,45 @@ describe('cones', () => {
     expect(board.state.markers).toHaveLength(0)
   })
 })
+
+describe('appearance', () => {
+  it('draws players without an outline', async () => {
+    useBoard().addCounter('red')
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+    const disc = wrapper.find('[data-counter] circle')
+    expect(disc.attributes('stroke')).toBeUndefined()
+  })
+
+  it('draws cones without an outline', async () => {
+    useBoard().addMarker({ x: 20, y: 20 })
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-marker] polygon').attributes('stroke')).toBeUndefined()
+  })
+
+  /**
+   * The ball keeps its outline: a white disc sitting on a white pitch
+   * marking would otherwise have no edge at all.
+   */
+  it('keeps an outline on the ball, and gives it a football pattern', async () => {
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+    const ball = wrapper.find('[data-ball]')
+    expect(ball.find('circle').attributes('stroke')).toBeDefined()
+    expect(ball.find('polygon').exists()).toBe(true)
+    expect(ball.findAll('line').length).toBe(5)
+  })
+
+  /**
+   * PNG export serialises the SVG, so anything styled in CSS is lost. Every
+   * value that makes the ball look like a ball must be an attribute.
+   */
+  it('styles the ball with attributes, so PNG export keeps it', async () => {
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+    const ball = wrapper.find('[data-ball]')
+    expect(ball.find('polygon').attributes('fill')).toBeDefined()
+    expect(ball.find('line').attributes('stroke')).toBeDefined()
+  })
+})

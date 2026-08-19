@@ -42,7 +42,7 @@ const HIT_RADIUS = 4.2
       stroke="#ffffff"
       stroke-width="0.5"
     />
-    <circle :r="RADIUS" :fill="fill" stroke="#00000055" stroke-width="0.2" />
+    <circle :r="RADIUS" :fill="fill" />
     <text
       data-counter-label
       :transform="labelTransform"

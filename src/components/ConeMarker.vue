@@ -24,7 +24,7 @@ const uprightTransform = computed(() => (props.rotated ? 'rotate(-90)' : ''))
 <template>
   <g data-marker :transform="`translate(${marker.pos.x} ${marker.pos.y})`" style="cursor: grab">
     <g :transform="uprightTransform">
-      <polygon :points="shape" fill="#fb8c00" stroke="#00000055" stroke-width="0.2" />
+      <polygon :points="shape" fill="#fb8c00" />
     </g>
     <circle :r="HIT_RADIUS" fill="transparent" @pointerdown="$emit('grab', $event as PointerEvent)" />
   </g>
