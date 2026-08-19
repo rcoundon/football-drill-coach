@@ -333,10 +333,15 @@ function onPointerUp(event: PointerEvent) {
         :key="counter.id"
         :counter="counter"
         :rotated="board.state.pitch.rotated"
-        :has-ball="board.state.ball.attachedTo === counter.id"
+        :has-ball="board.state.ball.visible && board.state.ball.attachedTo === counter.id"
         @grab="onCounterGrab(counter.id, $event)"
       />
-      <BallToken :pos="ballPos" :attached="ballAttached" @grab="onBallGrab" />
+      <BallToken
+        v-if="board.state.ball.visible"
+        :pos="ballPos"
+        :attached="ballAttached"
+        @grab="onBallGrab"
+      />
     </g>
   </svg>
 </template>

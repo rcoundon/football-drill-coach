@@ -719,3 +719,43 @@ describe('appearance', () => {
     expect(ball.find('line').attributes('stroke')).toBeDefined()
   })
 })
+
+describe('hiding the ball', () => {
+  it('takes the ball off the pitch', async () => {
+    const board = useBoard()
+    board.toggleBallVisible()
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-ball]').exists()).toBe(false)
+  })
+
+  /** No ball on the pitch means nobody is in possession. */
+  it('takes the possession ring with it', async () => {
+    const board = useBoard()
+    const player = board.addCounter('red')
+    board.moveCounter(player.id, { x: 30, y: 30 })
+    board.dropBall({ x: 30, y: 30 })
+
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-possession-ring]').exists()).toBe(true)
+
+    board.toggleBallVisible()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-possession-ring]').exists()).toBe(false)
+  })
+
+  it('puts the ball back with the player who had it', async () => {
+    const board = useBoard()
+    const player = board.addCounter('red')
+    board.moveCounter(player.id, { x: 30, y: 30 })
+    board.dropBall({ x: 30, y: 30 })
+    board.toggleBallVisible()
+    board.toggleBallVisible()
+
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-ball]').exists()).toBe(true)
+    expect(wrapper.find('[data-possession-ring]').exists()).toBe(true)
+  })
+})

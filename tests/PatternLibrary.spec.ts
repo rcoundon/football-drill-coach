@@ -13,7 +13,7 @@ function seed(name: string) {
   return useStorage().savePattern(name, {
     counters: [{ id: 'a', color: 'red', label: '1', pos: { x: 10, y: 10 } }],
     markers: [],
-    ball: { pos: { x: 5, y: 5 }, attachedTo: null },
+    ball: { pos: { x: 5, y: 5 }, attachedTo: null, visible: true },
     drawings: [],
     pitch: { type: 'full', rotated: false },
   })

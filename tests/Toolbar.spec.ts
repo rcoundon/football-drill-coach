@@ -194,3 +194,19 @@ describe('the cone tool', () => {
     expect(wrapper.find('[data-reset]').attributes('disabled')).toBeUndefined()
   })
 })
+
+describe('the ball toggle', () => {
+  it('hides the ball when pressed', async () => {
+    const board = useBoard()
+    const wrapper = mountToolbar()
+    await wrapper.find('[data-toggle-ball]').trigger('click')
+    expect(board.state.ball.visible).toBe(false)
+  })
+
+  it('shows whether the ball is currently on the pitch', async () => {
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-toggle-ball]').classes()).toContain('is-active')
+    await wrapper.find('[data-toggle-ball]').trigger('click')
+    expect(wrapper.find('[data-toggle-ball]').classes()).not.toContain('is-active')
+  })
+})
