@@ -150,6 +150,12 @@ const DRAW_COLOR_NAMES: Record<string, string> = {
         @click="board.clearDrawings()"
       >Clear drawings</button>
       <button
+        data-toggle-ball
+        :class="['chip', { 'is-active': board.state.ball.visible }]"
+        :title="board.state.ball.visible ? 'Take the ball off the pitch' : 'Put the ball back on the pitch'"
+        @click="board.toggleBallVisible()"
+      >Ball</button>
+      <button
         data-reset
         class="chip"
         :disabled="isBoardEmpty"

@@ -248,7 +248,7 @@ function sampleSnapshot(): BoardSnapshot {
   return {
     counters: [{ id: 'a', color: 'red', label: '1', pos: { x: 10, y: 10 } }],
     markers: [],
-    ball: { pos: { x: 5, y: 5 }, attachedTo: null },
+    ball: { pos: { x: 5, y: 5 }, attachedTo: null, visible: true },
     drawings: [],
     pitch: { type: 'full', rotated: false },
   }
@@ -522,5 +522,27 @@ describe('a save that was refused', () => {
 
     expect(wrapper.find('[data-current-pattern]').text()).toMatch(/unsaved/i)
     expect(localStorage.getItem(PATTERNS_KEY)).toBe('{not json at all')
+  })
+})
+
+describe('the ball shortcut', () => {
+  it('toggles the ball on b', async () => {
+    const board = useBoard()
+    wrapper = mount(App, { attachTo: document.body })
+    await wrapper.vm.$nextTick()
+
+    fire({ key: 'b' })
+    await wrapper.vm.$nextTick()
+    expect(board.state.ball.visible).toBe(false)
+  })
+
+  it('leaves the ball alone on Ctrl+B, which belongs to the browser', async () => {
+    const board = useBoard()
+    wrapper = mount(App, { attachTo: document.body })
+    await wrapper.vm.$nextTick()
+
+    fire({ key: 'b', ctrlKey: true })
+    await wrapper.vm.$nextTick()
+    expect(board.state.ball.visible).toBe(true)
   })
 })

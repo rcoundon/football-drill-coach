@@ -208,6 +208,11 @@ function onKeydown(event: KeyboardEvent) {
 
   if (modifier) return
 
+  if (event.key.toLowerCase() === 'b') {
+    board.toggleBallVisible()
+    return
+  }
+
   const byKey: Record<string, ToolMode> = { v: 'select', p: 'pen', r: 'arrow-run', s: 'arrow-pass', l: 'line', c: 'cone', e: 'erase' }
   const next = byKey[event.key.toLowerCase()]
   if (next) tool.value = next

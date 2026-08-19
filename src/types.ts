@@ -64,6 +64,12 @@ export type Ball = {
   pos: Vec
   /** Counter id when a player has the ball, null when it is free on the grass. */
   attachedTo: string | null
+  /**
+   * Whether the ball is on the pitch at all. A shape or pressing drill has
+   * no ball; a passing drill does. Hiding it keeps `attachedTo`, so showing
+   * it again returns it to whoever was carrying it.
+   */
+  visible: boolean
 }
 
 /**

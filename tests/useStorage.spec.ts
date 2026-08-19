@@ -11,7 +11,7 @@ function snap(): BoardSnapshot {
   return {
     counters: [{ id: 'a', color: 'red', label: '1', pos: { x: 10, y: 10 } }],
     markers: [],
-    ball: { pos: { x: 5, y: 5 }, attachedTo: null },
+    ball: { pos: { x: 5, y: 5 }, attachedTo: null, visible: true },
     drawings: [],
     pitch: { type: 'full', rotated: false },
   }
@@ -529,3 +529,35 @@ describe('cones', () => {
   })
 })
 
+
+describe('ball visibility', () => {
+  it('round-trips a hidden ball', () => {
+    const store = useStorage()
+    const hidden = { ...snap(), ball: { ...snap().ball, visible: false } }
+    const saved = store.savePattern('Shape drill', hidden)
+    expect(store.patternToSnapshot(saved).ball.visible).toBe(false)
+  })
+
+  /**
+   * Patterns saved before the ball could be hidden have no visible flag,
+   * and every one of them had a ball on the pitch.
+   */
+  it('treats a pattern saved without the flag as having a visible ball', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Older drill', snap())
+    const legacy = structuredClone(saved) as Record<string, unknown>
+    delete ((legacy.frames as Record<string, unknown>[])[0].ball as Record<string, unknown>).visible
+
+    expect(() => parsePattern(legacy)).not.toThrow()
+    expect(store.patternToSnapshot(parsePattern(legacy)).ball.visible).toBe(true)
+  })
+
+  it('treats a draft saved without the flag the same way', () => {
+    const store = useStorage()
+    store.saveDraft(snap())
+    const raw = JSON.parse(localStorage.getItem(DRAFT_KEY)!)
+    delete raw.ball.visible
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(raw))
+    expect(store.loadDraft()?.ball.visible).toBe(true)
+  })
+})

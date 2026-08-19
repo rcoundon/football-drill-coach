@@ -42,6 +42,12 @@ for reuse.
 
 Undo is `Ctrl+Z` (`Cmd+Z` on a Mac), redo is `Ctrl+Shift+Z`.
 
+**Ball** (`B`) takes the ball off the pitch and puts it back — a shape or
+pressing drill often has no ball in it. Hiding it also hides the possession
+ring, since nobody can be in possession of a ball that is not there, but the
+board remembers who was carrying it and returns it to them when you show it
+again. The setting is saved with the pattern.
+
 Cones are equipment rather than players: they carry no number, and the ball
 never belongs to one, so a cone beside a player can't steal possession. Drag
 them with **Move** and remove them with **Erase**.

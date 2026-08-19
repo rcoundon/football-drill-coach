@@ -40,6 +40,16 @@ function isValidCounter(value: unknown): boolean {
   )
 }
 
+/**
+ * The ball could not be hidden until after version 1 shipped, and every
+ * pattern written before that had one on the pitch. A missing flag
+ * therefore means visible, not invalid.
+ */
+function withBallDefaults(ball: unknown): unknown {
+  if (!isObject(ball)) return ball
+  return { ...ball, visible: ball.visible !== false }
+}
+
 function isValidBall(value: unknown): boolean {
   return (
     isObject(value) &&
@@ -308,7 +318,7 @@ function patternToSnapshot(pattern: Pattern): BoardSnapshot {
   return {
     counters: frame.counters,
     markers: markersOf(frame as unknown as Record<string, unknown>) as BoardSnapshot['markers'],
-    ball: frame.ball,
+    ball: withBallDefaults(frame.ball) as BoardSnapshot['ball'],
     drawings: copy.drawings,
     pitch: copy.pitch,
   }
@@ -357,7 +367,11 @@ function loadDraft(): BoardSnapshot | null {
     if (!isValidSnapshot(raw)) return null
     // A draft written before cones existed has no markers array.
     const draft = raw as Record<string, unknown>
-    return { ...draft, markers: markersOf(draft) } as unknown as BoardSnapshot
+    return {
+      ...draft,
+      ball: withBallDefaults(draft.ball),
+      markers: markersOf(draft),
+    } as unknown as BoardSnapshot
   } catch {
     return null
   }

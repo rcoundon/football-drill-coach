@@ -62,7 +62,7 @@ function emptyState(): BoardState {
     // coach's first drag would grab the ball instead of the player. Just
     // below the centre circle, which is clear of the centre on every pitch
     // type and well inside the half pitch's 25..75 band.
-    ball: { pos: { x: PITCH_W / 2, y: PITCH_H / 2 + 10 }, attachedTo: null },
+    ball: { pos: { x: PITCH_W / 2, y: PITCH_H / 2 + 10 }, attachedTo: null, visible: true },
     drawings: [],
     pitch: { type: 'blank', rotated: false },
   }
@@ -373,6 +373,12 @@ function deleteCounter(id: string): void {
 }
 
 /** Drag-time move. Detaches from any holder; does not commit. */
+/** Show or hide the ball, keeping who was carrying it either way. */
+function toggleBallVisible(): void {
+  commit()
+  state.ball.visible = !state.ball.visible
+}
+
 function moveBall(pos: Vec): void {
   state.ball.attachedTo = null
   state.ball.pos = clampToPitch(pos)
@@ -576,6 +582,7 @@ const board = {
   deleteMarker,
   nextLabelFor,
   moveBall,
+  toggleBallVisible,
   dropBall,
   ballPosition,
   startPen,
