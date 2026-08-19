@@ -294,11 +294,12 @@ describe('clearCounters', () => {
     expect(board.canUndo.value).toBe(false)
   })
 
-  it('lets the next counter start from 1 again', () => {
+  it('lets the next counter take the centre spot again', () => {
     const board = useBoard()
-    board.addCounter('red')
+    const first = board.addCounter('red')
+    const centre = { ...first.pos }
     board.addCounter('red')
     board.clearCounters()
-    expect(board.addCounter('red').label).toBe('1')
+    expect(board.addCounter('red').pos).toEqual(centre)
   })
 })

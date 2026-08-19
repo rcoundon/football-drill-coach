@@ -197,7 +197,7 @@ describe('keyboard shortcuts', () => {
 })
 
 describe('renaming a counter label', () => {
-  it('opens pre-filled with the current label, saves the new one, and is undoable', async () => {
+  it('opens empty on a fresh counter, saves what is typed, and is undoable', async () => {
     const board = useBoard()
     board.addCounter('red')
     wrapper = mountApp()
@@ -208,7 +208,7 @@ describe('renaming a counter label', () => {
     await wrapper.vm.$nextTick()
 
     const input = wrapper.find('#counter-label')
-    expect((input.element as HTMLInputElement).value).toBe('1')
+    expect((input.element as HTMLInputElement).value).toBe('')
 
     await input.setValue('CB')
     await wrapper.find('.prompt-actions .chip').trigger('click')
@@ -216,7 +216,7 @@ describe('renaming a counter label', () => {
     expect(board.state.counters[0].label).toBe('CB')
 
     board.undo()
-    expect(board.state.counters[0].label).toBe('1')
+    expect(board.state.counters[0].label).toBe('')
   })
 
   it('does not open on a single press', async () => {
