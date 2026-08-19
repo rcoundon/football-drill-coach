@@ -37,7 +37,7 @@ the text takes the label away again.
 | Run | `R` | Solid arrow |
 | Pass | `S` | Dashed arrow |
 | Line | `L` | Straight line for marking out zones, channels and thirds |
-| Cone | `C` | Tap the pitch to drop a cone; tap again for the next one |
+| Cone | `C` | Tap the pitch to drop a cone; drag one to move it |
 | Text | `T` | Tap the pitch to drop a label; drag or double-press one to adjust it |
 | Erase | `E` | Remove whatever you press |
 

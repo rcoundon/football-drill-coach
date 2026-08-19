@@ -128,7 +128,8 @@ describe('dragging a counter', () => {
     const wrapper = mountBoard()
     await wrapper.vm.$nextTick()
 
-    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(50, 32))
+    // Grabbed dead centre, so the counter's centre tracks the pointer exactly.
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(c.pos.x, c.pos.y))
     await firePointer(wrapper.find('svg'), 'pointermove', clientFor(20, 10))
     await firePointer(wrapper.find('svg'), 'pointerup', clientFor(20, 10))
 
@@ -540,10 +541,12 @@ describe('recovering from a lost pointerup', () => {
     const counters = wrapper.findAll('[data-counter]')
     await firePointer(counters[0], 'pointerdown', { ...clientFor(50, 32), pointerId: 1 })
     // pointerup for pointer 1 never arrives.
+    const grabbedAt = { ...board.counterById(second.id)!.pos }
     await firePointer(counters[1], 'pointerdown', { ...clientFor(50, 32), pointerId: 2 })
     await firePointer(wrapper.find('svg'), 'pointermove', { ...clientFor(20, 10), pointerId: 2 })
 
-    expect(board.counterById(second.id)!.pos.x).toBeCloseTo(20, 4)
+    // Carried by the point it was grabbed, so it travels the pointer's distance.
+    expect(board.counterById(second.id)!.pos.x).toBeCloseTo(grabbedAt.x - 30, 4)
     expect(board.counterById(first.id)!.pos.x).not.toBeCloseTo(20, 4)
   })
 
@@ -558,12 +561,14 @@ describe('recovering from a lost pointerup', () => {
       delete (svgOf(wrapper) as unknown as { hasPointerCapture?: unknown }).hasPointerCapture
 
       const counters = wrapper.findAll('[data-counter]')
+      const grabbedAt = { ...board.counterById(second.id)!.pos }
       await firePointer(counters[0], 'pointerdown', { ...clientFor(50, 32), pointerId: 1 })
       vi.advanceTimersByTime(STALE_DRAG_MS + 1)
       await firePointer(counters[1], 'pointerdown', { ...clientFor(50, 32), pointerId: 2 })
       await firePointer(wrapper.find('svg'), 'pointermove', { ...clientFor(20, 10), pointerId: 2 })
 
-      expect(board.counterById(second.id)!.pos.x).toBeCloseTo(20, 4)
+      // Carried by the point it was grabbed, so it travels the pointer's distance.
+      expect(board.counterById(second.id)!.pos.x).toBeCloseTo(grabbedAt.x - 30, 4)
     } finally {
       vi.useRealTimers()
     }
@@ -1074,5 +1079,96 @@ describe('a cancel from an unrelated pointer', () => {
     await firePointer(wrapper.find('svg'), 'pointerup', clientFor(50, 32))
 
     expect(wrapper.emitted('rename')).toBeFalsy()
+  })
+})
+
+describe('grabbing something without moving it', () => {
+  /**
+   * Pressing an object used to snap it so the pointer sat at its centre,
+   * so a plain click nudged whatever it landed on. A press should pick a
+   * thing up where it is, not reposition it.
+   */
+  it('leaves a counter exactly where it was when it is only clicked', async () => {
+    const board = useBoard()
+    const counter = board.addCounter('red')
+    const before = { ...counter.pos }
+    const offCentre = { x: before.x + 1.8, y: before.y + 1.2 }
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(offCentre.x, offCentre.y))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(offCentre.x, offCentre.y))
+
+    expect(board.counterById(counter.id)!.pos).toEqual(before)
+  })
+
+  it('carries a counter by the point it was grabbed, not by its centre', async () => {
+    const board = useBoard()
+    const counter = board.addCounter('red')
+    const start = { ...counter.pos }
+    const grab = { x: start.x + 1.8, y: start.y + 1.2 }
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(grab.x, grab.y))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(grab.x + 20, grab.y + 10))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(grab.x + 20, grab.y + 10))
+
+    const moved = board.counterById(counter.id)!.pos
+    expect(moved.x).toBeCloseTo(start.x + 20, 4)
+    expect(moved.y).toBeCloseTo(start.y + 10, 4)
+  })
+
+  it('leaves a cone where it was when it is only clicked', async () => {
+    const board = useBoard()
+    const marker = board.addMarker({ x: 40, y: 25 })
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-marker]'), 'pointerdown', clientFor(41.5, 26))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(41.5, 26))
+
+    expect(board.markerById(marker.id)!.pos).toEqual({ x: 40, y: 25 })
+  })
+
+  it('leaves a label where it was when it is only clicked', async () => {
+    const board = useBoard()
+    const label = board.addLabel({ x: 40, y: 25 }, 'Stay put')!
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-label]'), 'pointerdown', clientFor(42, 26))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(42, 26))
+
+    expect(board.labelById(label.id)!.pos).toEqual({ x: 40, y: 25 })
+  })
+})
+
+describe('adjusting a cone with the cone tool still active', () => {
+  /** Same as the text tool: placing one leaves that tool selected. */
+  it('drags the cone rather than dropping another on top of it', async () => {
+    const board = useBoard()
+    const marker = board.addMarker({ x: 50, y: 32 })
+    const wrapper = mountBoard('cone')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-marker]'), 'pointerdown', clientFor(50, 32))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(20, 10))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(20, 10))
+
+    expect(board.state.markers).toHaveLength(1)
+    expect(board.markerById(marker.id)!.pos.x).toBeCloseTo(20, 4)
+  })
+
+  it('still drops a new cone on empty grass', async () => {
+    const board = useBoard()
+    board.addMarker({ x: 10, y: 10 })
+    const wrapper = mountBoard('cone')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('svg'), 'pointerdown', clientFor(70, 45))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(70, 45))
+
+    expect(board.state.markers).toHaveLength(2)
   })
 })
