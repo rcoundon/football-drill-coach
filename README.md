@@ -43,6 +43,15 @@ for reuse.
 
 Undo is `Ctrl+Z` (`Cmd+Z` on a Mac), redo is `Ctrl+Shift+Z`.
 
+**Drill notes** sit beside the board on a wide screen and beneath it on a
+narrow one: setup, coaching points, progressions. They are saved with the
+pattern and come out in the PNG export in a band under the pitch, so a
+session plan pasted into a document carries its instructions with it —
+never printed over the pitch itself. **Notes** hides the panel, and hiding
+it keeps the notes out of the export too.
+
+**Labels** hides the on-pitch text without deleting it.
+
 **Ball** (`B`) takes the ball off the pitch and puts it back — a shape or
 pressing drill often has no ball in it. Hiding it also hides the possession
 ring, since nobody can be in possession of a ball that is not there, but the

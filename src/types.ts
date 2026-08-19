@@ -100,6 +100,13 @@ export type Pattern = {
   pitch: { type: PitchType; rotated: boolean }
   drawings: Drawing[]
   labelsVisible?: boolean
+  /**
+   * Free text describing the whole drill — setup, coaching points,
+   * progressions. Held at the pattern level rather than in a frame,
+   * because it describes the drill rather than a moment in it.
+   */
+  notes?: string
+  notesVisible?: boolean
   frames: Frame[]
   createdAt: string
   updatedAt: string

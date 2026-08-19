@@ -231,3 +231,20 @@ describe('the text tool', () => {
     expect(wrapper.find('[data-reset]').attributes('disabled')).toBeUndefined()
   })
 })
+
+describe('the notes toggle', () => {
+  it('hides the notes panel, and shows whether it is on', async () => {
+    const board = useBoard()
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-toggle-notes]').classes()).toContain('is-active')
+    await wrapper.find('[data-toggle-notes]').trigger('click')
+    expect(board.state.notesVisible).toBe(false)
+    expect(wrapper.find('[data-toggle-notes]').classes()).not.toContain('is-active')
+  })
+
+  it('offers Reset once there are only notes', () => {
+    useBoard().setNotes('Coaching points')
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-reset]').attributes('disabled')).toBeUndefined()
+  })
+})

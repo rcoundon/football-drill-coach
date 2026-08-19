@@ -15,6 +15,8 @@ function seed(name: string) {
     markers: [],
     labels: [],
     labelsVisible: true,
+    notes: '',
+    notesVisible: true,
     ball: { pos: { x: 5, y: 5 }, attachedTo: null, visible: true },
     drawings: [],
     pitch: { type: 'full', rotated: false },

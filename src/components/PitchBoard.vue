@@ -31,7 +31,7 @@ export const STALE_DRAG_MS = 10_000
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { ToolMode, Vec } from '../types'
-import { PITCH_H, PITCH_W, clientToPitch, viewBoxOf } from '../geometry'
+import { PITCH_H, PITCH_W, clientToPitch, distance, viewBoxOf } from '../geometry'
 import { useBoard } from '../composables/useBoard'
 import PitchMarkings from './PitchMarkings.vue'
 import PlayerCounter from './PlayerCounter.vue'
@@ -77,6 +77,9 @@ const drag = ref<Drag | null>(null)
 /** The last press on a counter that ended without moving, for detecting a double press. */
 let lastCounterPress: { id: string; at: number; pos: Vec } | null = null
 let lastLabelPress: { id: string; at: number; pos: Vec } | null = null
+
+/** Where the text tool was pressed, until the release that places the label. */
+let pendingLabelAt: Vec | null = null
 
 /** True for a pointermove/up belonging to some pointer other than the dragging one. */
 function isOtherPointer(event: PointerEvent): boolean {
@@ -298,9 +301,13 @@ function onPointerDown(event: PointerEvent) {
     const style = props.tool === 'arrow-run' ? 'run' : 'pass'
     drag.value = { kind: 'segment', id: board.startArrow(at, props.drawColor, style), ...shared }
   } else if (props.tool === 'text') {
-    // The text itself is typed in a dialog the app owns, so the board only
-    // reports where the coach tapped.
-    emit('addLabel', at)
+    /*
+     * Remembered here, emitted on release. Opening the dialog on the press
+     * means the pointerup that follows lands on the <svg> and pulls focus
+     * straight back out of the dialog's field. A tap is finished on release
+     * anyway, and waiting also lets a drag cancel the placement.
+     */
+    pendingLabelAt = at
   } else if (props.tool === 'cone') {
     // Placed on press rather than as a drag: laying out a grid is a
     // sequence of taps, and a cone has no size to drag out.
@@ -326,6 +333,13 @@ function onPointerMove(event: PointerEvent) {
 }
 
 function onPointerUp(event: PointerEvent) {
+  if (pendingLabelAt) {
+    const at = pendingLabelAt
+    pendingLabelAt = null
+    // Only a tap places a label; a drag across the pitch was not a placement.
+    if (distance(at, toPitch(event)) < 1) emit('addLabel', at)
+  }
+
   const active = drag.value
   if (!active || isOtherPointer(event)) return
   const at = toPitch(event)

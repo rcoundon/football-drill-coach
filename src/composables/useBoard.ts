@@ -37,6 +37,9 @@ export const COUNTER_RADIUS = 2.4
 export const COUNTER_SPACING = 5.5
 
 /** Minimum spacing between recorded freehand points, in pitch units. */
+/** Room for a setup, coaching points and progressions, without unbounded paste. */
+export const MAX_NOTES_LENGTH = 4000
+
 /** Long enough for a coaching cue, short enough to stay readable on the pitch. */
 export const MAX_LABEL_LENGTH = 40
 
@@ -50,6 +53,8 @@ export type BoardState = {
   markers: Marker[]
   labels: Label[]
   labelsVisible: boolean
+  notes: string
+  notesVisible: boolean
   ball: Ball
   drawings: Drawing[]
   pitch: { type: PitchType; rotated: boolean }
@@ -64,6 +69,8 @@ function emptyState(): BoardState {
     markers: [],
     labels: [],
     labelsVisible: true,
+    notes: '',
+    notesVisible: true,
     // Not the pitch centre: that is where the first counter lands, and the
     // ball's hit circle would sit right on top of the counter's body, so the
     // coach's first drag would grab the ball instead of the player. Just
@@ -113,6 +120,8 @@ function snapshot(): BoardSnapshot {
     markers: raw.markers,
     labels: raw.labels,
     labelsVisible: raw.labelsVisible,
+    notes: raw.notes,
+    notesVisible: raw.notesVisible,
     ball: raw.ball,
     drawings: raw.drawings,
     pitch: raw.pitch,
@@ -125,6 +134,8 @@ function apply(snap: BoardSnapshot): void {
   state.markers = copy.markers ?? []
   state.labels = copy.labels ?? []
   state.labelsVisible = copy.labelsVisible ?? true
+  state.notes = copy.notes ?? ''
+  state.notesVisible = copy.notesVisible ?? true
   state.ball = copy.ball
   state.drawings = copy.drawings
   state.pitch = copy.pitch
@@ -324,6 +335,31 @@ function addCounter(color: CounterColor): Counter {
   }
   state.counters.push(counter)
   return counter
+}
+
+/**
+ * The last commit made by note typing, if the very next change was also
+ * note typing. Committing per keystroke would bury every other undo entry
+ * under a drill's worth of characters.
+ */
+let notesUndoEntry: BoardSnapshot | null = null
+
+function setNotes(text: string): void {
+  const clean = text.slice(0, MAX_NOTES_LENGTH)
+  if (clean === state.notes) return
+  // Coalesce consecutive typing: only the first keystroke of a run commits.
+  // Compare against the raw entry — reading the stack through the ref hands
+  // back a proxy, which never matches the object commit() returned.
+  const top = undoStack.value.at(-1)
+  if (notesUndoEntry === null || (top && toRaw(top) !== notesUndoEntry)) {
+    notesUndoEntry = commit()
+  }
+  state.notes = clean
+}
+
+function toggleNotesVisible(): void {
+  commit()
+  state.notesVisible = !state.notesVisible
 }
 
 function labelById(id: string): Label | undefined {
@@ -644,6 +680,8 @@ const board = {
   moveLabel,
   deleteLabel,
   toggleLabelsVisible,
+  setNotes,
+  toggleNotesVisible,
   addMarker,
   moveMarker,
   deleteMarker,
@@ -669,6 +707,7 @@ export function useBoard() {
 
 /** Test-only: put the singleton back to its just-loaded condition. */
 export function __resetBoardForTests(): void {
+  notesUndoEntry = null
   apply(emptyState())
   undoStack.value = []
   redoStack.value = []

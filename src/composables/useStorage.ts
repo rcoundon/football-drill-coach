@@ -121,6 +121,10 @@ export function parsePattern(value: unknown): Pattern {
   }
 
   if (!Array.isArray(value.drawings)) throw new Error('That pattern is missing its drawings.')
+
+  if (value.notes !== undefined && typeof value.notes !== 'string') {
+    throw new Error('That pattern has damaged notes.')
+  }
   if (!value.drawings.every(isValidDrawing)) {
     throw new Error('That pattern has a damaged drawing.')
   }
@@ -283,6 +287,8 @@ function toPattern(name: string, snap: BoardSnapshot, id: string, createdAt: str
       },
     ],
     labelsVisible: copy.labelsVisible ?? true,
+    notes: copy.notes ?? '',
+    notesVisible: copy.notesVisible ?? true,
     createdAt,
     updatedAt: nowIso(),
   }
@@ -349,6 +355,8 @@ function patternToSnapshot(pattern: Pattern): BoardSnapshot {
     markers: markersOf(frame as unknown as Record<string, unknown>) as BoardSnapshot['markers'],
     labels: labelsOf(frame as unknown as Record<string, unknown>) as BoardSnapshot['labels'],
     labelsVisible: (copy as { labelsVisible?: boolean }).labelsVisible ?? true,
+    notes: (copy as { notes?: string }).notes ?? '',
+    notesVisible: (copy as { notesVisible?: boolean }).notesVisible ?? true,
     ball: withBallDefaults(frame.ball) as BoardSnapshot['ball'],
     drawings: copy.drawings,
     pitch: copy.pitch,
@@ -405,6 +413,8 @@ function loadDraft(): BoardSnapshot | null {
       markers: markersOf(draft),
       labels: labelsOf(draft),
       labelsVisible: draft.labelsVisible !== false,
+      notes: typeof draft.notes === 'string' ? draft.notes : '',
+      notesVisible: draft.notesVisible !== false,
     } as unknown as BoardSnapshot
   } catch {
     return null

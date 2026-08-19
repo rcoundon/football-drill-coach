@@ -250,6 +250,8 @@ function sampleSnapshot(): BoardSnapshot {
     markers: [],
     labels: [],
     labelsVisible: true,
+    notes: '',
+    notesVisible: true,
     ball: { pos: { x: 5, y: 5 }, attachedTo: null, visible: true },
     drawings: [],
     pitch: { type: 'full', rotated: false },
@@ -601,5 +603,52 @@ describe('adding a label', () => {
     await wrapper.vm.$nextTick()
 
     expect(board.labelById(label.id)!.text).toBe('After')
+  })
+})
+
+describe('drill notes', () => {
+  it('types into the board notes', async () => {
+    const board = useBoard()
+    wrapper = mount(App, { attachTo: document.body })
+    await wrapper.vm.$nextTick()
+
+    await wrapper.find('[data-notes]').setValue('Two touch max.\nSwitch after 90 seconds.')
+    await wrapper.vm.$nextTick()
+
+    expect(board.state.notes).toBe('Two touch max.\nSwitch after 90 seconds.')
+  })
+
+  it('shows notes loaded with a pattern', async () => {
+    const board = useBoard()
+    board.setNotes('Coaching points')
+    wrapper = mount(App, { attachTo: document.body })
+    await wrapper.vm.$nextTick()
+    expect((wrapper.find('[data-notes]').element as HTMLTextAreaElement).value).toBe(
+      'Coaching points',
+    )
+  })
+
+  it('hides the panel when notes are toggled off', async () => {
+    const board = useBoard()
+    board.toggleNotesVisible()
+    wrapper = mount(App, { attachTo: document.body })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-notes]').exists()).toBe(false)
+  })
+
+  /**
+   * Typing a drill name must not drive the tool shortcuts, and a textarea
+   * has to be exempt for the same reason an input is.
+   */
+  it('does not fire tool shortcuts while typing notes', async () => {
+    wrapper = mount(App, { attachTo: document.body })
+    await wrapper.vm.$nextTick()
+
+    const notes = wrapper.find('[data-notes]')
+    ;(notes.element as HTMLTextAreaElement).focus()
+    notes.element.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', bubbles: true }))
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[data-tool="arrow-run"]').classes()).not.toContain('is-active')
   })
 })
