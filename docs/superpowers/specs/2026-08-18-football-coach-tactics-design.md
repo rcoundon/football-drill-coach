@@ -144,15 +144,16 @@ If a later version needs drawings that appear and disappear during playback, the
 into `Frame` under a version bump and a migration that copies the pattern-level drawings
 into every frame.
 
-### Counter numbering
+### Counter labels
 
-Counters are auto-numbered from 1 within each colour. When a counter is deleted, the
-remaining counters keep their labels and a gap is left — deleting red 2 of 5 leaves red
-1, 3, 4, 5.
+Counters arrive unlabelled. A coach who wants numbers or initials double-presses a
+counter and types them, capped at four characters; clearing the text removes the label.
 
-Renumbering on delete was rejected: it would silently rename players mid-session, so a
-coach mid-explanation would find "red 3" had become "red 2". A visible gap is honest, and
-labels are editable if the coach wants to close it.
+(Amended after use. The original design auto-numbered counters from 1 within each colour
+and went to some trouble over what happened to those numbers on delete. In practice most
+drills are explained by colour and position, and an automatic number is one the coach has
+to clear before writing the one they actually wanted. Removing it also removed the whole
+question of renumbering, and the numbering helper with it.)
 
 ## Components
 

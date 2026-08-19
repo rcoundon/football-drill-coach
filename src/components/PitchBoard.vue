@@ -81,6 +81,9 @@ let lastLabelPress: { id: string; at: number; pos: Vec } | null = null
 /** Where the text tool was pressed, until the release that places the label. */
 let pendingLabelAt: Vec | null = null
 
+/** A counter awaiting the release of its second press, to be renamed. */
+let pendingRenameId: string | null = null
+
 /** True for a pointermove/up belonging to some pointer other than the dragging one. */
 function isOtherPointer(event: PointerEvent): boolean {
   return drag.value !== null && drag.value.pointerId !== event.pointerId
@@ -192,7 +195,13 @@ function onCounterGrab(id: string, event: PointerEvent) {
   lastCounterPress = isSecondPress ? null : { id, at: now, pos: at }
 
   if (isSecondPress) {
-    emit('rename', id)
+    /*
+     * Held until the release. Opening the dialog on the press means the
+     * pointerup that follows lands on the <svg> and pulls focus straight
+     * back out of the field, so the coach double-presses, types, and
+     * nothing lands. A drag before the release cancels it.
+     */
+    pendingRenameId = id
     return
   }
 
@@ -342,6 +351,14 @@ function onPointerMove(event: PointerEvent) {
 }
 
 function onPointerUp(event: PointerEvent) {
+  if (pendingRenameId) {
+    const id = pendingRenameId
+    pendingRenameId = null
+    const counter = board.counterById(id)
+    // A press that travelled was a drag, not a rename.
+    if (counter && distance(counter.pos, toPitch(event)) < 1) emit('rename', id)
+  }
+
   if (pendingLabelAt) {
     const at = pendingLabelAt
     pendingLabelAt = null

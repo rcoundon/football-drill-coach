@@ -26,9 +26,9 @@ npm run dev
 ## Using it
 
 Click a colour under **Players** to drop a counter, then drag it into position.
-Double-click a counter to rename it — labels are capped at four characters. New counters
-are numbered automatically from 1 within each colour, and deleting one frees its number
-for reuse.
+Counters arrive unlabelled: most drills are explained by colour and position. If you want
+numbers or initials, double-press a counter and type them — up to four characters. Clearing
+the text takes the label away again.
 
 | Tool | Key | What it does |
 | --- | --- | --- |

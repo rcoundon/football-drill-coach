@@ -87,11 +87,21 @@ describe('rendering', () => {
     expect(wrapper.findAll('[data-counter]')).toHaveLength(2)
   })
 
-  it('shows the counter label', async () => {
+  it('shows a counter label once one has been written', async () => {
+    const board = useBoard()
+    const counter = board.addCounter('red')
+    board.setCounterLabel(counter.id, '9')
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-counter-label]').text()).toBe('9')
+  })
+
+  /** A counter nobody has labelled shows nothing, not a number it never asked for. */
+  it('shows no label on a fresh counter', async () => {
     useBoard().addCounter('red')
     const wrapper = mountBoard()
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('[data-counter-label]').text()).toBe('1')
+    expect(wrapper.find('[data-counter-label]').text()).toBe('')
   })
 
   it('rings the counter that has the ball', async () => {
@@ -871,5 +881,51 @@ describe('adjusting a label with the text tool still active', () => {
     await firePointer(wrapper.find('svg'), 'pointerup', clientFor(70, 45))
 
     expect(wrapper.emitted('addLabel')).toBeTruthy()
+  })
+})
+
+describe('renaming a counter, and where focus ends up', () => {
+  /**
+   * The rename must be emitted on the release, not the press. Opening the
+   * dialog on the press means the pointerup that follows lands on the
+   * <svg> and pulls focus straight back out of the field — so the coach
+   * double-presses, types, and nothing lands. Only reproducible in a real
+   * browser, hence the explicit ordering test here.
+   */
+  it('does not emit the rename until the second press is released', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(50, 32))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(50, 32))
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(50, 32))
+
+    expect(wrapper.emitted('rename')).toBeFalsy()
+
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(50, 32))
+    expect(wrapper.emitted('rename')).toBeTruthy()
+  })
+
+  /**
+   * The second press does not start a drag — it is the opening half of a
+   * rename — so sliding away from it cancels the rename rather than moving
+   * the counter. Predates the release change; pinned so it stays deliberate.
+   */
+  it('cancels the rename when the pointer slides away before releasing', async () => {
+    const board = useBoard()
+    const counter = board.addCounter('red')
+    const startX = counter.pos.x
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(50, 32))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(50, 32))
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(50, 32))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(20, 10))
+
+    expect(wrapper.emitted('rename')).toBeFalsy()
+    expect(board.counterById(counter.id)!.pos.x).toBeCloseTo(startX, 4)
   })
 })

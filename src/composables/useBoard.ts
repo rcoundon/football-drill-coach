@@ -261,23 +261,6 @@ function counterById(id: string): Counter | undefined {
   return state.counters.find((c) => c.id === id)
 }
 
-/**
- * The lowest positive integer not currently used as a label by this colour.
- * Deleting a counter therefore frees its number for reuse, while surviving
- * counters keep the labels the coach has been calling them by.
- */
-function nextLabelFor(color: CounterColor): string {
-  const used = new Set(
-    state.counters
-      .filter((c) => c.color === color)
-      .map((c) => Number(c.label))
-      .filter((n) => Number.isInteger(n) && n > 0),
-  )
-  let n = 1
-  while (used.has(n)) n += 1
-  return String(n)
-}
-
 /** True when no counter already sits close enough to hide a counter placed at `p`. */
 function isClearOfCounters(p: Vec): boolean {
   return state.counters.every((c) => distance(c.pos, p) >= COUNTER_SPACING)
@@ -325,12 +308,17 @@ function nextCounterPosition(): Vec {
   return centre
 }
 
+/**
+ * Counters arrive unlabelled. Most drills are explained by colour and
+ * position, and an automatic number is one the coach has to clear before
+ * writing the one they actually wanted. Double-press a counter to label it.
+ */
 function addCounter(color: CounterColor): Counter {
   commit()
   const counter: Counter = {
     id: newId(),
     color,
-    label: nextLabelFor(color),
+    label: '',
     pos: nextCounterPosition(),
   }
   state.counters.push(counter)
@@ -685,7 +673,6 @@ const board = {
   addMarker,
   moveMarker,
   deleteMarker,
-  nextLabelFor,
   moveBall,
   toggleBallVisible,
   dropBall,

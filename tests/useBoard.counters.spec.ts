@@ -23,12 +23,16 @@ describe('addCounter', () => {
     expect(board.state.counters[0].color).toBe('blue')
   })
 
-  it('numbers counters from 1 within each colour independently', () => {
+  /**
+   * Counters arrive unlabelled. Most drills are explained by colour and
+   * position, and a number nobody asked for is a number the coach has to
+   * clear before writing the one they actually want.
+   */
+  it('leaves the counter unlabelled', () => {
     const board = useBoard()
-    expect(board.addCounter('red').label).toBe('1')
-    expect(board.addCounter('red').label).toBe('2')
-    expect(board.addCounter('blue').label).toBe('1')
-    expect(board.addCounter('red').label).toBe('3')
+    expect(board.addCounter('red').label).toBe('')
+    expect(board.addCounter('red').label).toBe('')
+    expect(board.addCounter('blue').label).toBe('')
   })
 
   it('is undoable', () => {
@@ -86,34 +90,6 @@ describe('placement of a new counter', () => {
   })
 })
 
-describe('label numbering after deletion', () => {
-  it('leaves a gap rather than renumbering surviving counters', () => {
-    const board = useBoard()
-    const one = board.addCounter('red')
-    const two = board.addCounter('red')
-    const three = board.addCounter('red')
-    board.deleteCounter(two.id)
-    expect(board.counterById(one.id)!.label).toBe('1')
-    expect(board.counterById(three.id)!.label).toBe('3')
-  })
-
-  it('gives the next new counter a label above the highest in use', () => {
-    const board = useBoard()
-    board.addCounter('red')
-    const two = board.addCounter('red')
-    board.deleteCounter(two.id)
-    // Highest surviving red label is 1, so the next is 2 — reusing the gap.
-    expect(board.addCounter('red').label).toBe('2')
-  })
-
-  it('is not confused by a hand-edited non-numeric label', () => {
-    const board = useBoard()
-    const c = board.addCounter('red')
-    board.setCounterLabel(c.id, 'GK')
-    expect(board.addCounter('red').label).toBe('1')
-  })
-})
-
 describe('moveCounter', () => {
   it('moves the counter', () => {
     const board = useBoard()
@@ -152,7 +128,23 @@ describe('setCounterLabel', () => {
     board.setCounterLabel(c.id, 'Sam')
     expect(board.counterById(c.id)!.label).toBe('Sam')
     board.undo()
-    expect(board.counterById(c.id)!.label).toBe('1')
+    expect(board.counterById(c.id)!.label).toBe('')
+  })
+
+  it('takes a number, which is what most coaches will want', () => {
+    const board = useBoard()
+    const c = board.addCounter('red')
+    board.setCounterLabel(c.id, '9')
+    expect(board.counterById(c.id)!.label).toBe('9')
+  })
+
+  it('clears back to unlabelled', () => {
+    const board = useBoard()
+    const c = board.addCounter('red')
+    board.setCounterLabel(c.id, '7')
+    board.setCounterLabel(c.id, '  ')
+    expect(board.counterById(c.id)!.label).toBe('')
+    expect(board.state.counters).toHaveLength(1)
   })
 
   it('trims whitespace and caps the length at 4 characters', () => {
