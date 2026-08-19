@@ -40,6 +40,7 @@ const TOOLS: { id: ToolMode; label: string }[] = [
   { id: 'pen', label: 'Draw' },
   { id: 'arrow-run', label: 'Run' },
   { id: 'arrow-pass', label: 'Pass' },
+  { id: 'line', label: 'Line' },
   { id: 'erase', label: 'Erase' },
 ]
 

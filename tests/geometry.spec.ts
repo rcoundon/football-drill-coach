@@ -131,3 +131,54 @@ describe('distance', () => {
     expect(distance({ x: 0, y: 0 }, { x: 3, y: 4 })).toBeCloseTo(5, 10)
   })
 })
+
+import { snapToAxis, SNAP_ANGLE_DEG } from '../src/geometry'
+
+describe('snapToAxis', () => {
+  const from = { x: 20, y: 30 }
+
+  it('leaves a clearly diagonal segment alone', () => {
+    const to = { x: 60, y: 60 }
+    expect(snapToAxis(from, to)).toEqual(to)
+  })
+
+  it('flattens a nearly-horizontal segment onto the horizontal', () => {
+    // 1 unit of rise over 40 of run is about 1.4 degrees.
+    const snapped = snapToAxis(from, { x: 60, y: 31 })
+    expect(snapped).toEqual({ x: 60, y: 30 })
+  })
+
+  it('straightens a nearly-vertical segment onto the vertical', () => {
+    const snapped = snapToAxis(from, { x: 21, y: 60 })
+    expect(snapped).toEqual({ x: 20, y: 60 })
+  })
+
+  it('snaps when the segment points back and up, not only forward', () => {
+    expect(snapToAxis(from, { x: -20, y: 29.5 })).toEqual({ x: -20, y: 30 })
+    expect(snapToAxis(from, { x: 20.5, y: 5 })).toEqual({ x: 20, y: 5 })
+  })
+
+  it('preserves the segment length along the axis it snaps to', () => {
+    const snapped = snapToAxis(from, { x: 75, y: 31 })
+    expect(snapped.x).toBe(75)
+  })
+
+  it('does not snap just outside the tolerance', () => {
+    // Just over the threshold angle from horizontal.
+    const run = 40
+    const rise = Math.tan(((SNAP_ANGLE_DEG + 0.5) * Math.PI) / 180) * run
+    const to = { x: from.x + run, y: from.y + rise }
+    expect(snapToAxis(from, to)).toEqual(to)
+  })
+
+  it('snaps just inside the tolerance', () => {
+    const run = 40
+    const rise = Math.tan(((SNAP_ANGLE_DEG - 0.5) * Math.PI) / 180) * run
+    const snapped = snapToAxis(from, { x: from.x + run, y: from.y + rise })
+    expect(snapped.y).toBe(from.y)
+  })
+
+  it('leaves a zero-length segment alone rather than dividing by zero', () => {
+    expect(snapToAxis(from, { ...from })).toEqual(from)
+  })
+})

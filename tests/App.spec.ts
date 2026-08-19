@@ -73,6 +73,13 @@ describe('keyboard shortcuts', () => {
     expect(wrapper.find('[data-tool="pen"]').classes()).toContain('is-active')
   })
 
+  it('switches to the line tool on an unmodified "l"', async () => {
+    wrapper = mount(App)
+    fire({ key: 'l' })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-tool="line"]').classes()).toContain('is-active')
+  })
+
   it('does not change the tool on Ctrl+S or Meta+S, leaving the shortcut to the browser', async () => {
     wrapper = mount(App)
     fire({ key: 's', ctrlKey: true })

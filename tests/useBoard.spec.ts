@@ -57,7 +57,7 @@ describe('useBoard singleton', () => {
   it('gives a new drawing an id no restored drawing is already using', () => {
     const board = useBoard()
     const arrow = board.startArrow({ x: 10, y: 10 }, '#fff', 'run')
-    board.updateArrow(arrow, { x: 60, y: 30 })
+    board.updateSegment(arrow, { x: 60, y: 30 })
     board.finishDrawing(arrow)
     const draft = board.snapshot()
 

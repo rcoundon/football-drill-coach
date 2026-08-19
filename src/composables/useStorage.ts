@@ -51,7 +51,9 @@ function isValidBall(value: unknown): boolean {
 function isValidDrawing(value: unknown): boolean {
   if (!isObject(value)) return false
   if (value.kind === 'pen') return Array.isArray(value.points)
-  if (value.kind === 'arrow') return isVec(value.from) && isVec(value.to)
+  if (value.kind === 'arrow' || value.kind === 'line') {
+    return isVec(value.from) && isVec(value.to)
+  }
   return false
 }
 

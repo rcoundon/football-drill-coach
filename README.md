@@ -36,6 +36,7 @@ for reuse.
 | Draw | `P` | Freehand pen |
 | Run | `R` | Solid arrow |
 | Pass | `S` | Dashed arrow |
+| Line | `L` | Straight line for marking out zones, channels and thirds |
 | Erase | `E` | Remove whatever you press |
 
 Undo is `Ctrl+Z` (`Cmd+Z` on a Mac), redo is `Ctrl+Shift+Z`.

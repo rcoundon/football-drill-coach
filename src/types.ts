@@ -2,7 +2,7 @@ export type PitchType = 'blank' | 'full' | 'half'
 
 export type CounterColor = 'red' | 'blue' | 'yellow' | 'green' | 'black'
 
-export type ToolMode = 'select' | 'pen' | 'arrow-run' | 'arrow-pass' | 'erase'
+export type ToolMode = 'select' | 'pen' | 'arrow-run' | 'arrow-pass' | 'line' | 'erase'
 
 /** A position in pitch units: x in 0..PITCH_W, y in 0..PITCH_H. Never pixels. */
 export type Vec = { x: number; y: number }
@@ -33,7 +33,23 @@ export type ArrowDrawing = {
   to: Vec
 }
 
-export type Drawing = PenDrawing | ArrowDrawing
+/**
+ * A plain straight segment with no arrowhead: a zone edge, a channel, a
+ * thirds or offside line. Distinct from an arrow rather than a style of
+ * one, because it marks out ground rather than describing a movement.
+ */
+export type LineDrawing = {
+  id: string
+  kind: 'line'
+  color: string
+  from: Vec
+  to: Vec
+}
+
+export type Drawing = PenDrawing | ArrowDrawing | LineDrawing
+
+/** Any drawing dragged out as a straight segment between two points. */
+export type SegmentDrawing = ArrowDrawing | LineDrawing
 
 export type Ball = {
   pos: Vec

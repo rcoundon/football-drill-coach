@@ -1,6 +1,6 @@
 import { computed, reactive, ref, toRaw } from 'vue'
 import type { Ball, Counter, CounterColor, Drawing, PitchType, Vec } from '../types'
-import { PITCH_H, PITCH_W, clampToPitch, distance } from '../geometry'
+import { PITCH_H, PITCH_W, clampToPitch, distance, snapToAxis } from '../geometry'
 
 export const UNDO_LIMIT = 50
 
@@ -40,7 +40,7 @@ export const COUNTER_SPACING = 5.5
 export const MIN_PEN_STEP = 0.6
 
 /** Arrows shorter than this are treated as an accidental tap. */
-export const MIN_ARROW_LENGTH = 2
+export const MIN_SEGMENT_LENGTH = 2
 
 export type BoardState = {
   counters: Counter[]
@@ -390,11 +390,27 @@ function startArrow(at: Vec, color: string, style: 'run' | 'pass'): string {
   return id
 }
 
-/** Drag-time; does not commit. */
-function updateArrow(id: string, to: Vec): void {
+function startLine(at: Vec, color: string): string {
+  const entry = commit()
+  const id = newId()
+  strokeUndoEntries.set(id, entry)
+  const point = clampToPitch(at)
+  state.drawings.push({ id, kind: 'line', color, from: point, to: { ...point } })
+  return id
+}
+
+/**
+ * Drag-time for anything dragged out as a straight segment; does not commit.
+ *
+ * Lines snap to the horizontal or vertical when they are close to it, since
+ * a zone edge is meant to be straight. Arrows deliberately do not: an arrow
+ * traces a run or a pass, and squaring it off would misstate the movement.
+ */
+function updateSegment(id: string, to: Vec): void {
   const drawing = drawingById(id)
-  if (!drawing || drawing.kind !== 'arrow') return
-  drawing.to = clampToPitch(to)
+  if (!drawing || drawing.kind === 'pen') return
+  const point = clampToPitch(to)
+  drawing.to = drawing.kind === 'line' ? snapToAxis(drawing.from, point) : point
 }
 
 /** Erase every trace of a drawing from the undo and redo history. */
@@ -410,7 +426,7 @@ function forgetDrawingInHistory(id: string): void {
  * End a stroke. A stroke too small to be intentional is removed, along with
  * the undo entry its start pushed, so a stray tap leaves no trace.
  *
- * The invariant this relies on: `startPen`/`startArrow` recorded the exact
+ * The invariant this relies on: `startPen`/`startArrow`/`startLine` recorded the exact
  * entry object they pushed, so it is found by identity. It is deliberately
  * NOT assumed to be on top of the stack — the toolbar lives outside the
  * board's pointer capture, so a second finger can commit (a pitch change,
@@ -428,7 +444,7 @@ function finishDrawing(id: string): void {
   const degenerate =
     drawing.kind === 'pen'
       ? drawing.points.length < 2
-      : distance(drawing.from, drawing.to) < MIN_ARROW_LENGTH
+      : distance(drawing.from, drawing.to) < MIN_SEGMENT_LENGTH
 
   if (!degenerate) return
 
@@ -484,7 +500,8 @@ const board = {
   startPen,
   extendPen,
   startArrow,
-  updateArrow,
+  startLine,
+  updateSegment,
   finishDrawing,
   deleteDrawing,
   clearDrawings,

@@ -46,8 +46,8 @@ function penPath(drawing: PenDrawing): string {
         :y2="d.to.y"
         :stroke="d.color"
         stroke-width="0.5"
-        :stroke-dasharray="d.style === 'pass' ? '1.6 1.2' : undefined"
-        :marker-end="`url(#head-${d.id})`"
+        :stroke-dasharray="d.kind === 'arrow' && d.style === 'pass' ? '1.6 1.2' : undefined"
+        :marker-end="d.kind === 'arrow' ? `url(#head-${d.id})` : undefined"
         @pointerdown="$emit('hit', d.id)"
       />
     </template>

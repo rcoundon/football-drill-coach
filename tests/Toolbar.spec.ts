@@ -111,3 +111,15 @@ describe('the open pattern', () => {
     expect(wrapper.find('[data-save]').attributes('title')).toMatch(/new pattern/i)
   })
 })
+
+describe('the line tool', () => {
+  it('is offered alongside the other tools', () => {
+    expect(mountToolbar().find('[data-tool="line"]').exists()).toBe(true)
+  })
+
+  it('emits the line tool when chosen', async () => {
+    const wrapper = mountToolbar()
+    await wrapper.find('[data-tool="line"]').trigger('click')
+    expect(wrapper.emitted('update:tool')![0]).toEqual(['line'])
+  })
+})

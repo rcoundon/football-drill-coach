@@ -450,3 +450,28 @@ describe('import and export', () => {
     expect(stored.map((p: { id: string }) => p.id)).toContain('junk')
   })
 })
+
+describe('straight-line drawings', () => {
+  const line = { id: 'l1', kind: 'line' as const, color: '#fff', from: { x: 0, y: 0 }, to: { x: 40, y: 0 } }
+
+  it('round-trips a line through save and load', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Zones', { ...snap(), drawings: [line] })
+    const restored = store.patternToSnapshot(saved)
+    expect(restored.drawings).toEqual([line])
+  })
+
+  it('accepts a line in an imported file', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Zones', { ...snap(), drawings: [line] })
+    expect(() => parsePattern(saved)).not.toThrow()
+  })
+
+  it('rejects a line with a malformed endpoint', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Zones', { ...snap(), drawings: [line] })
+    const broken = structuredClone(saved)
+    ;(broken.drawings[0] as { to: unknown }).to = 'over there'
+    expect(() => parsePattern(broken)).toThrow(/damaged drawing/i)
+  })
+})

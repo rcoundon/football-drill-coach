@@ -66,3 +66,30 @@ export function clampToPitch(p: Vec): Vec {
 export function distance(a: Vec, b: Vec): number {
   return Math.hypot(a.x - b.x, a.y - b.y)
 }
+
+/**
+ * How far off true a segment may be and still be treated as straight, in
+ * degrees. Generous enough to catch a hand-drawn thirds line on a tablet,
+ * tight enough that a deliberate shallow diagonal survives.
+ */
+export const SNAP_ANGLE_DEG = 6
+
+/**
+ * Lock a segment to the horizontal or vertical when it is within
+ * SNAP_ANGLE_DEG of it. A zone edge drawn by hand is never quite straight,
+ * and an almost-straight line reads as a mistake on a projected screen.
+ *
+ * Only the off-axis coordinate moves, so the segment keeps the length the
+ * coach dragged along the axis they meant.
+ */
+export function snapToAxis(from: Vec, to: Vec): Vec {
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  if (dx === 0 && dy === 0) return { ...to }
+
+  const tolerance = Math.tan((SNAP_ANGLE_DEG * Math.PI) / 180)
+
+  if (Math.abs(dy) <= Math.abs(dx) * tolerance) return { x: to.x, y: from.y }
+  if (Math.abs(dx) <= Math.abs(dy) * tolerance) return { x: from.x, y: to.y }
+  return { ...to }
+}

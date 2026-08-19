@@ -50,7 +50,7 @@ type DragTarget =
   | { kind: 'counter'; id: string }
   | { kind: 'ball' }
   | { kind: 'pen'; id: string }
-  | { kind: 'arrow'; id: string }
+  | { kind: 'segment'; id: string }
 
 /**
  * There is one drag at a time, and it belongs to one pointer.
@@ -231,7 +231,10 @@ function onPointerDown(event: PointerEvent) {
   } else if (props.tool === 'arrow-run' || props.tool === 'arrow-pass') {
     capture(event)
     const style = props.tool === 'arrow-run' ? 'run' : 'pass'
-    drag.value = { kind: 'arrow', id: board.startArrow(at, props.drawColor, style), ...shared }
+    drag.value = { kind: 'segment', id: board.startArrow(at, props.drawColor, style), ...shared }
+  } else if (props.tool === 'line') {
+    capture(event)
+    drag.value = { kind: 'segment', id: board.startLine(at, props.drawColor), ...shared }
   }
 }
 
@@ -244,7 +247,7 @@ function onPointerMove(event: PointerEvent) {
   else if (active.kind === 'ball') {
     if (active.moved) board.moveBall(at)
   } else if (active.kind === 'pen') board.extendPen(active.id, at)
-  else board.updateArrow(active.id, at)
+  else board.updateSegment(active.id, at)
 }
 
 function onPointerUp(event: PointerEvent) {
@@ -265,7 +268,7 @@ function onPointerUp(event: PointerEvent) {
     board.extendPen(active.id, at)
     board.finishDrawing(active.id)
   } else {
-    board.updateArrow(active.id, at)
+    board.updateSegment(active.id, at)
     board.finishDrawing(active.id)
   }
   clearDrag()

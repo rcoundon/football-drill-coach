@@ -3,7 +3,7 @@ import {
   useBoard,
   __resetBoardForTests,
   MIN_PEN_STEP,
-  MIN_ARROW_LENGTH,
+  MIN_SEGMENT_LENGTH,
 } from '../src/composables/useBoard'
 import type { ArrowDrawing, PenDrawing } from '../src/types'
 
@@ -77,7 +77,7 @@ describe('arrows', () => {
   it('tracks the pointer to set the head', () => {
     const board = useBoard()
     const id = board.startArrow({ x: 10, y: 10 }, '#ff0', 'pass')
-    board.updateArrow(id, { x: 40, y: 25 })
+    board.updateSegment(id, { x: 40, y: 25 })
     board.finishDrawing(id)
     expect((board.drawingById(id) as ArrowDrawing).to).toEqual({ x: 40, y: 25 })
   })
@@ -85,15 +85,15 @@ describe('arrows', () => {
   it('records the pass style', () => {
     const board = useBoard()
     const id = board.startArrow({ x: 10, y: 10 }, '#ff0', 'pass')
-    board.updateArrow(id, { x: 60, y: 10 })
+    board.updateSegment(id, { x: 60, y: 10 })
     board.finishDrawing(id)
     expect((board.drawingById(id) as ArrowDrawing).style).toBe('pass')
   })
 
-  it('discards an arrow shorter than MIN_ARROW_LENGTH', () => {
+  it('discards an arrow shorter than MIN_SEGMENT_LENGTH', () => {
     const board = useBoard()
     const id = board.startArrow({ x: 10, y: 10 }, '#ff0', 'run')
-    board.updateArrow(id, { x: 10 + MIN_ARROW_LENGTH * 0.5, y: 10 })
+    board.updateSegment(id, { x: 10 + MIN_SEGMENT_LENGTH * 0.5, y: 10 })
     board.finishDrawing(id)
     expect(board.state.drawings).toHaveLength(0)
     expect(board.canUndo.value).toBe(false)
@@ -102,7 +102,7 @@ describe('arrows', () => {
   it('is a single undo entry', () => {
     const board = useBoard()
     const id = board.startArrow({ x: 10, y: 10 }, '#ff0', 'run')
-    board.updateArrow(id, { x: 60, y: 30 })
+    board.updateSegment(id, { x: 60, y: 30 })
     board.finishDrawing(id)
     board.undo()
     expect(board.state.drawings).toHaveLength(0)
@@ -113,7 +113,7 @@ describe('deleteDrawing', () => {
   it('removes a drawing and is undoable', () => {
     const board = useBoard()
     const id = board.startArrow({ x: 10, y: 10 }, '#ff0', 'run')
-    board.updateArrow(id, { x: 60, y: 30 })
+    board.updateSegment(id, { x: 60, y: 30 })
     board.finishDrawing(id)
     board.deleteDrawing(id)
     expect(board.state.drawings).toHaveLength(0)
@@ -127,12 +127,85 @@ describe('clearDrawings', () => {
     const board = useBoard()
     board.addCounter('red')
     const id = board.startArrow({ x: 10, y: 10 }, '#ff0', 'run')
-    board.updateArrow(id, { x: 60, y: 30 })
+    board.updateSegment(id, { x: 60, y: 30 })
     board.finishDrawing(id)
     board.clearDrawings()
     expect(board.state.drawings).toHaveLength(0)
     expect(board.state.counters).toHaveLength(1)
     board.undo()
     expect(board.state.drawings).toHaveLength(1)
+  })
+})
+
+import type { LineDrawing } from '../src/types'
+
+describe('straight lines', () => {
+  it('creates a zero-length line at the press point', () => {
+    const board = useBoard()
+    const id = board.startLine({ x: 10, y: 10 }, '#fff')
+    const line = board.drawingById(id) as LineDrawing
+    expect(line.kind).toBe('line')
+    expect(line.from).toEqual({ x: 10, y: 10 })
+    expect(line.to).toEqual({ x: 10, y: 10 })
+  })
+
+  it('tracks the pointer', () => {
+    const board = useBoard()
+    const id = board.startLine({ x: 10, y: 10 }, '#fff')
+    board.updateSegment(id, { x: 10, y: 50 })
+    board.finishDrawing(id)
+    expect((board.drawingById(id) as LineDrawing).to).toEqual({ x: 10, y: 50 })
+  })
+
+  it('snaps a nearly-horizontal drag flat', () => {
+    const board = useBoard()
+    const id = board.startLine({ x: 10, y: 30 }, '#fff')
+    board.updateSegment(id, { x: 70, y: 31 })
+    board.finishDrawing(id)
+    const line = board.drawingById(id) as LineDrawing
+    expect(line.to).toEqual({ x: 70, y: 30 })
+  })
+
+  it('does NOT snap an arrow, which represents a real movement path', () => {
+    const board = useBoard()
+    const id = board.startArrow({ x: 10, y: 30 }, '#ff0', 'run')
+    board.updateSegment(id, { x: 70, y: 31 })
+    board.finishDrawing(id)
+    const arrow = board.drawingById(id) as { to: { x: number; y: number } }
+    expect(arrow.to).toEqual({ x: 70, y: 31 })
+  })
+
+  it('clamps to the pitch', () => {
+    const board = useBoard()
+    const id = board.startLine({ x: 10, y: 10 }, '#fff')
+    board.updateSegment(id, { x: -50, y: 10 })
+    expect((board.drawingById(id) as LineDrawing).to.x).toBe(0)
+  })
+
+  it('discards a line shorter than MIN_SEGMENT_LENGTH and leaves no undo entry', () => {
+    const board = useBoard()
+    const id = board.startLine({ x: 10, y: 10 }, '#fff')
+    board.updateSegment(id, { x: 10 + MIN_SEGMENT_LENGTH * 0.5, y: 10 })
+    board.finishDrawing(id)
+    expect(board.state.drawings).toHaveLength(0)
+    expect(board.canUndo.value).toBe(false)
+  })
+
+  it('is a single undo entry', () => {
+    const board = useBoard()
+    const id = board.startLine({ x: 10, y: 10 }, '#fff')
+    board.updateSegment(id, { x: 60, y: 10 })
+    board.finishDrawing(id)
+    board.undo()
+    expect(board.state.drawings).toHaveLength(0)
+  })
+
+  it('is erased like any other drawing', () => {
+    const board = useBoard()
+    const id = board.startLine({ x: 10, y: 10 }, '#fff')
+    board.updateSegment(id, { x: 60, y: 10 })
+    board.finishDrawing(id)
+    board.deleteDrawing(id)
+    expect(board.state.drawings).toHaveLength(0)
   })
 })

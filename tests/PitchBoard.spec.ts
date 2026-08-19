@@ -570,3 +570,49 @@ describe('recovering from a lost pointerup', () => {
     expect(board.counterById(c.id)!.pos.x).toBeCloseTo(20, 4)
   })
 })
+
+describe('drawing a straight line', () => {
+  it('creates a line with no arrowhead', async () => {
+    const board = useBoard()
+    const wrapper = mountBoard('line')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('svg'), 'pointerdown', clientFor(10, 10))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(60, 30))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(60, 30))
+
+    expect(board.state.drawings).toHaveLength(1)
+    expect(board.state.drawings[0].kind).toBe('line')
+
+    const rendered = wrapper.find('[data-drawing]')
+    expect(rendered.attributes('marker-end')).toBeUndefined()
+    expect(rendered.attributes('stroke-dasharray')).toBeUndefined()
+  })
+
+  it('snaps a nearly-horizontal drag flat on the board', async () => {
+    const board = useBoard()
+    const wrapper = mountBoard('line')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('svg'), 'pointerdown', clientFor(10, 30))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(70, 31))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(70, 31))
+
+    const line = board.state.drawings[0] as { from: { y: number }; to: { y: number } }
+    expect(line.to.y).toBeCloseTo(line.from.y, 6)
+  })
+
+  it('does not drag counters while the line tool is active', async () => {
+    const board = useBoard()
+    const c = board.addCounter('red')
+    const startX = c.pos.x
+    const wrapper = mountBoard('line')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(50, 32))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(20, 10))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(20, 10))
+
+    expect(board.counterById(c.id)!.pos.x).toBeCloseTo(startX, 4)
+  })
+})
