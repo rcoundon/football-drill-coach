@@ -4,6 +4,7 @@ import { nextTick } from 'vue'
 import App from '../src/App.vue'
 import { useBoard, __resetBoardForTests, type BoardSnapshot } from '../src/composables/useBoard'
 import { useStorage, PATTERNS_KEY } from '../src/composables/useStorage'
+import { __resetViewportForTests } from '../src/composables/useViewport'
 import { useExport } from '../src/composables/useExport'
 import { PITCH_H, PITCH_W } from '../src/geometry'
 
@@ -650,5 +651,130 @@ describe('drill notes', () => {
     await wrapper.vm.$nextTick()
 
     expect(wrapper.find('[data-tool="arrow-run"]').classes()).not.toContain('is-active')
+  })
+})
+
+describe('a fresh board on a portrait screen', () => {
+  function stubPortrait(portrait: boolean) {
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes('orientation') ? portrait : false,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia
+    __resetViewportForTests()
+  }
+
+  afterEach(() => __resetViewportForTests())
+
+  /**
+   * A landscape pitch on a portrait phone fills under a third of the
+   * screen. Starting rotated makes the board usable without the coach
+   * having to know the Rotate button exists.
+   */
+  it('starts rotated so the pitch fills the screen', async () => {
+    stubPortrait(true)
+    const board = useBoard()
+    wrapper = mount(App)
+    await wrapper.vm.$nextTick()
+    expect(board.state.pitch.rotated).toBe(true)
+  })
+
+  it('leaves a landscape screen alone', async () => {
+    stubPortrait(false)
+    const board = useBoard()
+    wrapper = mount(App)
+    await wrapper.vm.$nextTick()
+    expect(board.state.pitch.rotated).toBe(false)
+  })
+
+  it('adds nothing to the undo stack', async () => {
+    stubPortrait(true)
+    const board = useBoard()
+    wrapper = mount(App)
+    await wrapper.vm.$nextTick()
+    expect(board.canUndo.value).toBe(false)
+  })
+
+  /**
+   * Rotation is a property of the saved drill. A coach who deliberately
+   * saved a landscape pattern must get it back landscape, whatever they
+   * are holding.
+   */
+  it('never overrides what a restored draft says', async () => {
+    stubPortrait(true)
+    const storage = useStorage()
+    const board = useBoard()
+    storage.saveDraft({
+      ...board.snapshot(),
+      pitch: { type: 'full', rotated: false },
+    })
+    __resetBoardForTests()
+
+    wrapper = mount(App)
+    await wrapper.vm.$nextTick()
+    expect(board.state.pitch.rotated).toBe(false)
+  })
+})
+
+describe('the tablet rail layout', () => {
+  function stubWidth(kind: 'narrow' | 'rail' | 'wide') {
+    window.matchMedia = ((query: string) => {
+      const isNarrowQuery = query.includes('max-width') && !query.includes('min-width')
+      const isRailQuery = query.includes('min-width')
+      return {
+        matches:
+          (isNarrowQuery && kind === 'narrow') || (isRailQuery && kind === 'rail'),
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }
+    }) as unknown as typeof window.matchMedia
+    __resetViewportForTests()
+  }
+
+  afterEach(() => __resetViewportForTests())
+
+  it('shows the rail beside the board at tablet width', async () => {
+    stubWidth('rail')
+    wrapper = mount(App)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findComponent({ name: 'ToolRail' }).exists()).toBe(true)
+  })
+
+  it('does not repeat the tools in the bar above it', async () => {
+    stubWidth('rail')
+    wrapper = mount(App)
+    await wrapper.vm.$nextTick()
+    // Exactly one control per tool across the whole app, and it is the rail's.
+    expect(wrapper.findAll('[data-tool="pen"]')).toHaveLength(1)
+    expect(wrapper.findComponent({ name: 'ToolRail' }).find('[data-tool="pen"]').exists()).toBe(
+      true,
+    )
+  })
+
+  it('keeps the tools in the bar on a wide screen, with no rail', async () => {
+    stubWidth('wide')
+    wrapper = mount(App)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findComponent({ name: 'ToolRail' }).exists()).toBe(false)
+    expect(wrapper.find('[data-tool="pen"]').exists()).toBe(true)
+  })
+
+  it('uses the compact bar rather than a rail on a phone', async () => {
+    stubWidth('narrow')
+    wrapper = mount(App)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findComponent({ name: 'ToolRail' }).exists()).toBe(false)
+    expect(wrapper.find('[data-more]').exists()).toBe(true)
+  })
+
+  it('changes tool from the rail', async () => {
+    stubWidth('rail')
+    wrapper = mount(App)
+    await wrapper.vm.$nextTick()
+    await wrapper.findComponent({ name: 'ToolRail' }).find('[data-tool="cone"]').trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(
+      wrapper.findComponent({ name: 'ToolRail' }).find('[data-tool="cone"]').classes(),
+    ).toContain('is-active')
   })
 })

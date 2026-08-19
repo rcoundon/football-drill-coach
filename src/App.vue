@@ -2,14 +2,17 @@
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import type { Pattern, ToolMode, Vec } from './types'
 import Toolbar from './components/Toolbar.vue'
+import ToolRail from './components/ToolRail.vue'
 import PitchBoard from './components/PitchBoard.vue'
 import PatternLibrary from './components/PatternLibrary.vue'
 import { MAX_LABEL_LENGTH, MAX_NOTES_LENGTH, useBoard } from './composables/useBoard'
 import { useStorage } from './composables/useStorage'
 import { useExport } from './composables/useExport'
+import { useViewport } from './composables/useViewport'
 
 const board = useBoard()
 const storage = useStorage()
+const { isPortrait, isRail } = useViewport()
 const exporter = useExport()
 
 const tool = ref<ToolMode>('select')
@@ -266,7 +269,18 @@ onMounted(() => {
   // something the coach did, so it must not become the one undo entry a
   // freshly opened app offers.
   const draft = storage.loadDraft()
-  if (draft) board.restoreSnapshot(draft)
+  if (draft) {
+    board.restoreSnapshot(draft)
+  } else if (isPortrait.value) {
+    /*
+     * A landscape pitch on a portrait phone fills under a third of the
+     * screen, and a coach who has never seen the Rotate button has no
+     * reason to look for it. Only ever done for a genuinely fresh board:
+     * rotation belongs to the saved drill, so a pattern deliberately saved
+     * landscape must come back landscape whatever it is opened on.
+     */
+    board.restoreSnapshot({ ...board.snapshot(), pitch: { ...board.state.pitch, rotated: true } })
+  }
   window.addEventListener('keydown', onKeydown)
 })
 
@@ -290,6 +304,7 @@ watch(
       v-model:tool="tool"
       v-model:drawColor="drawColor"
       :pattern-name="currentName"
+      :railed="isRail"
       @save="openSavePrompt"
       @saveAs="openSaveAsPrompt"
       @open="libraryOpen = true"
@@ -299,6 +314,12 @@ watch(
       @reset="onBoardReset"
     />
     <div class="workspace">
+      <ToolRail
+        v-if="isRail"
+        v-model:tool="tool"
+        v-model:drawColor="drawColor"
+      />
+
       <div class="stage">
         <PitchBoard
           ref="boardRef"
@@ -425,10 +446,31 @@ body { font-family: system-ui, sans-serif; background: #102010; }
   border-radius: 0.4rem; border: 1px solid #ffffff26; background: #1b2429;
   color: #eceff1; font: inherit; font-size: 0.9rem; line-height: 1.45;
 }
-@media (max-width: 60rem) {
-  .workspace { flex-direction: column; }
-  .notes { width: auto; }
-  .notes-field { min-height: 6rem; }
+/*
+ * Wherever the rail is in use, the notes go under the board rather than
+ * beside it. Measured on a 1194px tablet: side by side, the rail and a
+ * 352px notes column left the pitch 663x430; stacked, it gets 919x597.
+ * The board is what a coach is manipulating, so it takes the room.
+ */
+@media (max-width: 80rem) {
+  /*
+   * Grid rather than a wrapping flex row: a wrapped line takes its content
+   * height, which let the board grow past the bottom of the screen. The
+   * explicit 1fr row keeps it inside the viewport.
+   */
+  .workspace {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+  .stage { min-height: 0; }
+  .notes { grid-column: 1 / -1; width: auto; }
+  .notes-field { min-height: 5rem; max-height: 9rem; }
+}
+
+/* No rail below this, so the board simply sits above the notes. */
+@media (max-width: 48rem) {
+  .workspace { grid-template-columns: minmax(0, 1fr); }
 }
 .error {
   margin: 0; padding: 0.6rem 0.9rem; background: #b71c1c; color: #fff; font-size: 0.85rem; cursor: pointer;
