@@ -33,6 +33,8 @@ const isBoardEmpty = computed(
   () =>
     board.state.counters.length === 0 &&
     board.state.markers.length === 0 &&
+    board.state.labels.length === 0 &&
+    board.state.notes === '' &&
     board.state.drawings.length === 0 &&
     board.state.ball.attachedTo === null,
 )
@@ -59,6 +61,7 @@ const TOOLS: { id: ToolMode; label: string }[] = [
   { id: 'arrow-pass', label: 'Pass' },
   { id: 'line', label: 'Line' },
   { id: 'cone', label: 'Cone' },
+  { id: 'text', label: 'Text' },
   { id: 'erase', label: 'Erase' },
 ]
 
@@ -149,6 +152,18 @@ const DRAW_COLOR_NAMES: Record<string, string> = {
         title="Rub out every drawing, leaving the players"
         @click="board.clearDrawings()"
       >Clear drawings</button>
+      <button
+        data-toggle-labels
+        :class="['chip', { 'is-active': board.state.labelsVisible }]"
+        :title="board.state.labelsVisible ? 'Hide the pitch labels' : 'Show the pitch labels'"
+        @click="board.toggleLabelsVisible()"
+      >Labels</button>
+      <button
+        data-toggle-notes
+        :class="['chip', { 'is-active': board.state.notesVisible }]"
+        :title="board.state.notesVisible ? 'Hide the drill notes' : 'Show the drill notes'"
+        @click="board.toggleNotesVisible()"
+      >Notes</button>
       <button
         data-toggle-ball
         :class="['chip', { 'is-active': board.state.ball.visible }]"

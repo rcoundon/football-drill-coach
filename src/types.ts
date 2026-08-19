@@ -2,7 +2,7 @@ export type PitchType = 'blank' | 'full' | 'half'
 
 export type CounterColor = 'red' | 'blue' | 'yellow' | 'purple' | 'black'
 
-export type ToolMode = 'select' | 'pen' | 'arrow-run' | 'arrow-pass' | 'line' | 'cone' | 'erase'
+export type ToolMode = 'select' | 'pen' | 'arrow-run' | 'arrow-pass' | 'line' | 'cone' | 'text' | 'erase'
 
 /** A position in pitch units: x in 0..PITCH_W, y in 0..PITCH_H. Never pixels. */
 export type Vec = { x: number; y: number }
@@ -24,6 +24,16 @@ export type Counter = {
 export type Marker = {
   id: string
   pos: Vec
+}
+
+/**
+ * Short text dropped on the pitch — "press trigger", "2 touch max". Held in
+ * pitch units like everything else, so it rotates and exports with the board.
+ */
+export type Label = {
+  id: string
+  pos: Vec
+  text: string
 }
 
 export type PenDrawing = {
@@ -79,6 +89,7 @@ export type Ball = {
 export type Frame = {
   counters: Counter[]
   markers: Marker[]
+  labels: Label[]
   ball: Ball
 }
 
@@ -88,6 +99,14 @@ export type Pattern = {
   version: 1
   pitch: { type: PitchType; rotated: boolean }
   drawings: Drawing[]
+  labelsVisible?: boolean
+  /**
+   * Free text describing the whole drill — setup, coaching points,
+   * progressions. Held at the pattern level rather than in a frame,
+   * because it describes the drill rather than a moment in it.
+   */
+  notes?: string
+  notesVisible?: boolean
   frames: Frame[]
   createdAt: string
   updatedAt: string

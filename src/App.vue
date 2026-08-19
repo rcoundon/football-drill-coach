@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import type { Pattern, ToolMode } from './types'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import type { Pattern, ToolMode, Vec } from './types'
 import Toolbar from './components/Toolbar.vue'
 import PitchBoard from './components/PitchBoard.vue'
 import PatternLibrary from './components/PatternLibrary.vue'
-import { useBoard } from './composables/useBoard'
+import { MAX_LABEL_LENGTH, MAX_NOTES_LENGTH, useBoard } from './composables/useBoard'
 import { useStorage } from './composables/useStorage'
 import { useExport } from './composables/useExport'
 
@@ -114,6 +114,36 @@ function onBoardReset() {
   currentName.value = ''
 }
 
+/**
+ * The board reports where a label should go, or which one to edit; the text
+ * itself is typed here, in the same small dialog the other prompts use.
+ */
+const labelDraft = ref('')
+const labelTarget = ref<{ kind: 'new'; at: Vec } | { kind: 'edit'; id: string } | null>(null)
+const labelInput = ref<HTMLInputElement | null>(null)
+
+function promptNewLabel(at: Vec) {
+  labelDraft.value = ''
+  labelTarget.value = { kind: 'new', at }
+}
+
+function promptEditLabel(id: string) {
+  labelDraft.value = board.labelById(id)?.text ?? ''
+  labelTarget.value = { kind: 'edit', id }
+}
+
+function confirmLabel() {
+  const target = labelTarget.value
+  if (!target) return
+  if (target.kind === 'new') board.addLabel(target.at, labelDraft.value)
+  else board.setLabelText(target.id, labelDraft.value)
+  labelTarget.value = null
+}
+
+watch(labelTarget, (target) => focusWhenOpen(target !== null, () => labelInput.value), {
+  flush: 'post',
+})
+
 const renameCounterId = ref<string | null>(null)
 const renameLabelDraft = ref('')
 const renamePromptOpen = ref(false)
@@ -135,7 +165,12 @@ async function exportPng() {
   const svg = boardRef.value?.svgEl
   if (!svg) return
   try {
-    const blob = await exporter.svgToPngBlob(svg)
+    // Only notes the coach can currently see go into the image: if they are
+    // toggled off, they are off everywhere.
+    const blob = await exporter.svgToPngBlob(
+      svg,
+      board.state.notesVisible ? board.state.notes : '',
+    )
     exporter.downloadBlob(blob, `${exporter.slugify(currentName.value || 'tactics-board')}.png`)
   } catch (error) {
     notice.value = error instanceof Error ? error.message : 'The image could not be created.'
@@ -168,21 +203,29 @@ const renameLabelInput = ref<HTMLInputElement | null>(null)
  * A dialog that opens without focus makes the coach click into the field
  * before typing, and on a tablet the keyboard never appears at all.
  */
-async function focusWhenOpen(open: boolean, field: () => HTMLInputElement | null) {
+/**
+ * The field is behind a v-if, so it does not exist when the state changes.
+ * These watchers run with flush: 'post', which fires after the DOM has been
+ * patched, so the element is there to focus by the time we look for it.
+ */
+function focusWhenOpen(open: boolean, field: () => HTMLInputElement | null) {
   if (!open) return
-  // The field is behind a v-if, so it does not exist until after this
-  // render — read the ref after the tick, not before it.
-  await nextTick()
   field()?.focus()
   field()?.select()
 }
 
-watch(savePromptOpen, (open) => focusWhenOpen(open, () => saveNameInput.value))
-watch(renameCounterId, (id) => focusWhenOpen(id !== null, () => renameLabelInput.value))
+watch(savePromptOpen, (open) => focusWhenOpen(open, () => saveNameInput.value), { flush: 'post' })
+watch(renameCounterId, (id) => focusWhenOpen(id !== null, () => renameLabelInput.value), {
+  flush: 'post',
+})
 
 /** True while anything modal is on screen. */
 const isDialogOpen = computed(
-  () => savePromptOpen.value || libraryOpen.value || renameCounterId.value !== null,
+  () =>
+    savePromptOpen.value ||
+    libraryOpen.value ||
+    renameCounterId.value !== null ||
+    labelTarget.value !== null,
 )
 
 function onKeydown(event: KeyboardEvent) {
@@ -213,7 +256,7 @@ function onKeydown(event: KeyboardEvent) {
     return
   }
 
-  const byKey: Record<string, ToolMode> = { v: 'select', p: 'pen', r: 'arrow-run', s: 'arrow-pass', l: 'line', c: 'cone', e: 'erase' }
+  const byKey: Record<string, ToolMode> = { v: 'select', p: 'pen', r: 'arrow-run', s: 'arrow-pass', l: 'line', c: 'cone', t: 'text', e: 'erase' }
   const next = byKey[event.key.toLowerCase()]
   if (next) tool.value = next
 }
@@ -255,8 +298,30 @@ watch(
       @importJson="importJson"
       @reset="onBoardReset"
     />
-    <div class="stage">
-      <PitchBoard ref="boardRef" :tool="tool" :draw-color="drawColor" @rename="openRenamePrompt" />
+    <div class="workspace">
+      <div class="stage">
+        <PitchBoard
+          ref="boardRef"
+          :tool="tool"
+          :draw-color="drawColor"
+          @rename="openRenamePrompt"
+          @add-label="promptNewLabel"
+          @edit-label="promptEditLabel"
+        />
+      </div>
+
+      <aside v-if="board.state.notesVisible" class="notes">
+        <label class="notes-label" for="drill-notes">Drill notes</label>
+        <textarea
+          id="drill-notes"
+          data-notes
+          class="notes-field"
+          :maxlength="MAX_NOTES_LENGTH"
+          placeholder="Setup, coaching points, progressions…"
+          :value="board.state.notes"
+          @input="board.setNotes(($event.target as HTMLTextAreaElement).value)"
+        ></textarea>
+      </aside>
     </div>
 
     <PatternLibrary
@@ -266,6 +331,25 @@ watch(
       @rename="onPatternRenamed"
       @delete="onPatternDeleted"
     />
+
+    <div v-if="labelTarget" class="overlay" @click.self="labelTarget = null">
+      <div class="prompt" role="dialog" aria-label="Label text">
+        <label for="label-text">Label</label>
+        <input
+          id="label-text"
+          ref="labelInput"
+          v-model="labelDraft"
+          data-label-input
+          class="input"
+          :maxlength="MAX_LABEL_LENGTH"
+          @keyup.enter="confirmLabel"
+        />
+        <div class="prompt-actions">
+          <button data-label-save class="chip" @click="confirmLabel">Save</button>
+          <button data-label-cancel class="chip" @click="labelTarget = null">Cancel</button>
+        </div>
+      </div>
+    </div>
 
     <div v-if="savePromptOpen" class="overlay" @click.self="savePromptOpen = false">
       <div class="prompt" role="dialog" :aria-label="savePromptTitle">
@@ -327,7 +411,25 @@ body { font-family: system-ui, sans-serif; background: #102010; }
 
 <style scoped>
 .app { display: flex; flex-direction: column; height: 100%; }
-.stage { flex: 1; min-height: 0; padding: 0.75rem; }
+.workspace { flex: 1; min-height: 0; display: flex; gap: 0.75rem; padding: 0.75rem; }
+.stage { flex: 1; min-height: 0; min-width: 0; }
+
+/*
+ * Beside the board on a wide screen, beneath it on a narrow one — a coach
+ * on a phone at the side of a pitch needs the board to stay the priority.
+ */
+.notes { display: flex; flex-direction: column; gap: 0.35rem; width: min(22rem, 32vw); }
+.notes-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.65; color: #eceff1; }
+.notes-field {
+  flex: 1; min-height: 8rem; resize: none; padding: 0.6rem;
+  border-radius: 0.4rem; border: 1px solid #ffffff26; background: #1b2429;
+  color: #eceff1; font: inherit; font-size: 0.9rem; line-height: 1.45;
+}
+@media (max-width: 60rem) {
+  .workspace { flex-direction: column; }
+  .notes { width: auto; }
+  .notes-field { min-height: 6rem; }
+}
 .error {
   margin: 0; padding: 0.6rem 0.9rem; background: #b71c1c; color: #fff; font-size: 0.85rem; cursor: pointer;
 }

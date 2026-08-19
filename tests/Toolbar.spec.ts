@@ -210,3 +210,41 @@ describe('the ball toggle', () => {
     expect(wrapper.find('[data-toggle-ball]').classes()).not.toContain('is-active')
   })
 })
+
+describe('the text tool', () => {
+  it('is offered alongside the other tools', () => {
+    expect(mountToolbar().find('[data-tool="text"]').exists()).toBe(true)
+  })
+
+  it('toggles the labels, and shows whether they are on', async () => {
+    const board = useBoard()
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-toggle-labels]').classes()).toContain('is-active')
+    await wrapper.find('[data-toggle-labels]').trigger('click')
+    expect(board.state.labelsVisible).toBe(false)
+    expect(wrapper.find('[data-toggle-labels]').classes()).not.toContain('is-active')
+  })
+
+  it('offers Reset once there is only a label on the board', () => {
+    useBoard().addLabel({ x: 20, y: 20 }, 'Something')
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-reset]').attributes('disabled')).toBeUndefined()
+  })
+})
+
+describe('the notes toggle', () => {
+  it('hides the notes panel, and shows whether it is on', async () => {
+    const board = useBoard()
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-toggle-notes]').classes()).toContain('is-active')
+    await wrapper.find('[data-toggle-notes]').trigger('click')
+    expect(board.state.notesVisible).toBe(false)
+    expect(wrapper.find('[data-toggle-notes]').classes()).not.toContain('is-active')
+  })
+
+  it('offers Reset once there are only notes', () => {
+    useBoard().setNotes('Coaching points')
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-reset]').attributes('disabled')).toBeUndefined()
+  })
+})

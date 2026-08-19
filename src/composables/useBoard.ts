@@ -1,5 +1,5 @@
 import { computed, reactive, ref, toRaw } from 'vue'
-import type { Ball, Counter, CounterColor, Drawing, Marker, PitchType, Vec } from '../types'
+import type { Ball, Counter, CounterColor, Drawing, Label, Marker, PitchType, Vec } from '../types'
 import { PITCH_H, PITCH_W, clampToPitch, distance, snapToAxis } from '../geometry'
 
 export const UNDO_LIMIT = 50
@@ -37,6 +37,12 @@ export const COUNTER_RADIUS = 2.4
 export const COUNTER_SPACING = 5.5
 
 /** Minimum spacing between recorded freehand points, in pitch units. */
+/** Room for a setup, coaching points and progressions, without unbounded paste. */
+export const MAX_NOTES_LENGTH = 4000
+
+/** Long enough for a coaching cue, short enough to stay readable on the pitch. */
+export const MAX_LABEL_LENGTH = 40
+
 export const MIN_PEN_STEP = 0.6
 
 /** Arrows shorter than this are treated as an accidental tap. */
@@ -45,6 +51,10 @@ export const MIN_SEGMENT_LENGTH = 2
 export type BoardState = {
   counters: Counter[]
   markers: Marker[]
+  labels: Label[]
+  labelsVisible: boolean
+  notes: string
+  notesVisible: boolean
   ball: Ball
   drawings: Drawing[]
   pitch: { type: PitchType; rotated: boolean }
@@ -57,6 +67,10 @@ function emptyState(): BoardState {
   return {
     counters: [],
     markers: [],
+    labels: [],
+    labelsVisible: true,
+    notes: '',
+    notesVisible: true,
     // Not the pitch centre: that is where the first counter lands, and the
     // ball's hit circle would sit right on top of the counter's body, so the
     // coach's first drag would grab the ball instead of the player. Just
@@ -104,6 +118,10 @@ function snapshot(): BoardSnapshot {
   return structuredClone({
     counters: raw.counters,
     markers: raw.markers,
+    labels: raw.labels,
+    labelsVisible: raw.labelsVisible,
+    notes: raw.notes,
+    notesVisible: raw.notesVisible,
     ball: raw.ball,
     drawings: raw.drawings,
     pitch: raw.pitch,
@@ -114,6 +132,10 @@ function apply(snap: BoardSnapshot): void {
   const copy = clone(snap)
   state.counters = copy.counters
   state.markers = copy.markers ?? []
+  state.labels = copy.labels ?? []
+  state.labelsVisible = copy.labelsVisible ?? true
+  state.notes = copy.notes ?? ''
+  state.notesVisible = copy.notesVisible ?? true
   state.ball = copy.ball
   state.drawings = copy.drawings
   state.pitch = copy.pitch
@@ -313,6 +335,81 @@ function addCounter(color: CounterColor): Counter {
   }
   state.counters.push(counter)
   return counter
+}
+
+/**
+ * The last commit made by note typing, if the very next change was also
+ * note typing. Committing per keystroke would bury every other undo entry
+ * under a drill's worth of characters.
+ */
+let notesUndoEntry: BoardSnapshot | null = null
+
+function setNotes(text: string): void {
+  const clean = text.slice(0, MAX_NOTES_LENGTH)
+  if (clean === state.notes) return
+  // Coalesce consecutive typing: only the first keystroke of a run commits.
+  // Compare against the raw entry — reading the stack through the ref hands
+  // back a proxy, which never matches the object commit() returned.
+  const top = undoStack.value.at(-1)
+  if (notesUndoEntry === null || (top && toRaw(top) !== notesUndoEntry)) {
+    notesUndoEntry = commit()
+  }
+  state.notes = clean
+}
+
+function toggleNotesVisible(): void {
+  commit()
+  state.notesVisible = !state.notesVisible
+}
+
+function labelById(id: string): Label | undefined {
+  return state.labels.find((l) => l.id === id)
+}
+
+/** Trimmed and capped; an empty label is not worth putting on the pitch. */
+function cleanLabelText(text: string): string {
+  return text.trim().slice(0, MAX_LABEL_LENGTH)
+}
+
+function addLabel(at: Vec, text: string): Label | null {
+  const clean = cleanLabelText(text)
+  if (clean === '') return null
+  commit()
+  const label: Label = { id: newId(), pos: clampToPitch(at), text: clean }
+  state.labels.push(label)
+  return label
+}
+
+/** Clearing the text removes the label: an empty one has nothing to say. */
+function setLabelText(id: string, text: string): void {
+  const label = labelById(id)
+  if (!label) return
+  const clean = cleanLabelText(text)
+  commit()
+  if (clean === '') {
+    state.labels = rawFilter(state.labels, (l) => l.id !== id)
+    return
+  }
+  label.text = clean
+}
+
+/** Called on every pointer-move of a drag, so it deliberately does not commit. */
+function moveLabel(id: string, pos: Vec): void {
+  const label = labelById(id)
+  if (!label) return
+  label.pos = clampToPitch(pos)
+}
+
+function deleteLabel(id: string): void {
+  const index = state.labels.findIndex((l) => l.id === id)
+  if (index === -1) return
+  commit()
+  state.labels.splice(index, 1)
+}
+
+function toggleLabelsVisible(): void {
+  commit()
+  state.labelsVisible = !state.labelsVisible
 }
 
 function markerById(id: string): Marker | undefined {
@@ -577,6 +674,14 @@ const board = {
   deleteCounter,
   counterById,
   markerById,
+  labelById,
+  addLabel,
+  setLabelText,
+  moveLabel,
+  deleteLabel,
+  toggleLabelsVisible,
+  setNotes,
+  toggleNotesVisible,
   addMarker,
   moveMarker,
   deleteMarker,
@@ -602,6 +707,7 @@ export function useBoard() {
 
 /** Test-only: put the singleton back to its just-loaded condition. */
 export function __resetBoardForTests(): void {
+  notesUndoEntry = null
   apply(emptyState())
   undoStack.value = []
   redoStack.value = []
