@@ -41,6 +41,11 @@ for reuse.
 
 Undo is `Ctrl+Z` (`Cmd+Z` on a Mac), redo is `Ctrl+Shift+Z`.
 
+**Clear players** takes everyone off and leaves your drawings. **Clear drawings**
+does the reverse. **Reset** starts a fresh board for the next drill — it clears
+players, ball and drawings, but keeps the pitch and orientation you are on, since
+that is almost always the pitch you want next. All three are undoable.
+
 Drop the ball on a player to give them possession — the player gets a white ring and the
 ball travels with them. Drag it onto empty grass to release it.
 

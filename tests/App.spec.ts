@@ -65,6 +65,32 @@ function fire(init: KeyboardEventInit, target: EventTarget = window) {
   target.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }))
 }
 
+describe('resetting the board', () => {
+  it('forgets the open pattern, so a later Save cannot overwrite it', async () => {
+    const board = useBoard()
+    const storage = useStorage()
+    const saved = storage.savePattern('High press', board.snapshot())
+
+    wrapper = mount(App)
+    await wrapper.vm.$nextTick()
+
+    // Load it, so the app is treating this board as that pattern.
+    await wrapper.find('[data-open]').trigger('click')
+    await wrapper.vm.$nextTick()
+    await wrapper.find('[data-load]').trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-current-pattern]').text()).toContain('High press')
+
+    board.addCounter('red')
+    await wrapper.vm.$nextTick()
+    await wrapper.find('[data-reset]').trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[data-current-pattern]').text()).not.toContain('High press')
+    expect(storage.listPatterns().find((p) => p.id === saved.id)).toBeDefined()
+  })
+})
+
 describe('keyboard shortcuts', () => {
   it('switches to the pen tool on an unmodified "p"', async () => {
     wrapper = mount(App)

@@ -23,9 +23,25 @@ const emit = defineEmits<{
   exportPng: []
   exportJson: []
   importJson: []
+  reset: []
 }>()
 
 const board = useBoard()
+
+/** Nothing to clear: no players, no drawings, and the ball never moved. */
+const isBoardEmpty = computed(
+  () =>
+    board.state.counters.length === 0 &&
+    board.state.drawings.length === 0 &&
+    board.state.ball.attachedTo === null,
+)
+
+function resetBoard() {
+  board.resetBoard()
+  // The board is no longer the pattern that was open, so the app must stop
+  // treating a later Save as an update to it.
+  emit('reset')
+}
 
 const SWATCHES: Record<CounterColor, string> = {
   red: '#e53935',
@@ -117,7 +133,27 @@ const DRAW_COLOR_NAMES: Record<string, string> = {
     <div class="group">
       <button data-undo class="chip" :disabled="!board.canUndo.value" @click="board.undo()">Undo</button>
       <button data-redo class="chip" :disabled="!board.canRedo.value" @click="board.redo()">Redo</button>
-      <button class="chip" @click="board.clearDrawings()">Clear drawings</button>
+      <button
+        data-clear-players
+        class="chip"
+        :disabled="board.state.counters.length === 0"
+        title="Take every player off, leaving the drawings"
+        @click="board.clearCounters()"
+      >Clear players</button>
+      <button
+        data-clear-drawings
+        class="chip"
+        :disabled="board.state.drawings.length === 0"
+        title="Rub out every drawing, leaving the players"
+        @click="board.clearDrawings()"
+      >Clear drawings</button>
+      <button
+        data-reset
+        class="chip"
+        :disabled="isBoardEmpty"
+        title="Start a fresh board, keeping the pitch you are on"
+        @click="resetBoard()"
+      >Reset</button>
     </div>
 
     <div class="group">

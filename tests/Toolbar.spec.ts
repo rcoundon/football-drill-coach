@@ -123,3 +123,56 @@ describe('the line tool', () => {
     expect(wrapper.emitted('update:tool')![0]).toEqual(['line'])
   })
 })
+
+describe('clearing the board', () => {
+  it('clears the players without touching the drawings', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    const line = board.startLine({ x: 5, y: 5 }, '#fff')
+    board.updateSegment(line, { x: 60, y: 5 })
+    board.finishDrawing(line)
+
+    const wrapper = mountToolbar()
+    await wrapper.find('[data-clear-players]').trigger('click')
+
+    expect(board.state.counters).toEqual([])
+    expect(board.state.drawings).toHaveLength(1)
+  })
+
+  it('resets everything', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    const line = board.startLine({ x: 5, y: 5 }, '#fff')
+    board.updateSegment(line, { x: 60, y: 5 })
+    board.finishDrawing(line)
+
+    const wrapper = mountToolbar()
+    await wrapper.find('[data-reset]').trigger('click')
+
+    expect(board.state.counters).toEqual([])
+    expect(board.state.drawings).toEqual([])
+  })
+
+  it('emits reset so the app can forget the open pattern', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    const wrapper = mountToolbar()
+    await wrapper.find('[data-reset]').trigger('click')
+    expect(wrapper.emitted('reset')).toBeTruthy()
+  })
+
+  it('disables each button when it has nothing to do', () => {
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-clear-players]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-clear-drawings]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-reset]').attributes('disabled')).toBeDefined()
+  })
+
+  it('enables clearing the players once there is one', () => {
+    useBoard().addCounter('red')
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-clear-players]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-clear-drawings]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-reset]').attributes('disabled')).toBeUndefined()
+  })
+})

@@ -104,6 +104,16 @@ function onPatternDeleted(id: string) {
   currentName.value = ''
 }
 
+/**
+ * A reset board is not the pattern that was open any more, so the app must
+ * stop treating it as one — otherwise the next Save silently overwrites
+ * that pattern with an empty board.
+ */
+function onBoardReset() {
+  currentPatternId.value = null
+  currentName.value = ''
+}
+
 const renameCounterId = ref<string | null>(null)
 const renameLabelDraft = ref('')
 const renamePromptOpen = ref(false)
@@ -205,6 +215,7 @@ watch(
       @exportPng="exportPng"
       @exportJson="exportJson"
       @importJson="importJson"
+      @reset="onBoardReset"
     />
     <div class="stage">
       <PitchBoard ref="boardRef" :tool="tool" :draw-color="drawColor" @rename="openRenamePrompt" />

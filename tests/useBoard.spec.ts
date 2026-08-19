@@ -184,12 +184,111 @@ describe('loadSnapshot', () => {
 })
 
 describe('resetBoard', () => {
-  it('clears the board and is undoable', () => {
+  it('clears players, ball and drawings', () => {
     const board = useBoard()
-    board.setPitchType('full')
+    const c = board.addCounter('red')
+    board.moveCounter(c.id, { x: 20, y: 20 })
+    board.dropBall({ x: 20, y: 20 })
+    const line = board.startLine({ x: 5, y: 5 }, '#fff')
+    board.updateSegment(line, { x: 60, y: 5 })
+    board.finishDrawing(line)
+
     board.resetBoard()
-    expect(board.state.pitch.type).toBe('blank')
+
+    expect(board.state.counters).toEqual([])
+    expect(board.state.drawings).toEqual([])
+    expect(board.state.ball.attachedTo).toBeNull()
+  })
+
+  it('puts the ball back where a fresh board starts it', () => {
+    const board = useBoard()
+    const fresh = { ...board.state.ball.pos }
+    board.moveBall({ x: 90, y: 10 })
+    board.resetBoard()
+    expect(board.state.ball.pos).toEqual(fresh)
+  })
+
+  /**
+   * Reset is for starting the next drill, and that is nearly always on the
+   * same pitch. Snapping back to a blank landscape pitch would mean
+   * re-selecting the view every single time.
+   */
+  it('keeps the pitch type and orientation', () => {
+    const board = useBoard()
+    board.setPitchType('half')
+    board.setRotated(true)
+    board.addCounter('red')
+
+    board.resetBoard()
+
+    expect(board.state.pitch).toEqual({ type: 'half', rotated: true })
+  })
+
+  it('is undoable', () => {
+    const board = useBoard()
+    board.addCounter('red')
+    board.resetBoard()
     board.undo()
-    expect(board.state.pitch.type).toBe('full')
+    expect(board.state.counters).toHaveLength(1)
+  })
+})
+
+describe('clearCounters', () => {
+  it('removes every counter but leaves the drawings alone', () => {
+    const board = useBoard()
+    board.addCounter('red')
+    board.addCounter('blue')
+    const line = board.startLine({ x: 5, y: 5 }, '#fff')
+    board.updateSegment(line, { x: 60, y: 5 })
+    board.finishDrawing(line)
+
+    board.clearCounters()
+
+    expect(board.state.counters).toEqual([])
+    expect(board.state.drawings).toHaveLength(1)
+  })
+
+  it('frees the ball where it was riding, rather than removing it', () => {
+    const board = useBoard()
+    const c = board.addCounter('red')
+    board.moveCounter(c.id, { x: 30, y: 20 })
+    board.dropBall({ x: 30, y: 20 })
+    const riding = board.ballPosition()
+
+    board.clearCounters()
+
+    expect(board.state.ball.attachedTo).toBeNull()
+    expect(board.state.ball.pos).toEqual(riding)
+  })
+
+  it('leaves a free ball exactly where it was', () => {
+    const board = useBoard()
+    board.addCounter('red')
+    board.dropBall({ x: 80, y: 40 })
+    board.clearCounters()
+    expect(board.state.ball.pos).toEqual({ x: 80, y: 40 })
+  })
+
+  it('is undoable', () => {
+    const board = useBoard()
+    board.addCounter('red')
+    board.addCounter('blue')
+    board.clearCounters()
+    board.undo()
+    expect(board.state.counters).toHaveLength(2)
+  })
+
+  it('does nothing, and adds no undo entry, when there are no counters', () => {
+    const board = useBoard()
+    board.clearCounters()
+    expect(board.canUndo.value).toBe(false)
+  })
+
+  it('lets the next counter start from 1 again', () => {
+    const board = useBoard()
+    board.addCounter('red')
+    board.addCounter('red')
+    board.clearCounters()
+    expect(board.addCounter('red').label).toBe('1')
   })
 })

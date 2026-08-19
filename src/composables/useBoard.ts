@@ -184,9 +184,33 @@ function toggleRotated(): void {
   setRotated(!state.pitch.rotated)
 }
 
+/**
+ * Clear the board for the next drill.
+ *
+ * The pitch type and orientation deliberately survive: the next drill is
+ * nearly always on the same pitch, and snapping back to a blank landscape
+ * view would mean re-selecting it every time.
+ */
 function resetBoard(): void {
   commit()
-  apply(emptyState())
+  apply({ ...emptyState(), pitch: { ...toRaw(state).pitch } })
+}
+
+/**
+ * Remove every counter, leaving drawings and the pitch untouched.
+ *
+ * A ball being carried is set down where it was riding rather than removed,
+ * matching what deleting its holder already does — the drill still has a
+ * ball in it, it just no longer belongs to anyone.
+ */
+function clearCounters(): void {
+  if (state.counters.length === 0) return
+  commit()
+  if (state.ball.attachedTo) {
+    state.ball.pos = ballPosition()
+    state.ball.attachedTo = null
+  }
+  state.counters = []
 }
 
 function loadSnapshot(snap: BoardSnapshot): void {
@@ -500,6 +524,7 @@ const board = {
   loadSnapshot,
   restoreSnapshot,
   resetBoard,
+  clearCounters,
   setPitchType,
   setRotated,
   toggleRotated,
