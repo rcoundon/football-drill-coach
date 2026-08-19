@@ -67,6 +67,12 @@ type Drag = DragTarget & {
   pointerId: number
   /** Where the press landed, so travel can be measured against it. */
   origin: Vec
+  /**
+   * From the press to the centre of the thing grabbed. Added back on every
+   * move so a press picks an object up where it is rather than snapping it
+   * under the pointer — which meant a plain click nudged whatever it hit.
+   */
+  grabOffset: Vec
   /** True once the pointer has travelled far enough to mean a drag, not a tap. */
   moved: boolean
   startedAt: number
@@ -166,6 +172,11 @@ function dragIsLive(): boolean {
 }
 
 /** Record travel away from the press point, once, for the whole drag. */
+/** Where the grabbed object's centre belongs for a pointer now at `at`. */
+function withGrabOffset(active: Drag, at: Vec): Vec {
+  return { x: at.x + active.grabOffset.x, y: at.y + active.grabOffset.y }
+}
+
 function noteTravel(active: Drag, at: Vec): void {
   if (active.moved) return
   if (Math.hypot(at.x - active.origin.x, at.y - active.origin.y) > TAP_TOLERANCE) {
@@ -203,6 +214,8 @@ function capture(event: PointerEvent) {
 }
 
 function onCounterGrab(id: string, event: PointerEvent) {
+  const counter = board.counterById(id)
+  if (!counter) return
   if (props.tool === 'erase') {
     event.stopPropagation()
     board.deleteCounter(id)
@@ -243,8 +256,15 @@ function onCounterGrab(id: string, event: PointerEvent) {
 
   capture(event)
   board.commit() // one entry for the whole drag
-  drag.value = { kind: 'counter', id, pointerId: event.pointerId, origin: at, moved: false, startedAt: now }
-  board.moveCounter(id, at)
+  drag.value = {
+    kind: 'counter',
+    id,
+    pointerId: event.pointerId,
+    origin: at,
+    grabOffset: { x: counter.pos.x - at.x, y: counter.pos.y - at.y },
+    moved: false,
+    startedAt: now,
+  }
 }
 
 /**
@@ -256,6 +276,8 @@ function onCounterGrab(id: string, event: PointerEvent) {
  * the ball only moves once the pointer does.
  */
 function onLabelGrab(id: string, event: PointerEvent) {
+  const label = board.labelById(id)
+  if (!label) return
   if (props.tool === 'erase') {
     event.stopPropagation()
     board.deleteLabel(id)
@@ -296,19 +318,26 @@ function onLabelGrab(id: string, event: PointerEvent) {
     id,
     pointerId: event.pointerId,
     origin: at,
+    grabOffset: { x: label.pos.x - at.x, y: label.pos.y - at.y },
     moved: false,
     startedAt: now,
   }
-  board.moveLabel(id, at)
 }
 
 function onMarkerGrab(id: string, event: PointerEvent) {
+  const marker = board.markerById(id)
+  if (!marker) return
   if (props.tool === 'erase') {
     event.stopPropagation()
     board.deleteMarker(id)
     return
   }
-  if (props.tool !== 'select' || dragIsLive()) return
+  /*
+   * The cone tool moves cones as well as placing them. Placing one leaves
+   * that tool selected, so the next thing a coach does is usually nudge the
+   * cone they just put down; without this it dropped a second cone on top.
+   */
+  if ((props.tool !== 'select' && props.tool !== 'cone') || dragIsLive()) return
   event.stopPropagation()
   capture(event)
   board.commit() // one entry for the whole drag
@@ -318,10 +347,10 @@ function onMarkerGrab(id: string, event: PointerEvent) {
     id,
     pointerId: event.pointerId,
     origin: at,
+    grabOffset: { x: marker.pos.x - at.x, y: marker.pos.y - at.y },
     moved: false,
     startedAt: Date.now(),
   }
-  board.moveMarker(id, at)
 }
 
 function onBallGrab(event: PointerEvent) {
@@ -334,6 +363,9 @@ function onBallGrab(event: PointerEvent) {
     kind: 'ball',
     pointerId: event.pointerId,
     origin: toPitch(event),
+    // No offset: the ball is drawn away from its holder's centre, so
+    // carrying the grab offset would fight the possession maths on drop.
+    grabOffset: { x: 0, y: 0 },
     moved: false,
     startedAt: Date.now(),
   }
@@ -346,7 +378,15 @@ function onDrawingHit(id: string) {
 function onPointerDown(event: PointerEvent) {
   if (dragIsLive()) return
   const at = toPitch(event)
-  const shared = { pointerId: event.pointerId, origin: at, moved: false, startedAt: Date.now() }
+  // A stroke is drawn straight from the pointer, so there is nothing to
+  // carry an offset from.
+  const shared = {
+    pointerId: event.pointerId,
+    origin: at,
+    grabOffset: { x: 0, y: 0 },
+    moved: false,
+    startedAt: Date.now(),
+  }
   if (props.tool === 'pen') {
     capture(event)
     drag.value = { kind: 'pen', id: board.startPen(at, props.drawColor), ...shared }
@@ -379,9 +419,10 @@ function onPointerMove(event: PointerEvent) {
   if (!active || isOtherPointer(event)) return
   const at = toPitch(event)
   noteTravel(active, at)
-  if (active.kind === 'counter') board.moveCounter(active.id, at)
-  else if (active.kind === 'marker') board.moveMarker(active.id, at)
-  else if (active.kind === 'label') board.moveLabel(active.id, at)
+  const carried = withGrabOffset(active, at)
+  if (active.kind === 'counter') board.moveCounter(active.id, carried)
+  else if (active.kind === 'marker') board.moveMarker(active.id, carried)
+  else if (active.kind === 'label') board.moveLabel(active.id, carried)
   else if (active.kind === 'ball') {
     if (active.moved) board.moveBall(at)
   } else if (active.kind === 'pen') board.extendPen(active.id, at)
@@ -435,15 +476,15 @@ function onPointerUp(event: PointerEvent) {
   noteTravel(active, at)
 
   if (active.kind === 'counter') {
-    board.moveCounter(active.id, at)
+    board.moveCounter(active.id, withGrabOffset(active, at))
     // A press that travelled was a drag, not the first half of a double
     // press. Leaving it armed turns an ordinary nudge-release-regrab rhythm
     // into a rename prompt with no drag.
     if (active.moved && lastCounterPress?.id === active.id) lastCounterPress = null
   } else if (active.kind === 'marker') {
-    board.moveMarker(active.id, at)
+    board.moveMarker(active.id, withGrabOffset(active, at))
   } else if (active.kind === 'label') {
-    board.moveLabel(active.id, at)
+    board.moveLabel(active.id, withGrabOffset(active, at))
   } else if (active.kind === 'ball') {
     if (active.moved) board.dropBall(at)
   } else if (active.kind === 'pen') {
