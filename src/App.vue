@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import type { Pattern, ToolMode } from './types'
+import type { Pattern, ToolMode, Vec } from './types'
 import Toolbar from './components/Toolbar.vue'
 import PitchBoard from './components/PitchBoard.vue'
 import PatternLibrary from './components/PatternLibrary.vue'
-import { useBoard } from './composables/useBoard'
+import { MAX_LABEL_LENGTH, useBoard } from './composables/useBoard'
 import { useStorage } from './composables/useStorage'
 import { useExport } from './composables/useExport'
 
@@ -114,6 +114,34 @@ function onBoardReset() {
   currentName.value = ''
 }
 
+/**
+ * The board reports where a label should go, or which one to edit; the text
+ * itself is typed here, in the same small dialog the other prompts use.
+ */
+const labelDraft = ref('')
+const labelTarget = ref<{ kind: 'new'; at: Vec } | { kind: 'edit'; id: string } | null>(null)
+const labelInput = ref<HTMLInputElement | null>(null)
+
+function promptNewLabel(at: Vec) {
+  labelDraft.value = ''
+  labelTarget.value = { kind: 'new', at }
+}
+
+function promptEditLabel(id: string) {
+  labelDraft.value = board.labelById(id)?.text ?? ''
+  labelTarget.value = { kind: 'edit', id }
+}
+
+function confirmLabel() {
+  const target = labelTarget.value
+  if (!target) return
+  if (target.kind === 'new') board.addLabel(target.at, labelDraft.value)
+  else board.setLabelText(target.id, labelDraft.value)
+  labelTarget.value = null
+}
+
+watch(labelTarget, (target) => focusWhenOpen(target !== null, () => labelInput.value))
+
 const renameCounterId = ref<string | null>(null)
 const renameLabelDraft = ref('')
 const renamePromptOpen = ref(false)
@@ -182,7 +210,11 @@ watch(renameCounterId, (id) => focusWhenOpen(id !== null, () => renameLabelInput
 
 /** True while anything modal is on screen. */
 const isDialogOpen = computed(
-  () => savePromptOpen.value || libraryOpen.value || renameCounterId.value !== null,
+  () =>
+    savePromptOpen.value ||
+    libraryOpen.value ||
+    renameCounterId.value !== null ||
+    labelTarget.value !== null,
 )
 
 function onKeydown(event: KeyboardEvent) {
@@ -213,7 +245,7 @@ function onKeydown(event: KeyboardEvent) {
     return
   }
 
-  const byKey: Record<string, ToolMode> = { v: 'select', p: 'pen', r: 'arrow-run', s: 'arrow-pass', l: 'line', c: 'cone', e: 'erase' }
+  const byKey: Record<string, ToolMode> = { v: 'select', p: 'pen', r: 'arrow-run', s: 'arrow-pass', l: 'line', c: 'cone', t: 'text', e: 'erase' }
   const next = byKey[event.key.toLowerCase()]
   if (next) tool.value = next
 }
@@ -256,7 +288,14 @@ watch(
       @reset="onBoardReset"
     />
     <div class="stage">
-      <PitchBoard ref="boardRef" :tool="tool" :draw-color="drawColor" @rename="openRenamePrompt" />
+      <PitchBoard
+        ref="boardRef"
+        :tool="tool"
+        :draw-color="drawColor"
+        @rename="openRenamePrompt"
+        @add-label="promptNewLabel"
+        @edit-label="promptEditLabel"
+      />
     </div>
 
     <PatternLibrary
@@ -266,6 +305,25 @@ watch(
       @rename="onPatternRenamed"
       @delete="onPatternDeleted"
     />
+
+    <div v-if="labelTarget" class="overlay" @click.self="labelTarget = null">
+      <div class="prompt" role="dialog" aria-label="Label text">
+        <label for="label-text">Label</label>
+        <input
+          id="label-text"
+          ref="labelInput"
+          v-model="labelDraft"
+          data-label-input
+          class="input"
+          :maxlength="MAX_LABEL_LENGTH"
+          @keyup.enter="confirmLabel"
+        />
+        <div class="prompt-actions">
+          <button data-label-save class="chip" @click="confirmLabel">Save</button>
+          <button data-label-cancel class="chip" @click="labelTarget = null">Cancel</button>
+        </div>
+      </div>
+    </div>
 
     <div v-if="savePromptOpen" class="overlay" @click.self="savePromptOpen = false">
       <div class="prompt" role="dialog" :aria-label="savePromptTitle">

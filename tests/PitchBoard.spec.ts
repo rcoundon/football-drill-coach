@@ -18,7 +18,7 @@ import type { ToolMode } from '../src/types'
  * throws. Constructing and dispatching the event ourselves sidesteps the
  * bug while still exercising a genuine native PointerEvent.
  *
- * `PlayerCounter`/`BallToken`/`ConeMarker` deliberately put the pointerdown listener on
+ * `PlayerCounter`/`BallToken`/`ConeMarker`/`PitchLabel` deliberately put the pointerdown listener on
  * the LAST child of their group (the enlarged transparent hit circle), not
  * on the group itself — see the paint-order note in PlayerCounter.vue. A
  * real browser's hit-testing lands a press there; jsdom has no layout
@@ -35,7 +35,8 @@ async function firePointer(
   const isHitGroup =
     target.element.hasAttribute('data-counter') ||
     target.element.hasAttribute('data-ball') ||
-    target.element.hasAttribute('data-marker')
+    target.element.hasAttribute('data-marker') ||
+    target.element.hasAttribute('data-label')
   const node = (isHitGroup ? target.element.lastElementChild : null) ?? target.element
   const event = new PointerEvent(type, { bubbles: true, cancelable: true, ...opts })
   node.dispatchEvent(event)
@@ -757,5 +758,60 @@ describe('hiding the ball', () => {
     await wrapper.vm.$nextTick()
     expect(wrapper.find('[data-ball]').exists()).toBe(true)
     expect(wrapper.find('[data-possession-ring]').exists()).toBe(true)
+  })
+})
+
+describe('pitch labels', () => {
+  it('renders one label per entry, with its text', async () => {
+    const board = useBoard()
+    board.addLabel({ x: 20, y: 20 }, 'Press trigger')
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('[data-label]')).toHaveLength(1)
+    expect(wrapper.find('[data-label-text]').text()).toBe('Press trigger')
+  })
+
+  it('asks for the text when the pitch is tapped with the text tool', async () => {
+    const wrapper = mountBoard('text')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('svg'), 'pointerdown', clientFor(30, 20))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(30, 20))
+
+    const asked = wrapper.emitted('addLabel')
+    expect(asked).toBeTruthy()
+    expect(asked![0][0]).toMatchObject({ x: expect.closeTo(30, 4), y: expect.closeTo(20, 4) })
+  })
+
+  it('drags a label with the move tool', async () => {
+    const board = useBoard()
+    const label = board.addLabel({ x: 50, y: 32 }, 'Move me')!
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-label]'), 'pointerdown', clientFor(50, 32))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(20, 10))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(20, 10))
+
+    expect(board.labelById(label.id)!.pos.x).toBeCloseTo(20, 4)
+  })
+
+  it('erases a label', async () => {
+    const board = useBoard()
+    board.addLabel({ x: 50, y: 32 }, 'Erase me')
+    const wrapper = mountBoard('erase')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-label]'), 'pointerdown', clientFor(50, 32))
+    expect(board.state.labels).toHaveLength(0)
+  })
+
+  it('hides the labels when they are toggled off', async () => {
+    const board = useBoard()
+    board.addLabel({ x: 20, y: 20 }, 'Hidden')
+    board.toggleLabelsVisible()
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-label]').exists()).toBe(false)
   })
 })

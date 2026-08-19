@@ -248,6 +248,8 @@ function sampleSnapshot(): BoardSnapshot {
   return {
     counters: [{ id: 'a', color: 'red', label: '1', pos: { x: 10, y: 10 } }],
     markers: [],
+    labels: [],
+    labelsVisible: true,
     ball: { pos: { x: 5, y: 5 }, attachedTo: null, visible: true },
     drawings: [],
     pitch: { type: 'full', rotated: false },
@@ -544,5 +546,60 @@ describe('the ball shortcut', () => {
     fire({ key: 'b', ctrlKey: true })
     await wrapper.vm.$nextTick()
     expect(board.state.ball.visible).toBe(true)
+  })
+})
+
+describe('adding a label', () => {
+  it('asks for the text, then puts it on the pitch', async () => {
+    const board = useBoard()
+    wrapper = mount(App, { attachTo: document.body })
+    await wrapper.vm.$nextTick()
+
+    await wrapper.findComponent({ name: 'PitchBoard' }).vm.$emit('addLabel', { x: 30, y: 20 })
+    await wrapper.vm.$nextTick()
+    await nextTick()
+
+    const input = wrapper.find('[data-label-input]')
+    expect(input.exists()).toBe(true)
+    expect(document.activeElement).toBe(input.element)
+
+    await input.setValue('Press trigger')
+    await wrapper.find('[data-label-save]').trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(board.state.labels).toHaveLength(1)
+    expect(board.state.labels[0].text).toBe('Press trigger')
+  })
+
+  it('adds nothing when the prompt is cancelled', async () => {
+    const board = useBoard()
+    wrapper = mount(App, { attachTo: document.body })
+    await wrapper.vm.$nextTick()
+
+    await wrapper.findComponent({ name: 'PitchBoard' }).vm.$emit('addLabel', { x: 30, y: 20 })
+    await wrapper.vm.$nextTick()
+    await wrapper.find('[data-label-cancel]').trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(board.state.labels).toHaveLength(0)
+  })
+
+  it('edits an existing label, pre-filled with its text', async () => {
+    const board = useBoard()
+    const label = board.addLabel({ x: 30, y: 20 }, 'Before')!
+    wrapper = mount(App, { attachTo: document.body })
+    await wrapper.vm.$nextTick()
+
+    await wrapper.findComponent({ name: 'PitchBoard' }).vm.$emit('editLabel', label.id)
+    await wrapper.vm.$nextTick()
+    await nextTick()
+
+    const input = wrapper.find('[data-label-input]')
+    expect((input.element as HTMLInputElement).value).toBe('Before')
+    await input.setValue('After')
+    await wrapper.find('[data-label-save]').trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(board.labelById(label.id)!.text).toBe('After')
   })
 })

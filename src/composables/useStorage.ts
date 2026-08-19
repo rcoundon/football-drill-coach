@@ -58,6 +58,24 @@ function isValidBall(value: unknown): boolean {
   )
 }
 
+function isValidLabel(value: unknown): boolean {
+  return (
+    isObject(value) &&
+    typeof value.id === 'string' &&
+    typeof value.text === 'string' &&
+    isVec(value.pos)
+  )
+}
+
+/**
+ * Labels arrived after version 1 shipped, so a pattern or draft written
+ * before them has no labels array. Read a missing one as empty rather than
+ * rejecting the coach's real saved work.
+ */
+function labelsOf(value: Record<string, unknown>): unknown[] {
+  return Array.isArray(value.labels) ? value.labels : []
+}
+
 function isValidMarker(value: unknown): boolean {
   return isObject(value) && typeof value.id === 'string' && isVec(value.pos)
 }
@@ -123,6 +141,9 @@ export function parsePattern(value: unknown): Pattern {
     }
     if (!markersOf(frame).every(isValidMarker)) {
       throw new Error('That pattern has a damaged cone position.')
+    }
+    if (!labelsOf(frame).every(isValidLabel)) {
+      throw new Error('That pattern has a damaged label.')
     }
   }
 
@@ -253,7 +274,15 @@ function toPattern(name: string, snap: BoardSnapshot, id: string, createdAt: str
     version: SCHEMA_VERSION,
     pitch: copy.pitch,
     drawings: copy.drawings,
-    frames: [{ counters: copy.counters, markers: copy.markers ?? [], ball: copy.ball }],
+    frames: [
+      {
+        counters: copy.counters,
+        markers: copy.markers ?? [],
+        labels: copy.labels ?? [],
+        ball: copy.ball,
+      },
+    ],
+    labelsVisible: copy.labelsVisible ?? true,
     createdAt,
     updatedAt: nowIso(),
   }
@@ -318,6 +347,8 @@ function patternToSnapshot(pattern: Pattern): BoardSnapshot {
   return {
     counters: frame.counters,
     markers: markersOf(frame as unknown as Record<string, unknown>) as BoardSnapshot['markers'],
+    labels: labelsOf(frame as unknown as Record<string, unknown>) as BoardSnapshot['labels'],
+    labelsVisible: (copy as { labelsVisible?: boolean }).labelsVisible ?? true,
     ball: withBallDefaults(frame.ball) as BoardSnapshot['ball'],
     drawings: copy.drawings,
     pitch: copy.pitch,
@@ -348,6 +379,7 @@ function isValidSnapshot(value: unknown): boolean {
     Array.isArray(value.counters) &&
     value.counters.every(isValidCounter) &&
     markersOf(value).every(isValidMarker) &&
+    labelsOf(value).every(isValidLabel) &&
     isValidBall(value.ball) &&
     Array.isArray(value.drawings) &&
     value.drawings.every(isValidDrawing) &&
@@ -371,6 +403,8 @@ function loadDraft(): BoardSnapshot | null {
       ...draft,
       ball: withBallDefaults(draft.ball),
       markers: markersOf(draft),
+      labels: labelsOf(draft),
+      labelsVisible: draft.labelsVisible !== false,
     } as unknown as BoardSnapshot
   } catch {
     return null

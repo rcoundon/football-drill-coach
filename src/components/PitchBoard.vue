@@ -37,10 +37,11 @@ import PitchMarkings from './PitchMarkings.vue'
 import PlayerCounter from './PlayerCounter.vue'
 import BallToken from './BallToken.vue'
 import ConeMarker from './ConeMarker.vue'
+import PitchLabel from './PitchLabel.vue'
 import DrawingLayer from './DrawingLayer.vue'
 
 const props = defineProps<{ tool: ToolMode; drawColor: string }>()
-const emit = defineEmits<{ rename: [id: string] }>()
+const emit = defineEmits<{ rename: [id: string]; addLabel: [at: Vec]; editLabel: [id: string] }>()
 
 const board = useBoard()
 const svgEl = ref<SVGSVGElement | null>(null)
@@ -50,6 +51,7 @@ defineExpose({ svgEl })
 type DragTarget =
   | { kind: 'counter'; id: string }
   | { kind: 'marker'; id: string }
+  | { kind: 'label'; id: string }
   | { kind: 'ball' }
   | { kind: 'pen'; id: string }
   | { kind: 'segment'; id: string }
@@ -74,6 +76,7 @@ const drag = ref<Drag | null>(null)
 
 /** The last press on a counter that ended without moving, for detecting a double press. */
 let lastCounterPress: { id: string; at: number; pos: Vec } | null = null
+let lastLabelPress: { id: string; at: number; pos: Vec } | null = null
 
 /** True for a pointermove/up belonging to some pointer other than the dragging one. */
 function isOtherPointer(event: PointerEvent): boolean {
@@ -204,6 +207,44 @@ function onCounterGrab(id: string, event: PointerEvent) {
  * travels is not a re-placement at all, so it leaves possession untouched —
  * the ball only moves once the pointer does.
  */
+function onLabelGrab(id: string, event: PointerEvent) {
+  if (props.tool === 'erase') {
+    event.stopPropagation()
+    board.deleteLabel(id)
+    return
+  }
+  if (props.tool !== 'select' || dragIsLive()) return
+  event.stopPropagation()
+
+  // Same double-press detection as a counter, and for the same reason:
+  // pointer capture stops dblclick ever reaching this element.
+  const now = Date.now()
+  const at = toPitch(event)
+  const isSecondPress =
+    lastLabelPress !== null &&
+    lastLabelPress.id === id &&
+    now - lastLabelPress.at <= DOUBLE_PRESS_MS &&
+    Math.hypot(at.x - lastLabelPress.pos.x, at.y - lastLabelPress.pos.y) <= DOUBLE_PRESS_RADIUS
+  lastLabelPress = isSecondPress ? null : { id, at: now, pos: at }
+
+  if (isSecondPress) {
+    emit('editLabel', id)
+    return
+  }
+
+  capture(event)
+  board.commit() // one entry for the whole drag
+  drag.value = {
+    kind: 'label',
+    id,
+    pointerId: event.pointerId,
+    origin: at,
+    moved: false,
+    startedAt: now,
+  }
+  board.moveLabel(id, at)
+}
+
 function onMarkerGrab(id: string, event: PointerEvent) {
   if (props.tool === 'erase') {
     event.stopPropagation()
@@ -256,6 +297,10 @@ function onPointerDown(event: PointerEvent) {
     capture(event)
     const style = props.tool === 'arrow-run' ? 'run' : 'pass'
     drag.value = { kind: 'segment', id: board.startArrow(at, props.drawColor, style), ...shared }
+  } else if (props.tool === 'text') {
+    // The text itself is typed in a dialog the app owns, so the board only
+    // reports where the coach tapped.
+    emit('addLabel', at)
   } else if (props.tool === 'cone') {
     // Placed on press rather than as a drag: laying out a grid is a
     // sequence of taps, and a cone has no size to drag out.
@@ -273,6 +318,7 @@ function onPointerMove(event: PointerEvent) {
   noteTravel(active, at)
   if (active.kind === 'counter') board.moveCounter(active.id, at)
   else if (active.kind === 'marker') board.moveMarker(active.id, at)
+  else if (active.kind === 'label') board.moveLabel(active.id, at)
   else if (active.kind === 'ball') {
     if (active.moved) board.moveBall(at)
   } else if (active.kind === 'pen') board.extendPen(active.id, at)
@@ -293,6 +339,8 @@ function onPointerUp(event: PointerEvent) {
     if (active.moved && lastCounterPress?.id === active.id) lastCounterPress = null
   } else if (active.kind === 'marker') {
     board.moveMarker(active.id, at)
+  } else if (active.kind === 'label') {
+    board.moveLabel(active.id, at)
   } else if (active.kind === 'ball') {
     if (active.moved) board.dropBall(at)
   } else if (active.kind === 'pen') {
@@ -335,6 +383,13 @@ function onPointerUp(event: PointerEvent) {
         :rotated="board.state.pitch.rotated"
         :has-ball="board.state.ball.visible && board.state.ball.attachedTo === counter.id"
         @grab="onCounterGrab(counter.id, $event)"
+      />
+      <PitchLabel
+        v-for="label in board.state.labelsVisible ? board.state.labels : []"
+        :key="label.id"
+        :label="label"
+        :rotated="board.state.pitch.rotated"
+        @grab="onLabelGrab(label.id, $event)"
       />
       <BallToken
         v-if="board.state.ball.visible"

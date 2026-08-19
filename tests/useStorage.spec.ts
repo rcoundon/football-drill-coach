@@ -11,6 +11,8 @@ function snap(): BoardSnapshot {
   return {
     counters: [{ id: 'a', color: 'red', label: '1', pos: { x: 10, y: 10 } }],
     markers: [],
+    labels: [],
+    labelsVisible: true,
     ball: { pos: { x: 5, y: 5 }, attachedTo: null, visible: true },
     drawings: [],
     pitch: { type: 'full', rotated: false },
@@ -559,5 +561,45 @@ describe('ball visibility', () => {
     delete raw.ball.visible
     localStorage.setItem(DRAFT_KEY, JSON.stringify(raw))
     expect(store.loadDraft()?.ball.visible).toBe(true)
+  })
+})
+
+describe('pitch labels', () => {
+  const label = { id: 'l1', pos: { x: 20, y: 20 }, text: 'Press trigger' }
+
+  it('round-trips labels and their visibility', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Drill', { ...snap(), labels: [label], labelsVisible: false })
+    const restored = store.patternToSnapshot(saved)
+    expect(restored.labels).toEqual([label])
+    expect(restored.labelsVisible).toBe(false)
+  })
+
+  it('loads a pattern saved before labels existed', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Older drill', snap())
+    const legacy = structuredClone(saved) as Record<string, unknown>
+    delete (legacy.frames as Record<string, unknown>[])[0].labels
+
+    expect(() => parsePattern(legacy)).not.toThrow()
+    const restored = store.patternToSnapshot(parsePattern(legacy))
+    expect(restored.labels).toEqual([])
+    expect(restored.labelsVisible).toBe(true)
+  })
+
+  it('rejects a label with a malformed position', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Drill', { ...snap(), labels: [label] })
+    const broken = structuredClone(saved)
+    ;(broken.frames[0].labels[0] as { pos: unknown }).pos = 'over there'
+    expect(() => parsePattern(broken)).toThrow()
+  })
+
+  it('rejects a label whose text is not text', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Drill', { ...snap(), labels: [label] })
+    const broken = structuredClone(saved)
+    ;(broken.frames[0].labels[0] as { text: unknown }).text = 42
+    expect(() => parsePattern(broken)).toThrow()
   })
 })
