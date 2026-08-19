@@ -37,13 +37,18 @@ for reuse.
 | Run | `R` | Solid arrow |
 | Pass | `S` | Dashed arrow |
 | Line | `L` | Straight line for marking out zones, channels and thirds |
+| Cone | `C` | Tap the pitch to drop a cone; tap again for the next one |
 | Erase | `E` | Remove whatever you press |
 
 Undo is `Ctrl+Z` (`Cmd+Z` on a Mac), redo is `Ctrl+Shift+Z`.
 
-**Clear players** takes everyone off and leaves your drawings. **Clear drawings**
+Cones are equipment rather than players: they carry no number, and the ball
+never belongs to one, so a cone beside a player can't steal possession. Drag
+them with **Move** and remove them with **Erase**.
+
+**Clear players** takes everyone off and leaves your drawings and cones. **Clear drawings**
 does the reverse. **Reset** starts a fresh board for the next drill — it clears
-players, ball and drawings, but keeps the pitch and orientation you are on, since
+players, cones, ball and drawings, but keeps the pitch and orientation you are on, since
 that is almost always the pitch you want next. All three are undoable.
 
 Drop the ball on a player to give them possession — the player gets a white ring and the

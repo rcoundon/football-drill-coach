@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import type { Pattern, ToolMode } from './types'
 import Toolbar from './components/Toolbar.vue'
 import PitchBoard from './components/PitchBoard.vue'
@@ -161,9 +161,42 @@ async function importJson() {
   }
 }
 
+const saveNameInput = ref<HTMLInputElement | null>(null)
+const renameLabelInput = ref<HTMLInputElement | null>(null)
+
+/**
+ * A dialog that opens without focus makes the coach click into the field
+ * before typing, and on a tablet the keyboard never appears at all.
+ */
+async function focusWhenOpen(open: boolean, field: () => HTMLInputElement | null) {
+  if (!open) return
+  // The field is behind a v-if, so it does not exist until after this
+  // render — read the ref after the tick, not before it.
+  await nextTick()
+  field()?.focus()
+  field()?.select()
+}
+
+watch(savePromptOpen, (open) => focusWhenOpen(open, () => saveNameInput.value))
+watch(renameCounterId, (id) => focusWhenOpen(id !== null, () => renameLabelInput.value))
+
+/** True while anything modal is on screen. */
+const isDialogOpen = computed(
+  () => savePromptOpen.value || libraryOpen.value || renameCounterId.value !== null,
+)
+
 function onKeydown(event: KeyboardEvent) {
   const target = event.target as HTMLElement | null
   if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return
+
+  /*
+   * Shortcuts must not reach the board while a dialog is up. Checking the
+   * focused element is not enough: with a dialog open and focus anywhere
+   * else, typing a pattern name drives the tool shortcuts behind it —
+   * "Cone grid" contains an r, so the board switches to the Run tool
+   * while the coach is naming their drill.
+   */
+  if (isDialogOpen.value) return
 
   const modifier = event.metaKey || event.ctrlKey
   if (modifier && event.key.toLowerCase() === 'z') {
@@ -175,7 +208,7 @@ function onKeydown(event: KeyboardEvent) {
 
   if (modifier) return
 
-  const byKey: Record<string, ToolMode> = { v: 'select', p: 'pen', r: 'arrow-run', s: 'arrow-pass', l: 'line', e: 'erase' }
+  const byKey: Record<string, ToolMode> = { v: 'select', p: 'pen', r: 'arrow-run', s: 'arrow-pass', l: 'line', c: 'cone', e: 'erase' }
   const next = byKey[event.key.toLowerCase()]
   if (next) tool.value = next
 }
@@ -232,7 +265,13 @@ watch(
     <div v-if="savePromptOpen" class="overlay" @click.self="savePromptOpen = false">
       <div class="prompt" role="dialog" :aria-label="savePromptTitle">
         <label for="pattern-name">{{ savePromptTitle }}</label>
-        <input id="pattern-name" v-model="saveNameDraft" class="input" @keyup.enter="confirmSave" />
+        <input
+          id="pattern-name"
+          ref="saveNameInput"
+          v-model="saveNameDraft"
+          class="input"
+          @keyup.enter="confirmSave"
+        />
         <p v-if="savePromptMode === 'fork' && currentName" class="hint">
           “{{ currentName }}” stays as it is.
         </p>
@@ -250,6 +289,7 @@ watch(
         <label for="counter-label">Player label</label>
         <input
           id="counter-label"
+          ref="renameLabelInput"
           v-model="renameLabelDraft"
           class="input"
           maxlength="4"

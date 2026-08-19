@@ -32,6 +32,7 @@ const board = useBoard()
 const isBoardEmpty = computed(
   () =>
     board.state.counters.length === 0 &&
+    board.state.markers.length === 0 &&
     board.state.drawings.length === 0 &&
     board.state.ball.attachedTo === null,
 )
@@ -57,6 +58,7 @@ const TOOLS: { id: ToolMode; label: string }[] = [
   { id: 'arrow-run', label: 'Run' },
   { id: 'arrow-pass', label: 'Pass' },
   { id: 'line', label: 'Line' },
+  { id: 'cone', label: 'Cone' },
   { id: 'erase', label: 'Erase' },
 ]
 

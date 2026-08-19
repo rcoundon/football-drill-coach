@@ -1,5 +1,5 @@
 import { computed, reactive, ref, toRaw } from 'vue'
-import type { Ball, Counter, CounterColor, Drawing, PitchType, Vec } from '../types'
+import type { Ball, Counter, CounterColor, Drawing, Marker, PitchType, Vec } from '../types'
 import { PITCH_H, PITCH_W, clampToPitch, distance, snapToAxis } from '../geometry'
 
 export const UNDO_LIMIT = 50
@@ -44,6 +44,7 @@ export const MIN_SEGMENT_LENGTH = 2
 
 export type BoardState = {
   counters: Counter[]
+  markers: Marker[]
   ball: Ball
   drawings: Drawing[]
   pitch: { type: PitchType; rotated: boolean }
@@ -55,6 +56,7 @@ export type BoardSnapshot = BoardState
 function emptyState(): BoardState {
   return {
     counters: [],
+    markers: [],
     // Not the pitch centre: that is where the first counter lands, and the
     // ball's hit circle would sit right on top of the counter's body, so the
     // coach's first drag would grab the ball instead of the player. Just
@@ -101,6 +103,7 @@ function snapshot(): BoardSnapshot {
   const raw = toRaw(state)
   return structuredClone({
     counters: raw.counters,
+    markers: raw.markers,
     ball: raw.ball,
     drawings: raw.drawings,
     pitch: raw.pitch,
@@ -110,6 +113,7 @@ function snapshot(): BoardSnapshot {
 function apply(snap: BoardSnapshot): void {
   const copy = clone(snap)
   state.counters = copy.counters
+  state.markers = copy.markers ?? []
   state.ball = copy.ball
   state.drawings = copy.drawings
   state.pitch = copy.pitch
@@ -309,6 +313,38 @@ function addCounter(color: CounterColor): Counter {
   }
   state.counters.push(counter)
   return counter
+}
+
+function markerById(id: string): Marker | undefined {
+  return state.markers.find((m) => m.id === id)
+}
+
+/**
+ * Drop a cone exactly where the coach tapped.
+ *
+ * Unlike a player, a cone is not shuffled clear of its neighbours: cones
+ * are laid out in deliberate shapes — gates, grids, channels — and moving
+ * one off the spot it was placed would defeat the point.
+ */
+function addMarker(at: Vec): Marker {
+  commit()
+  const marker: Marker = { id: newId(), pos: clampToPitch(at) }
+  state.markers.push(marker)
+  return marker
+}
+
+/** Called on every pointer-move of a drag, so it deliberately does not commit. */
+function moveMarker(id: string, pos: Vec): void {
+  const marker = markerById(id)
+  if (!marker) return
+  marker.pos = clampToPitch(pos)
+}
+
+function deleteMarker(id: string): void {
+  const index = state.markers.findIndex((m) => m.id === id)
+  if (index === -1) return
+  commit()
+  state.markers.splice(index, 1)
 }
 
 /** Called on every pointer-move of a drag, so it deliberately does not commit. */
@@ -534,6 +570,10 @@ const board = {
   setCounterLabel,
   deleteCounter,
   counterById,
+  markerById,
+  addMarker,
+  moveMarker,
+  deleteMarker,
   nextLabelFor,
   moveBall,
   dropBall,

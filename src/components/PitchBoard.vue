@@ -36,6 +36,7 @@ import { useBoard } from '../composables/useBoard'
 import PitchMarkings from './PitchMarkings.vue'
 import PlayerCounter from './PlayerCounter.vue'
 import BallToken from './BallToken.vue'
+import ConeMarker from './ConeMarker.vue'
 import DrawingLayer from './DrawingLayer.vue'
 
 const props = defineProps<{ tool: ToolMode; drawColor: string }>()
@@ -48,6 +49,7 @@ defineExpose({ svgEl })
 
 type DragTarget =
   | { kind: 'counter'; id: string }
+  | { kind: 'marker'; id: string }
   | { kind: 'ball' }
   | { kind: 'pen'; id: string }
   | { kind: 'segment'; id: string }
@@ -202,6 +204,28 @@ function onCounterGrab(id: string, event: PointerEvent) {
  * travels is not a re-placement at all, so it leaves possession untouched —
  * the ball only moves once the pointer does.
  */
+function onMarkerGrab(id: string, event: PointerEvent) {
+  if (props.tool === 'erase') {
+    event.stopPropagation()
+    board.deleteMarker(id)
+    return
+  }
+  if (props.tool !== 'select' || dragIsLive()) return
+  event.stopPropagation()
+  capture(event)
+  board.commit() // one entry for the whole drag
+  const at = toPitch(event)
+  drag.value = {
+    kind: 'marker',
+    id,
+    pointerId: event.pointerId,
+    origin: at,
+    moved: false,
+    startedAt: Date.now(),
+  }
+  board.moveMarker(id, at)
+}
+
 function onBallGrab(event: PointerEvent) {
   if (props.tool !== 'select') return
   if (dragIsLive()) return
@@ -232,6 +256,10 @@ function onPointerDown(event: PointerEvent) {
     capture(event)
     const style = props.tool === 'arrow-run' ? 'run' : 'pass'
     drag.value = { kind: 'segment', id: board.startArrow(at, props.drawColor, style), ...shared }
+  } else if (props.tool === 'cone') {
+    // Placed on press rather than as a drag: laying out a grid is a
+    // sequence of taps, and a cone has no size to drag out.
+    board.addMarker(at)
   } else if (props.tool === 'line') {
     capture(event)
     drag.value = { kind: 'segment', id: board.startLine(at, props.drawColor), ...shared }
@@ -244,6 +272,7 @@ function onPointerMove(event: PointerEvent) {
   const at = toPitch(event)
   noteTravel(active, at)
   if (active.kind === 'counter') board.moveCounter(active.id, at)
+  else if (active.kind === 'marker') board.moveMarker(active.id, at)
   else if (active.kind === 'ball') {
     if (active.moved) board.moveBall(at)
   } else if (active.kind === 'pen') board.extendPen(active.id, at)
@@ -262,6 +291,8 @@ function onPointerUp(event: PointerEvent) {
     // press. Leaving it armed turns an ordinary nudge-release-regrab rhythm
     // into a rename prompt with no drag.
     if (active.moved && lastCounterPress?.id === active.id) lastCounterPress = null
+  } else if (active.kind === 'marker') {
+    board.moveMarker(active.id, at)
   } else if (active.kind === 'ball') {
     if (active.moved) board.dropBall(at)
   } else if (active.kind === 'pen') {
@@ -290,6 +321,13 @@ function onPointerUp(event: PointerEvent) {
       <rect :x="0" :y="0" :width="PITCH_W" :height="PITCH_H" fill="#2e7d32" />
       <PitchMarkings :type="board.state.pitch.type" />
       <DrawingLayer :drawings="board.state.drawings" @hit="onDrawingHit" />
+      <ConeMarker
+        v-for="marker in board.state.markers"
+        :key="marker.id"
+        :marker="marker"
+        :rotated="board.state.pitch.rotated"
+        @grab="onMarkerGrab(marker.id, $event)"
+      />
       <PlayerCounter
         v-for="counter in board.state.counters"
         :key="counter.id"

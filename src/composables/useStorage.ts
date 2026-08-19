@@ -48,6 +48,19 @@ function isValidBall(value: unknown): boolean {
   )
 }
 
+function isValidMarker(value: unknown): boolean {
+  return isObject(value) && typeof value.id === 'string' && isVec(value.pos)
+}
+
+/**
+ * Cones arrived after version 1 shipped, so a pattern or draft written
+ * before them simply has no markers array. That is the coach's real saved
+ * work: treat a missing array as an empty one rather than rejecting it.
+ */
+function markersOf(value: Record<string, unknown>): unknown[] {
+  return Array.isArray(value.markers) ? value.markers : []
+}
+
 function isValidDrawing(value: unknown): boolean {
   if (!isObject(value)) return false
   if (value.kind === 'pen') return Array.isArray(value.points)
@@ -97,6 +110,9 @@ export function parsePattern(value: unknown): Pattern {
     }
     if (!isValidBall(frame.ball)) {
       throw new Error('That pattern has a damaged ball position.')
+    }
+    if (!markersOf(frame).every(isValidMarker)) {
+      throw new Error('That pattern has a damaged cone position.')
     }
   }
 
@@ -227,7 +243,7 @@ function toPattern(name: string, snap: BoardSnapshot, id: string, createdAt: str
     version: SCHEMA_VERSION,
     pitch: copy.pitch,
     drawings: copy.drawings,
-    frames: [{ counters: copy.counters, ball: copy.ball }],
+    frames: [{ counters: copy.counters, markers: copy.markers ?? [], ball: copy.ball }],
     createdAt,
     updatedAt: nowIso(),
   }
@@ -291,6 +307,7 @@ function patternToSnapshot(pattern: Pattern): BoardSnapshot {
   const frame = copy.frames[0]
   return {
     counters: frame.counters,
+    markers: markersOf(frame as unknown as Record<string, unknown>) as BoardSnapshot['markers'],
     ball: frame.ball,
     drawings: copy.drawings,
     pitch: copy.pitch,
@@ -320,6 +337,7 @@ function isValidSnapshot(value: unknown): boolean {
     isObject(value) &&
     Array.isArray(value.counters) &&
     value.counters.every(isValidCounter) &&
+    markersOf(value).every(isValidMarker) &&
     isValidBall(value.ball) &&
     Array.isArray(value.drawings) &&
     value.drawings.every(isValidDrawing) &&
@@ -337,7 +355,9 @@ function loadDraft(): BoardSnapshot | null {
   try {
     const raw = readRaw(DRAFT_KEY)
     if (!isValidSnapshot(raw)) return null
-    return raw as unknown as BoardSnapshot
+    // A draft written before cones existed has no markers array.
+    const draft = raw as Record<string, unknown>
+    return { ...draft, markers: markersOf(draft) } as unknown as BoardSnapshot
   } catch {
     return null
   }

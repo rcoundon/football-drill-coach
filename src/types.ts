@@ -2,7 +2,7 @@ export type PitchType = 'blank' | 'full' | 'half'
 
 export type CounterColor = 'red' | 'blue' | 'yellow' | 'green' | 'black'
 
-export type ToolMode = 'select' | 'pen' | 'arrow-run' | 'arrow-pass' | 'line' | 'erase'
+export type ToolMode = 'select' | 'pen' | 'arrow-run' | 'arrow-pass' | 'line' | 'cone' | 'erase'
 
 /** A position in pitch units: x in 0..PITCH_W, y in 0..PITCH_H. Never pixels. */
 export type Vec = { x: number; y: number }
@@ -14,6 +14,15 @@ export type Counter = {
   id: string
   color: CounterColor
   label: string
+  pos: Vec
+}
+
+/**
+ * A cone on the ground. Equipment, not a player: it has no colour, no
+ * label, and the ball can never belong to it.
+ */
+export type Marker = {
+  id: string
   pos: Vec
 }
 
@@ -63,6 +72,7 @@ export type Ball = {
  */
 export type Frame = {
   counters: Counter[]
+  markers: Marker[]
   ball: Ball
 }
 

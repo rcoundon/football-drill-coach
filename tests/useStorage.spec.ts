@@ -10,6 +10,7 @@ import type { BoardSnapshot } from '../src/composables/useBoard'
 function snap(): BoardSnapshot {
   return {
     counters: [{ id: 'a', color: 'red', label: '1', pos: { x: 10, y: 10 } }],
+    markers: [],
     ball: { pos: { x: 5, y: 5 }, attachedTo: null },
     drawings: [],
     pitch: { type: 'full', rotated: false },
@@ -473,5 +474,57 @@ describe('straight-line drawings', () => {
     const broken = structuredClone(saved)
     ;(broken.drawings[0] as { to: unknown }).to = 'over there'
     expect(() => parsePattern(broken)).toThrow(/damaged drawing/i)
+  })
+})
+
+describe('cones', () => {
+  it('round-trips cones through save and load', () => {
+    const store = useStorage()
+    const withCones = { ...snap(), markers: [{ id: 'm1', pos: { x: 20, y: 20 } }] }
+    const saved = store.savePattern('Grid', withCones)
+    expect(store.patternToSnapshot(saved).markers).toEqual(withCones.markers)
+  })
+
+  it('keeps cones in the frame, alongside the players', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Grid', {
+      ...snap(),
+      markers: [{ id: 'm1', pos: { x: 20, y: 20 } }],
+    })
+    expect(saved.frames[0].markers).toHaveLength(1)
+  })
+
+  /**
+   * Every pattern saved before cones existed has no markers array. Those
+   * are the coach's real saved work and must keep loading.
+   */
+  it('loads a pattern saved before cones existed', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Older drill', snap())
+    const legacy = structuredClone(saved) as Record<string, unknown>
+    delete (legacy.frames as Record<string, unknown>[])[0].markers
+
+    expect(() => parsePattern(legacy)).not.toThrow()
+    expect(store.patternToSnapshot(parsePattern(legacy)).markers).toEqual([])
+  })
+
+  it('rejects a cone with a malformed position', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Grid', {
+      ...snap(),
+      markers: [{ id: 'm1', pos: { x: 20, y: 20 } }],
+    })
+    const broken = structuredClone(saved)
+    ;(broken.frames[0].markers[0] as { pos: unknown }).pos = 'somewhere'
+    expect(() => parsePattern(broken)).toThrow()
+  })
+
+  it('survives a draft written before cones existed', () => {
+    const store = useStorage()
+    store.saveDraft(snap())
+    const raw = JSON.parse(localStorage.getItem(DRAFT_KEY)!)
+    delete raw.markers
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(raw))
+    expect(store.loadDraft()?.markers).toEqual([])
   })
 })

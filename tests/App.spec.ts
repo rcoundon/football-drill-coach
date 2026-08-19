@@ -91,6 +91,54 @@ describe('resetting the board', () => {
   })
 })
 
+describe('dialogs', () => {
+  it('focuses the name field when the save prompt opens, so typing lands in it', async () => {
+    useBoard().addCounter('red')
+    wrapper = mount(App, { attachTo: document.body })
+    await wrapper.vm.$nextTick()
+
+    await wrapper.find('[data-save]').trigger('click')
+    await wrapper.vm.$nextTick()
+    await nextTick()
+
+    const input = wrapper.find('[role="dialog"] input').element
+    expect(document.activeElement).toBe(input)
+  })
+
+  /**
+   * Without this, typing a pattern name drives the tool shortcuts behind
+   * the dialog: "Cone grid" contains an r, so the board silently switches
+   * to the Run tool while the coach is naming their drill.
+   */
+  it('ignores tool shortcuts while a dialog is open', async () => {
+    useBoard().addCounter('red')
+    wrapper = mount(App, { attachTo: document.body })
+    await wrapper.vm.$nextTick()
+
+    await wrapper.find('[data-save]').trigger('click')
+    await wrapper.vm.$nextTick()
+
+    fire({ key: 'r' })
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[data-tool="arrow-run"]').classes()).not.toContain('is-active')
+    expect(wrapper.find('[data-tool="select"]').classes()).toContain('is-active')
+  })
+
+  it('ignores tool shortcuts while the library is open', async () => {
+    wrapper = mount(App, { attachTo: document.body })
+    await wrapper.vm.$nextTick()
+
+    await wrapper.find('[data-open]').trigger('click')
+    await wrapper.vm.$nextTick()
+
+    fire({ key: 'p' })
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[data-tool="pen"]').classes()).not.toContain('is-active')
+  })
+})
+
 describe('keyboard shortcuts', () => {
   it('switches to the pen tool on an unmodified "p"', async () => {
     wrapper = mount(App)
@@ -199,6 +247,7 @@ describe('renaming a counter label', () => {
 function sampleSnapshot(): BoardSnapshot {
   return {
     counters: [{ id: 'a', color: 'red', label: '1', pos: { x: 10, y: 10 } }],
+    markers: [],
     ball: { pos: { x: 5, y: 5 }, attachedTo: null },
     drawings: [],
     pitch: { type: 'full', rotated: false },

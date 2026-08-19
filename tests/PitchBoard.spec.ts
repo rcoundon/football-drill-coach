@@ -18,12 +18,12 @@ import type { ToolMode } from '../src/types'
  * throws. Constructing and dispatching the event ourselves sidesteps the
  * bug while still exercising a genuine native PointerEvent.
  *
- * `PlayerCounter`/`BallToken` deliberately put the pointerdown listener on
+ * `PlayerCounter`/`BallToken`/`ConeMarker` deliberately put the pointerdown listener on
  * the LAST child of their group (the enlarged transparent hit circle), not
  * on the group itself — see the paint-order note in PlayerCounter.vue. A
  * real browser's hit-testing lands a press there; jsdom has no layout
  * engine and does no hit-testing, so a synthetic dispatch on `[data-counter]`
- * / `[data-ball]` (the group) would silently miss that listener even though
+ * / `[data-ball]` / `[data-marker]` (the group) would silently miss that listener even though
  * the component is wired correctly. Route the dispatch to that last child
  * so the test exercises the same element a real press would.
  */
@@ -32,7 +32,10 @@ async function firePointer(
   type: string,
   opts: { clientX: number; clientY: number; pointerId: number },
 ) {
-  const isHitGroup = target.element.hasAttribute('data-counter') || target.element.hasAttribute('data-ball')
+  const isHitGroup =
+    target.element.hasAttribute('data-counter') ||
+    target.element.hasAttribute('data-ball') ||
+    target.element.hasAttribute('data-marker')
   const node = (isHitGroup ? target.element.lastElementChild : null) ?? target.element
   const event = new PointerEvent(type, { bubbles: true, cancelable: true, ...opts })
   node.dispatchEvent(event)
@@ -614,5 +617,63 @@ describe('drawing a straight line', () => {
     await firePointer(wrapper.find('svg'), 'pointerup', clientFor(20, 10))
 
     expect(board.counterById(c.id)!.pos.x).toBeCloseTo(startX, 4)
+  })
+})
+
+describe('cones', () => {
+  it('drops a cone where the pitch is tapped', async () => {
+    const board = useBoard()
+    const wrapper = mountBoard('cone')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('svg'), 'pointerdown', clientFor(30, 20))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(30, 20))
+
+    expect(board.state.markers).toHaveLength(1)
+    expect(board.state.markers[0].pos.x).toBeCloseTo(30, 4)
+    expect(board.state.markers[0].pos.y).toBeCloseTo(20, 4)
+  })
+
+  it('renders one cone per marker', async () => {
+    const board = useBoard()
+    board.addMarker({ x: 20, y: 20 })
+    board.addMarker({ x: 40, y: 20 })
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('[data-marker]')).toHaveLength(2)
+  })
+
+  it('drags a cone with the move tool', async () => {
+    const board = useBoard()
+    const marker = board.addMarker({ x: 50, y: 32 })
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-marker]'), 'pointerdown', clientFor(50, 32))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(20, 10))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(20, 10))
+
+    expect(board.markerById(marker.id)!.pos.x).toBeCloseTo(20, 4)
+  })
+
+  it('erases a cone', async () => {
+    const board = useBoard()
+    board.addMarker({ x: 50, y: 32 })
+    const wrapper = mountBoard('erase')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-marker]'), 'pointerdown', clientFor(50, 32))
+    expect(board.state.markers).toHaveLength(0)
+  })
+
+  it('does not drop a cone while another tool is active', async () => {
+    const board = useBoard()
+    const wrapper = mountBoard('pen')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('svg'), 'pointerdown', clientFor(30, 20))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(30, 20))
+
+    expect(board.state.markers).toHaveLength(0)
   })
 })

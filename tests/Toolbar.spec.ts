@@ -176,3 +176,21 @@ describe('clearing the board', () => {
     expect(wrapper.find('[data-reset]').attributes('disabled')).toBeUndefined()
   })
 })
+
+describe('the cone tool', () => {
+  it('is offered alongside the other tools', () => {
+    expect(mountToolbar().find('[data-tool="cone"]').exists()).toBe(true)
+  })
+
+  it('emits the cone tool when chosen', async () => {
+    const wrapper = mountToolbar()
+    await wrapper.find('[data-tool="cone"]').trigger('click')
+    expect(wrapper.emitted('update:tool')![0]).toEqual(['cone'])
+  })
+
+  it('offers Reset once there are only cones on the board', () => {
+    useBoard().addMarker({ x: 20, y: 20 })
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-reset]').attributes('disabled')).toBeUndefined()
+  })
+})
