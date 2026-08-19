@@ -209,3 +209,41 @@ describe('straight lines', () => {
     expect(board.state.drawings).toHaveLength(0)
   })
 })
+
+describe('state stays structured-cloneable after a discarded stroke', () => {
+  it('can still snapshot after a stray tap is discarded', () => {
+    const board = useBoard()
+    board.startPen({ x: 10, y: 10 }, '#fff')
+    const id = board.state.drawings[0].id
+    board.finishDrawing(id)
+    // A discarded stroke rewrites state.drawings. If that rewrite put
+    // reactive proxies back into raw state, the next commit cannot clone it.
+    expect(() => board.addCounter('red')).not.toThrow()
+  })
+
+  it('can still snapshot after a discarded stroke that had a real one before it', () => {
+    const board = useBoard()
+    const keep = board.startArrow({ x: 5, y: 5 }, '#fff', 'run')
+    board.updateSegment(keep, { x: 60, y: 40 })
+    board.finishDrawing(keep)
+
+    const tap = board.startPen({ x: 10, y: 10 }, '#fff')
+    board.finishDrawing(tap)
+
+    expect(() => board.addCounter('red')).not.toThrow()
+    expect(board.state.drawings).toHaveLength(1)
+  })
+
+  it('can still undo after a discarded stroke scrubbed the history', () => {
+    const board = useBoard()
+    board.addCounter('blue')
+    const keep = board.startArrow({ x: 5, y: 5 }, '#fff', 'run')
+    board.updateSegment(keep, { x: 60, y: 40 })
+    board.finishDrawing(keep)
+
+    const tap = board.startPen({ x: 10, y: 10 }, '#fff')
+    board.finishDrawing(tap)
+
+    expect(() => board.undo()).not.toThrow()
+  })
+})

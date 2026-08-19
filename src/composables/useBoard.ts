@@ -80,6 +80,22 @@ const redoStack = ref<BoardSnapshot[]>([])
 
 let idCounter = 0
 
+/**
+ * Filter an array that lives in reactive state, without poisoning it.
+ *
+ * Reading an array through Vue's reactive proxy hands back *proxied*
+ * elements, so a plain `arr.filter(...)` produces a new array full of
+ * proxies. Assigning that back stores proxies in the raw target, and
+ * `structuredClone` — which every snapshot depends on — cannot clone a
+ * proxy. The failure surfaces later and far away, as a DataCloneError on
+ * the next unrelated commit.
+ *
+ * Unwrap first, and the survivors stay plain.
+ */
+function rawFilter<T>(array: T[], keep: (item: T) => boolean): T[] {
+  return (toRaw(array) as T[]).filter((item) => keep(toRaw(item) as T))
+}
+
 /** A plain copy of the current state, safe to keep. */
 function snapshot(): BoardSnapshot {
   const raw = toRaw(state)
@@ -417,7 +433,7 @@ function updateSegment(id: string, to: Vec): void {
 function forgetDrawingInHistory(id: string): void {
   for (const stack of [undoStack, redoStack]) {
     for (const entry of stack.value) {
-      entry.drawings = entry.drawings.filter((d) => d.id !== id)
+      entry.drawings = rawFilter(entry.drawings, (d) => d.id !== id)
     }
   }
 }
@@ -448,7 +464,7 @@ function finishDrawing(id: string): void {
 
   if (!degenerate) return
 
-  state.drawings = state.drawings.filter((d) => d.id !== id)
+  state.drawings = rawFilter(state.drawings, (d) => d.id !== id)
 
   if (startEntry) {
     const index = undoStack.value.findIndex((entry) => toRaw(entry) === startEntry)
