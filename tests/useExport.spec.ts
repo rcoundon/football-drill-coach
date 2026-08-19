@@ -1,0 +1,135 @@
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
+import { useExport } from '../src/composables/useExport'
+
+beforeEach(() => {
+  document.body.innerHTML = ''
+  // The object URL is revoked on a timer, so every test drives that clock.
+  vi.useFakeTimers()
+  if (!URL.createObjectURL) {
+    Object.defineProperty(URL, 'createObjectURL', { value: vi.fn(() => 'blob:fake'), configurable: true })
+  }
+  if (!URL.revokeObjectURL) {
+    Object.defineProperty(URL, 'revokeObjectURL', { value: vi.fn(), configurable: true })
+  }
+})
+
+afterEach(() => {
+  vi.useRealTimers()
+  vi.restoreAllMocks()
+})
+
+describe('slugify', () => {
+  it('makes a filename-safe name', () => {
+    expect(useExport().slugify('Press trigger — 4-4-2!')).toBe('press-trigger-4-4-2')
+  })
+
+  it('falls back when the name has nothing usable', () => {
+    expect(useExport().slugify('!!!')).toBe('pattern')
+  })
+})
+
+describe('downloadText', () => {
+  it('clicks a link carrying the right filename', () => {
+    const clicks: string[] = []
+    const create = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      const el = create(tag) as HTMLAnchorElement
+      if (tag === 'a') el.click = () => clicks.push(el.download)
+      return el
+    })
+
+    useExport().downloadText('{}', 'patterns.json')
+    expect(clicks).toEqual(['patterns.json'])
+  })
+
+  it('does not leave the link in the document', () => {
+    useExport().downloadText('{}', 'patterns.json')
+    expect(document.querySelectorAll('a')).toHaveLength(0)
+  })
+})
+
+/**
+ * Revoking synchronously after link.click() is a long-standing cause of
+ * failed downloads outside Chromium: the browser has not started reading the
+ * blob yet when the URL is torn out from under it. The spec's target devices
+ * include tablets, so iPad Safari is the likely victim — for the PNG and the
+ * JSON alike.
+ */
+describe('object URL lifetime', () => {
+  it('does not revoke the object URL before the download can start', () => {
+    const revoke = vi.spyOn(URL, 'revokeObjectURL')
+
+    useExport().downloadText('{}', 'patterns.json')
+    expect(revoke).not.toHaveBeenCalled()
+
+    vi.runAllTimers()
+    expect(revoke).toHaveBeenCalledTimes(1)
+  })
+
+  it('revokes the same URL it handed the link', () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:the-one')
+    const revoke = vi.spyOn(URL, 'revokeObjectURL')
+
+    useExport().downloadBlob(new Blob(['x']), 'board.png')
+    vi.runAllTimers()
+
+    expect(revoke).toHaveBeenCalledWith('blob:the-one')
+  })
+})
+
+/**
+ * A cancelled file picker used to leave the promise pending forever, leaking
+ * one per cancelled import — and leaving the caller's await hanging, so the
+ * coach got no feedback at all.
+ */
+describe('pickJsonFile when the coach cancels', () => {
+  function captureInput() {
+    const create = document.createElement.bind(document)
+    let input: HTMLInputElement | undefined
+    vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      const el = create(tag)
+      if (tag === 'input') {
+        input = el as HTMLInputElement
+        el.click = () => {}
+      }
+      return el
+    })
+    return () => input!
+  }
+
+  it('rejects when the picker reports a cancel', async () => {
+    const input = captureInput()
+    // The assertion is attached before the rejection is triggered, so the
+    // rejection is never momentarily unhandled.
+    const settled = expect(useExport().pickJsonFile()).rejects.toThrow(/no file/i)
+
+    input().dispatchEvent(new Event('cancel'))
+
+    await settled
+  })
+
+  it('rejects when the picker closes without reporting anything', async () => {
+    captureInput()
+    const settled = expect(useExport().pickJsonFile()).rejects.toThrow(/no file/i)
+
+    // Every browser gives the window its focus back; not all fire `cancel`.
+    window.dispatchEvent(new Event('focus'))
+    await vi.advanceTimersByTimeAsync(2000)
+
+    await settled
+  })
+
+  it('still resolves with the file when one is chosen', async () => {
+    const input = captureInput()
+    const pending = useExport().pickJsonFile()
+
+    const file = new File(['[]'], 'patterns.json', { type: 'application/json' })
+    Object.defineProperty(input(), 'files', { value: [file], configurable: true })
+    // A chosen file also returns focus to the window; the change must win.
+    window.dispatchEvent(new Event('focus'))
+    input().dispatchEvent(new Event('change'))
+    await vi.advanceTimersByTimeAsync(2000)
+
+    await expect(pending).resolves.toBe('[]')
+  })
+})
