@@ -929,3 +929,75 @@ describe('renaming a counter, and where focus ends up', () => {
     expect(board.counterById(counter.id)!.pos.x).toBeCloseTo(startX, 4)
   })
 })
+
+describe('tap gestures that finish on release', () => {
+  /**
+   * The counter's hit target is 4.2 units where the disc is 2.4, so a press
+   * lands well off centre routinely. Travel must be measured from where the
+   * press landed, not from the counter's middle, or a stationary press near
+   * the edge reads as a drag and never renames.
+   */
+  it('renames on a stationary press that lands off the counter centre', async () => {
+    const board = useBoard()
+    const counter = board.addCounter('red')
+    const edge = { x: counter.pos.x + 3, y: counter.pos.y }
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(edge.x, edge.y))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(edge.x, edge.y))
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(edge.x, edge.y))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(edge.x, edge.y))
+
+    expect(wrapper.emitted('rename')).toBeTruthy()
+  })
+
+  it('abandons a rename when the gesture is cancelled', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(50, 32))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(50, 32))
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(50, 32))
+    await firePointer(wrapper.find('svg'), 'pointercancel', clientFor(50, 32))
+
+    expect(wrapper.emitted('rename')).toBeFalsy()
+  })
+
+  /** A second finger's release must not complete someone else's gesture. */
+  it('ignores a release from a different pointer', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(50, 32))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(50, 32))
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(50, 32))
+    await firePointer(wrapper.find('svg'), 'pointerup', { ...clientFor(50, 32), pointerId: 7 })
+
+    expect(wrapper.emitted('rename')).toBeFalsy()
+  })
+
+  it('abandons a label placement when the gesture is cancelled', async () => {
+    const wrapper = mountBoard('text')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('svg'), 'pointerdown', clientFor(30, 20))
+    await firePointer(wrapper.find('svg'), 'pointercancel', clientFor(30, 20))
+
+    expect(wrapper.emitted('addLabel')).toBeFalsy()
+  })
+
+  it('does not place a label on a different pointer\'s release', async () => {
+    const wrapper = mountBoard('text')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('svg'), 'pointerdown', clientFor(30, 20))
+    await firePointer(wrapper.find('svg'), 'pointerup', { ...clientFor(30, 20), pointerId: 7 })
+
+    expect(wrapper.emitted('addLabel')).toBeFalsy()
+  })
+})

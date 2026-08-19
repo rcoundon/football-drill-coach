@@ -94,7 +94,7 @@ type Vec = { x: number; y: number }   // pitch units: x 0..100, y 0..64.76
 type Counter = {
   id: string
   color: CounterColor
-  label: string        // auto-assigned "1".."n" within its colour, editable
+  label: string        // '' until the coach writes one; see Counter labels
   pos: Vec
 }
 

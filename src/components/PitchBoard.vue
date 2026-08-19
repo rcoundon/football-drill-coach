@@ -78,26 +78,43 @@ const drag = ref<Drag | null>(null)
 let lastCounterPress: { id: string; at: number; pos: Vec } | null = null
 let lastLabelPress: { id: string; at: number; pos: Vec } | null = null
 
-/** Where the text tool was pressed, until the release that places the label. */
-let pendingLabelAt: Vec | null = null
+/**
+ * A gesture that finishes on release rather than on the press: placing a
+ * label, or the second half of a double press to rename.
+ *
+ * The pointer id belongs to the gesture so a second finger's release cannot
+ * finish someone else's, and the origin is recorded so travel is measured
+ * from where the press actually landed rather than from the target's
+ * centre — a counter's hit target is nearly twice its drawn radius, so a
+ * press lands off centre routinely.
+ */
+type PendingTap =
+  | { kind: 'rename'; id: string; pointerId: number; origin: Vec }
+  | { kind: 'label'; pointerId: number; origin: Vec }
 
-/** A counter awaiting the release of its second press, to be renamed. */
-let pendingRenameId: string | null = null
+/** How far a press may travel and still count as a tap, in pitch units. */
+const TAP_TOLERANCE = 1
+
+let pendingTap: PendingTap | null = null
 
 /** True for a pointermove/up belonging to some pointer other than the dragging one. */
 function isOtherPointer(event: PointerEvent): boolean {
   return drag.value !== null && drag.value.pointerId !== event.pointerId
 }
 
-function clearDrag(): void {
-  const active = drag.value
-  drag.value = null
-  if (!active) return
+/** Give up capture of one pointer, tolerating a pointer that is already gone. */
+function releaseCapture(pointerId: number): void {
   try {
-    svgEl.value?.releasePointerCapture(active.pointerId)
+    svgEl.value?.releasePointerCapture(pointerId)
   } catch {
     // The pointer is already gone; there was nothing left to release.
   }
+}
+
+function clearDrag(): void {
+  const active = drag.value
+  drag.value = null
+  if (active) releaseCapture(active.pointerId)
 }
 
 /**
@@ -201,7 +218,8 @@ function onCounterGrab(id: string, event: PointerEvent) {
      * back out of the field, so the coach double-presses, types, and
      * nothing lands. A drag before the release cancels it.
      */
-    pendingRenameId = id
+    capture(event)
+    pendingTap = { kind: 'rename', id, pointerId: event.pointerId, origin: at }
     return
   }
 
@@ -325,7 +343,8 @@ function onPointerDown(event: PointerEvent) {
      * straight back out of the dialog's field. A tap is finished on release
      * anyway, and waiting also lets a drag cancel the placement.
      */
-    pendingLabelAt = at
+    capture(event)
+    pendingTap = { kind: 'label', pointerId: event.pointerId, origin: at }
   } else if (props.tool === 'cone') {
     // Placed on press rather than as a drag: laying out a grid is a
     // sequence of taps, and a cone has no size to drag out.
@@ -350,21 +369,35 @@ function onPointerMove(event: PointerEvent) {
   else board.updateSegment(active.id, at)
 }
 
-function onPointerUp(event: PointerEvent) {
-  if (pendingRenameId) {
-    const id = pendingRenameId
-    pendingRenameId = null
-    const counter = board.counterById(id)
-    // A press that travelled was a drag, not a rename.
-    if (counter && distance(counter.pos, toPitch(event)) < 1) emit('rename', id)
-  }
+/**
+ * Finish a pending tap, if this release is the one that owns it. A press
+ * that travelled was a drag, not a tap, so it completes nothing.
+ */
+function settlePendingTap(event: PointerEvent): void {
+  const tap = pendingTap
+  if (!tap || tap.pointerId !== event.pointerId) return
+  pendingTap = null
+  releaseCapture(event.pointerId)
+  if (distance(tap.origin, toPitch(event)) > TAP_TOLERANCE) return
+  if (tap.kind === 'rename') emit('rename', tap.id)
+  else emit('addLabel', tap.origin)
+}
 
-  if (pendingLabelAt) {
-    const at = pendingLabelAt
-    pendingLabelAt = null
-    // Only a tap places a label; a drag across the pitch was not a placement.
-    if (distance(at, toPitch(event)) < 1) emit('addLabel', at)
+/**
+ * An interrupted gesture completes nothing. Without this a pointercancel
+ * would run the release path and open a dialog for a gesture the browser
+ * had already taken away.
+ */
+function onPointerCancel(event: PointerEvent): void {
+  if (pendingTap && pendingTap.pointerId === event.pointerId) {
+    pendingTap = null
+    releaseCapture(event.pointerId)
   }
+  clearDrag()
+}
+
+function onPointerUp(event: PointerEvent) {
+  settlePendingTap(event)
 
   const active = drag.value
   if (!active || isOtherPointer(event)) return
@@ -403,7 +436,7 @@ function onPointerUp(event: PointerEvent) {
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
-    @pointercancel="onPointerUp"
+    @pointercancel="onPointerCancel"
   >
     <g :transform="boardTransform">
       <rect :x="0" :y="0" :width="PITCH_W" :height="PITCH_H" fill="#2e7d32" />
