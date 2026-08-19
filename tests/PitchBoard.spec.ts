@@ -1001,3 +1001,78 @@ describe('tap gestures that finish on release', () => {
     expect(wrapper.emitted('addLabel')).toBeFalsy()
   })
 })
+
+describe('one tap tolerance, shared by every gesture', () => {
+  /**
+   * A local constant was shadowing the exported TAP_TOLERANCE, so travel
+   * between the two values counted as a tap in one place and a drag in
+   * another. This pins the boundary: 0.75 units is past 0.5, so the press
+   * travelled and cannot also be the opening half of a double press.
+   */
+  it('treats travel between 0.5 and 1 units as a drag, not a tap', async () => {
+    const board = useBoard()
+    const counter = board.addCounter('red')
+    const from = { ...counter.pos }
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(from.x, from.y))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(from.x + 0.75, from.y))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(from.x + 0.75, from.y))
+
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(from.x + 0.75, from.y))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(from.x + 0.75, from.y))
+
+    expect(wrapper.emitted('rename')).toBeFalsy()
+  })
+})
+
+describe('a pending tap while another press arrives', () => {
+  /** The pointer that started a gesture keeps it until it releases. */
+  it('does not let a second press steal a pending label placement', async () => {
+    const wrapper = mountBoard('text')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('svg'), 'pointerdown', clientFor(30, 20))
+    await firePointer(wrapper.find('svg'), 'pointerdown', { ...clientFor(70, 45), pointerId: 7 })
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(30, 20))
+
+    const placed = wrapper.emitted('addLabel')
+    expect(placed).toBeTruthy()
+    expect(placed![0][0]).toMatchObject({ x: expect.closeTo(30, 4), y: expect.closeTo(20, 4) })
+  })
+})
+
+describe('a cancel from an unrelated pointer', () => {
+  it('leaves an active drag alone', async () => {
+    const board = useBoard()
+    const counter = board.addCounter('red')
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(50, 32))
+    await firePointer(wrapper.find('svg'), 'pointercancel', { ...clientFor(50, 32), pointerId: 7 })
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(20, 10))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(20, 10))
+
+    expect(board.counterById(counter.id)!.pos.x).toBeCloseTo(20, 4)
+  })
+
+  /**
+   * A press the browser took away never happened, so it cannot count as
+   * the opening half of a double press.
+   */
+  it('stops a cancelled press arming a rename', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(50, 32))
+    await firePointer(wrapper.find('svg'), 'pointercancel', clientFor(50, 32))
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(50, 32))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(50, 32))
+
+    expect(wrapper.emitted('rename')).toBeFalsy()
+  })
+})

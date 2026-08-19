@@ -92,10 +92,27 @@ type PendingTap =
   | { kind: 'rename'; id: string; pointerId: number; origin: Vec }
   | { kind: 'label'; pointerId: number; origin: Vec }
 
-/** How far a press may travel and still count as a tap, in pitch units. */
-const TAP_TOLERANCE = 1
-
 let pendingTap: PendingTap | null = null
+
+/**
+ * True while a pending tap's own pointer is still down. A gesture belongs
+ * to the pointer that started it until that pointer releases, so another
+ * press must not quietly take its place — doing so lost the first gesture
+ * and leaked its capture.
+ */
+function pendingTapIsLive(): boolean {
+  if (!pendingTap) return false
+  const svg = svgEl.value
+  if (!svg || typeof svg.hasPointerCapture !== 'function') return true
+  try {
+    if (svg.hasPointerCapture(pendingTap.pointerId)) return true
+  } catch {
+    // Treat an unanswerable capture question as a pointer that is gone.
+  }
+  releaseCapture(pendingTap.pointerId)
+  pendingTap = null
+  return false
+}
 
 /** True for a pointermove/up belonging to some pointer other than the dragging one. */
 function isOtherPointer(event: PointerEvent): boolean {
@@ -218,6 +235,7 @@ function onCounterGrab(id: string, event: PointerEvent) {
      * back out of the field, so the coach double-presses, types, and
      * nothing lands. A drag before the release cancels it.
      */
+    if (pendingTapIsLive()) return
     capture(event)
     pendingTap = { kind: 'rename', id, pointerId: event.pointerId, origin: at }
     return
@@ -343,6 +361,7 @@ function onPointerDown(event: PointerEvent) {
      * straight back out of the dialog's field. A tap is finished on release
      * anyway, and waiting also lets a drag cancel the placement.
      */
+    if (pendingTapIsLive()) return
     capture(event)
     pendingTap = { kind: 'label', pointerId: event.pointerId, origin: at }
   } else if (props.tool === 'cone') {
@@ -393,7 +412,18 @@ function onPointerCancel(event: PointerEvent): void {
     pendingTap = null
     releaseCapture(event.pointerId)
   }
-  clearDrag()
+
+  /*
+   * A press the browser took away never happened, so it cannot be the
+   * opening half of a double press either — leaving these set would let the
+   * next press open a rename or an editor the coach never asked for.
+   */
+  lastCounterPress = null
+  lastLabelPress = null
+
+  // Only this pointer's drag ends. A cancel from some other pointer - a
+  // rejected palm beside a stylus - must not abandon the drag in progress.
+  if (drag.value?.pointerId === event.pointerId) clearDrag()
 }
 
 function onPointerUp(event: PointerEvent) {
