@@ -48,7 +48,7 @@ const SWATCHES: Record<CounterColor, string> = {
   red: '#e53935',
   blue: '#1e88e5',
   yellow: '#fdd835',
-  green: '#43a047',
+  purple: '#8e24aa',
   black: '#212121',
 }
 

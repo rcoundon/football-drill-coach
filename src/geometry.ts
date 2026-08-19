@@ -9,7 +9,7 @@ const PITCH_SCALE = 100 / 105
 export const PITCH_W = 100
 export const PITCH_H = Number((68 * PITCH_SCALE).toFixed(2)) // 64.76
 
-export const COUNTER_COLORS = ['red', 'blue', 'yellow', 'green', 'black'] as const satisfies readonly CounterColor[]
+export const COUNTER_COLORS = ['red', 'blue', 'yellow', 'purple', 'black'] as const satisfies readonly CounterColor[]
 
 /** Metres to pitch units. Used by the markings component. */
 export function m(metres: number): number {

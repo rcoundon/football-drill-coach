@@ -27,7 +27,7 @@ describe('COUNTER_COLORS', () => {
   })
 
   it('contains the agreed colours', () => {
-    expect([...COUNTER_COLORS]).toEqual(['red', 'blue', 'yellow', 'green', 'black'])
+    expect([...COUNTER_COLORS]).toEqual(['red', 'blue', 'yellow', 'purple', 'black'])
   })
 })
 

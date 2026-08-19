@@ -1,6 +1,6 @@
 export type PitchType = 'blank' | 'full' | 'half'
 
-export type CounterColor = 'red' | 'blue' | 'yellow' | 'green' | 'black'
+export type CounterColor = 'red' | 'blue' | 'yellow' | 'purple' | 'black'
 
 export type ToolMode = 'select' | 'pen' | 'arrow-run' | 'arrow-pass' | 'line' | 'cone' | 'erase'
 
