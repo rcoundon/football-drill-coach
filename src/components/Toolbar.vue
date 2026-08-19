@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { CounterColor, PitchType, ToolMode } from '../types'
 import { COUNTER_COLORS } from '../geometry'
 import { useBoard } from '../composables/useBoard'
+import { useViewport } from '../composables/useViewport'
 
 const props = withDefaults(
   defineProps<{
@@ -27,6 +28,8 @@ const emit = defineEmits<{
 }>()
 
 const board = useBoard()
+const { isNarrow } = useViewport()
+const menuOpen = ref(false)
 
 /** Nothing to clear: no players, no drawings, and the ball never moved. */
 const isBoardEmpty = computed(
@@ -124,6 +127,31 @@ const DRAW_COLOR_NAMES: Record<string, string> = {
     </div>
 
     <div class="group">
+      <button data-undo class="chip" :disabled="!board.canUndo.value" @click="board.undo()">Undo</button>
+      <button data-redo class="chip" :disabled="!board.canRedo.value" @click="board.redo()">Redo</button>
+    </div>
+
+    <button
+      v-if="isNarrow"
+      data-more
+      :class="['chip', 'more', { 'is-active': menuOpen }]"
+      :aria-expanded="menuOpen"
+      title="Pitch, saving and everything else"
+      @click="menuOpen = !menuOpen"
+    >☰ More</button>
+
+    <!--
+      Everything used once per drill rather than constantly. On a narrow
+      screen it lives behind the More button so the controls above can stay
+      big enough to hit with a finger; on a wide one it is simply part of
+      the toolbar.
+    -->
+    <div
+      v-if="!isNarrow || menuOpen"
+      :class="['secondary', { 'as-menu': isNarrow }]"
+      @click="menuOpen = false"
+    >
+    <div class="group">
       <span class="group-label">Pitch</span>
       <button
         v-for="p in PITCHES"
@@ -136,8 +164,6 @@ const DRAW_COLOR_NAMES: Record<string, string> = {
     </div>
 
     <div class="group">
-      <button data-undo class="chip" :disabled="!board.canUndo.value" @click="board.undo()">Undo</button>
-      <button data-redo class="chip" :disabled="!board.canRedo.value" @click="board.redo()">Redo</button>
       <button
         data-clear-players
         class="chip"
@@ -196,6 +222,7 @@ const DRAW_COLOR_NAMES: Record<string, string> = {
       <button data-export-json class="chip" @click="emit('exportJson')">Export</button>
       <button data-import-json class="chip" @click="emit('importJson')">Import</button>
     </div>
+    </div>
   </div>
 </template>
 
@@ -209,13 +236,53 @@ const DRAW_COLOR_NAMES: Record<string, string> = {
   color: #eceff1;
   align-items: center;
 }
-.group { display: flex; gap: 0.35rem; align-items: center; }
+/*
+ * Wrapping, not overflowing. Without this a group is a single unbreakable
+ * row: on a narrow screen the tools ran off the right edge, leaving Text
+ * and Erase unreachable with no scrollbar to find them.
+ */
+.group { display: flex; flex-wrap: wrap; min-width: 0; gap: 0.35rem; align-items: center; }
 .group-label { font-size: 0.7rem; text-transform: uppercase; opacity: 0.65; margin-right: 0.2rem; }
 .swatch {
   width: 2rem; height: 2rem; border-radius: 50%;
   border: 2px solid #ffffff40; cursor: pointer; padding: 0;
 }
 .swatch--sm { width: 1.4rem; height: 1.4rem; }
+
+.more { font-weight: 600; }
+
+.secondary { display: contents; }
+
+/*
+ * Everything that is not a tool, gathered into a panel under the More
+ * button. Scrolls rather than growing, so a long list can never push the
+ * pitch off the screen.
+ */
+.secondary.as-menu {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  width: 100%;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #ffffff26;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.secondary.as-menu .group { flex-wrap: wrap; }
+
+/*
+ * A finger is far bigger than a mouse pointer, and this gets used at the
+ * side of a pitch. 44px is the smallest reliably hittable target, so on a
+ * touch screen every control grows to it — even though that means fewer
+ * fit per row.
+ */
+@media (pointer: coarse) {
+  .chip { min-height: 44px; padding-inline: 0.85rem; }
+  .swatch { width: 44px; height: 44px; }
+  .swatch--sm { width: 36px; height: 36px; }
+}
 .swatch.is-active, .chip.is-active { border-color: #ffffff; }
 .chip {
   border: 1px solid #ffffff40; background: #37474f; color: inherit;

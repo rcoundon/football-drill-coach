@@ -7,9 +7,11 @@ import PatternLibrary from './components/PatternLibrary.vue'
 import { MAX_LABEL_LENGTH, MAX_NOTES_LENGTH, useBoard } from './composables/useBoard'
 import { useStorage } from './composables/useStorage'
 import { useExport } from './composables/useExport'
+import { useViewport } from './composables/useViewport'
 
 const board = useBoard()
 const storage = useStorage()
+const { isPortrait } = useViewport()
 const exporter = useExport()
 
 const tool = ref<ToolMode>('select')
@@ -266,7 +268,18 @@ onMounted(() => {
   // something the coach did, so it must not become the one undo entry a
   // freshly opened app offers.
   const draft = storage.loadDraft()
-  if (draft) board.restoreSnapshot(draft)
+  if (draft) {
+    board.restoreSnapshot(draft)
+  } else if (isPortrait.value) {
+    /*
+     * A landscape pitch on a portrait phone fills under a third of the
+     * screen, and a coach who has never seen the Rotate button has no
+     * reason to look for it. Only ever done for a genuinely fresh board:
+     * rotation belongs to the saved drill, so a pattern deliberately saved
+     * landscape must come back landscape whatever it is opened on.
+     */
+    board.restoreSnapshot({ ...board.snapshot(), pitch: { ...board.state.pitch, rotated: true } })
+  }
   window.addEventListener('keydown', onKeydown)
 })
 

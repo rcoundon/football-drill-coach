@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import type { ToolMode } from '../src/types'
 import Toolbar from '../src/components/Toolbar.vue'
 import { useBoard, __resetBoardForTests } from '../src/composables/useBoard'
 import { COUNTER_COLORS } from '../src/geometry'
+import { __resetViewportForTests } from '../src/composables/useViewport'
 
 beforeEach(() => __resetBoardForTests())
 
@@ -246,5 +247,63 @@ describe('the notes toggle', () => {
     useBoard().setNotes('Coaching points')
     const wrapper = mountToolbar()
     expect(wrapper.find('[data-reset]').attributes('disabled')).toBeUndefined()
+  })
+})
+
+describe('on a narrow screen', () => {
+  function stubNarrow(narrow: boolean) {
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes('max-width') ? narrow : false,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia
+    __resetViewportForTests()
+  }
+
+  afterEach(() => __resetViewportForTests())
+
+  it('keeps the tools and colours in reach without opening anything', () => {
+    stubNarrow(true)
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-tool="pen"]').exists()).toBe(true)
+    expect(wrapper.findAll('[data-add-counter]')).toHaveLength(COUNTER_COLORS.length)
+    expect(wrapper.find('[data-undo]').exists()).toBe(true)
+  })
+
+  /**
+   * The controls used once per drill move behind a menu so the ones used
+   * constantly can be big enough to hit.
+   */
+  it('puts the set-up controls behind a menu', () => {
+    stubNarrow(true)
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-more]').exists()).toBe(true)
+    expect(wrapper.find('[data-save]').exists()).toBe(false)
+    expect(wrapper.find('[data-pitch="full"]').exists()).toBe(false)
+  })
+
+  it('reveals them when the menu is opened', async () => {
+    stubNarrow(true)
+    const wrapper = mountToolbar()
+    await wrapper.find('[data-more]').trigger('click')
+    expect(wrapper.find('[data-save]').exists()).toBe(true)
+    expect(wrapper.find('[data-pitch="full"]').exists()).toBe(true)
+    expect(wrapper.find('[data-reset]').exists()).toBe(true)
+  })
+
+  it('closes the menu once something in it is used', async () => {
+    stubNarrow(true)
+    const wrapper = mountToolbar()
+    await wrapper.find('[data-more]').trigger('click')
+    await wrapper.find('[data-pitch="full"]').trigger('click')
+    expect(wrapper.find('[data-save]').exists()).toBe(false)
+  })
+
+  it('shows everything at once on a wide screen, with no menu', () => {
+    stubNarrow(false)
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-more]').exists()).toBe(false)
+    expect(wrapper.find('[data-save]').exists()).toBe(true)
+    expect(wrapper.find('[data-pitch="full"]').exists()).toBe(true)
   })
 })

@@ -4,6 +4,7 @@ import { nextTick } from 'vue'
 import App from '../src/App.vue'
 import { useBoard, __resetBoardForTests, type BoardSnapshot } from '../src/composables/useBoard'
 import { useStorage, PATTERNS_KEY } from '../src/composables/useStorage'
+import { __resetViewportForTests } from '../src/composables/useViewport'
 import { useExport } from '../src/composables/useExport'
 import { PITCH_H, PITCH_W } from '../src/geometry'
 
@@ -650,5 +651,67 @@ describe('drill notes', () => {
     await wrapper.vm.$nextTick()
 
     expect(wrapper.find('[data-tool="arrow-run"]').classes()).not.toContain('is-active')
+  })
+})
+
+describe('a fresh board on a portrait screen', () => {
+  function stubPortrait(portrait: boolean) {
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes('orientation') ? portrait : false,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia
+    __resetViewportForTests()
+  }
+
+  afterEach(() => __resetViewportForTests())
+
+  /**
+   * A landscape pitch on a portrait phone fills under a third of the
+   * screen. Starting rotated makes the board usable without the coach
+   * having to know the Rotate button exists.
+   */
+  it('starts rotated so the pitch fills the screen', async () => {
+    stubPortrait(true)
+    const board = useBoard()
+    wrapper = mount(App)
+    await wrapper.vm.$nextTick()
+    expect(board.state.pitch.rotated).toBe(true)
+  })
+
+  it('leaves a landscape screen alone', async () => {
+    stubPortrait(false)
+    const board = useBoard()
+    wrapper = mount(App)
+    await wrapper.vm.$nextTick()
+    expect(board.state.pitch.rotated).toBe(false)
+  })
+
+  it('adds nothing to the undo stack', async () => {
+    stubPortrait(true)
+    const board = useBoard()
+    wrapper = mount(App)
+    await wrapper.vm.$nextTick()
+    expect(board.canUndo.value).toBe(false)
+  })
+
+  /**
+   * Rotation is a property of the saved drill. A coach who deliberately
+   * saved a landscape pattern must get it back landscape, whatever they
+   * are holding.
+   */
+  it('never overrides what a restored draft says', async () => {
+    stubPortrait(true)
+    const storage = useStorage()
+    const board = useBoard()
+    storage.saveDraft({
+      ...board.snapshot(),
+      pitch: { type: 'full', rotated: false },
+    })
+    __resetBoardForTests()
+
+    wrapper = mount(App)
+    await wrapper.vm.$nextTick()
+    expect(board.state.pitch.rotated).toBe(false)
   })
 })
