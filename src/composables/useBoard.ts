@@ -580,6 +580,20 @@ function updateSegment(id: string, to: Vec): void {
   drawing.to = drawing.kind === 'line' ? snapToAxis(drawing.from, point) : point
 }
 
+/**
+ * Bow an arrow off its straight line. Called on every pointer-move of a
+ * handle drag, so it deliberately does not commit — the grab does that.
+ *
+ * A bend of zero is stored as an absent field rather than a zero, so a
+ * straightened arrow is indistinguishable from one that was never bent.
+ */
+function setArrowBend(id: string, bend: number): void {
+  const drawing = drawingById(id)
+  if (!drawing || drawing.kind !== 'arrow') return
+  if (bend === 0) delete drawing.bend
+  else drawing.bend = bend
+}
+
 /** Erase every trace of a drawing from the undo and redo history. */
 function forgetDrawingInHistory(id: string): void {
   for (const stack of [undoStack, redoStack]) {
@@ -682,6 +696,7 @@ const board = {
   startArrow,
   startLine,
   updateSegment,
+  setArrowBend,
   finishDrawing,
   deleteDrawing,
   clearDrawings,

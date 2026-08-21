@@ -50,6 +50,15 @@ export type ArrowDrawing = {
   style: 'run' | 'pass'
   from: Vec
   to: Vec
+  /**
+   * How far the arrow bows off the straight line between its ends, in pitch
+   * units, signed by which side it bows towards. Absent or zero is straight.
+   *
+   * Held as an offset rather than a control point so it survives the board
+   * being rotated, and so an arrow saved before curves existed loads as the
+   * straight one it was.
+   */
+  bend?: number
 }
 
 /**

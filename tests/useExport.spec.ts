@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
-import { useExport } from '../src/composables/useExport'
+import { exportableClone, useExport } from '../src/composables/useExport'
 
 beforeEach(() => {
   document.body.innerHTML = ''
@@ -131,5 +131,39 @@ describe('pickJsonFile when the coach cancels', () => {
     await vi.advanceTimersByTimeAsync(2000)
 
     await expect(pending).resolves.toBe('[]')
+  })
+})
+
+/**
+ * The board carries editing affordances the coach never wants in an image —
+ * the bend handle on every arrow. They are marked transient rather than
+ * listed here, so a future affordance is excluded the day it is added.
+ */
+describe('exportableClone', () => {
+  function boardSvg(): SVGSVGElement {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    svg.setAttribute('viewBox', '0 0 100 65')
+    svg.innerHTML =
+      '<path data-drawing d="M 20 30 Q 40 40 60 30"></path>' +
+      '<g data-bend-handle data-transient><circle data-bend r="0.9"></circle></g>'
+    return svg
+  }
+
+  it('leaves the drill itself alone', () => {
+    expect(exportableClone(boardSvg()).querySelectorAll('[data-drawing]')).toHaveLength(1)
+  })
+
+  it('drops the editing affordances', () => {
+    expect(exportableClone(boardSvg()).querySelectorAll('[data-transient]')).toHaveLength(0)
+  })
+
+  it('drops what a transient element contains, not only the element', () => {
+    expect(exportableClone(boardSvg()).querySelectorAll('[data-bend]')).toHaveLength(0)
+  })
+
+  it('does not disturb the board it copied', () => {
+    const svg = boardSvg()
+    exportableClone(svg)
+    expect(svg.querySelectorAll('[data-transient]')).toHaveLength(1)
   })
 })

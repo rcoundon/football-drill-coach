@@ -107,8 +107,23 @@ const NOTES_LINE_HEIGHT = 42
  * properly. The board keeps its own dimensions either way — the image just
  * grows by however much the notes need, so nothing ever covers the pitch.
  */
-function svgToPngBlob(svg: SVGSVGElement, notes = '', pixelWidth = 1600): Promise<Blob> {
+/**
+ * A copy of the board with its editing affordances removed.
+ *
+ * The bend handles are on screen whenever the Move tool is selected, which
+ * is most of the time — rasterising the live board would bake a dot onto
+ * every arrow in the coach's image. Anything marked `data-transient` is
+ * dropped, so an affordance added later is excluded without anyone having to
+ * remember this function exists.
+ */
+export function exportableClone(svg: SVGSVGElement): SVGSVGElement {
   const clone = svg.cloneNode(true) as SVGSVGElement
+  for (const transient of clone.querySelectorAll('[data-transient]')) transient.remove()
+  return clone
+}
+
+function svgToPngBlob(svg: SVGSVGElement, notes = '', pixelWidth = 1600): Promise<Blob> {
+  const clone = exportableClone(svg)
   const viewBox = (clone.getAttribute('viewBox') ?? '0 0 100 65').split(/\s+/).map(Number)
   const aspect = viewBox[2] / viewBox[3]
   const width = pixelWidth

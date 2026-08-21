@@ -93,7 +93,11 @@ function isValidDrawing(value: unknown): boolean {
   if (!isObject(value)) return false
   if (value.kind === 'pen') return Array.isArray(value.points)
   if (value.kind === 'arrow' || value.kind === 'line') {
-    return isVec(value.from) && isVec(value.to)
+    if (!isVec(value.from) || !isVec(value.to)) return false
+    // Curves arrived after version 1, so an arrow with no bend is a straight
+    // one saved before them. A bend that is present must still be a real
+    // distance: anything else reaches the renderer as an unreadable path.
+    return value.bend === undefined || (typeof value.bend === 'number' && Number.isFinite(value.bend))
   }
   return false
 }

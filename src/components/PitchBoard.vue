@@ -30,8 +30,8 @@ export const STALE_DRAG_MS = 10_000
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { ToolMode, Vec } from '../types'
-import { PITCH_H, PITCH_W, clientToPitch, distance, viewBoxOf } from '../geometry'
+import type { ArrowDrawing, ToolMode, Vec } from '../types'
+import { PITCH_H, PITCH_W, bendFor, clampToPitch, clientToPitch, distance, viewBoxOf } from '../geometry'
 import { useBoard } from '../composables/useBoard'
 import PitchMarkings from './PitchMarkings.vue'
 import PlayerCounter from './PlayerCounter.vue'
@@ -39,6 +39,7 @@ import BallToken from './BallToken.vue'
 import ConeMarker from './ConeMarker.vue'
 import PitchLabel from './PitchLabel.vue'
 import DrawingLayer from './DrawingLayer.vue'
+import BendHandle from './BendHandle.vue'
 
 const props = defineProps<{ tool: ToolMode; drawColor: string }>()
 const emit = defineEmits<{ rename: [id: string]; addLabel: [at: Vec]; editLabel: [id: string] }>()
@@ -55,6 +56,7 @@ type DragTarget =
   | { kind: 'ball' }
   | { kind: 'pen'; id: string }
   | { kind: 'segment'; id: string }
+  | { kind: 'bend'; id: string }
 
 /**
  * There is one drag at a time, and it belongs to one pointer.
@@ -375,6 +377,52 @@ function onDrawingHit(id: string) {
   if (props.tool === 'erase') board.deleteDrawing(id)
 }
 
+/**
+ * Every arrow's bend handle, shown only under the Move tool.
+ *
+ * Bending an arrow is moving part of it, so it belongs to the same mode as
+ * moving a player. Keeping the handles out of the drawing modes also means
+ * a press meant to start a new arrow can never land on one instead.
+ */
+const bendHandles = computed(() =>
+  props.tool === 'select'
+    ? board.state.drawings.filter((d): d is ArrowDrawing => d.kind === 'arrow')
+    : [],
+)
+
+function onBendGrab(id: string, event: PointerEvent) {
+  if (dragIsLive()) return
+  event.stopPropagation()
+  capture(event)
+  // The whole drag is one change, so the grab commits and the moves do not.
+  board.commit()
+  drag.value = {
+    kind: 'bend',
+    id,
+    pointerId: event.pointerId,
+    origin: toPitch(event),
+    // The bend is read off the chord, not carried from the grab point, so an
+    // offset would only fight the projection.
+    grabOffset: { x: 0, y: 0 },
+    moved: false,
+    startedAt: Date.now(),
+  }
+}
+
+/**
+ * Bow the arrow this drag holds to wherever its handle now sits.
+ *
+ * The handle is clamped to the pitch like every other position on the
+ * board. Without it a drag off the edge keeps deepening the bow, and the
+ * curve — which passes through the handle — arcs out over the touchline and
+ * into the exported image.
+ */
+function bendTo(id: string, at: Vec): void {
+  const arrow = board.drawingById(id)
+  if (!arrow || arrow.kind !== 'arrow') return
+  board.setArrowBend(id, bendFor(arrow.from, arrow.to, clampToPitch(at)))
+}
+
 function onPointerDown(event: PointerEvent) {
   if (dragIsLive()) return
   const at = toPitch(event)
@@ -426,6 +474,7 @@ function onPointerMove(event: PointerEvent) {
   else if (active.kind === 'ball') {
     if (active.moved) board.moveBall(at)
   } else if (active.kind === 'pen') board.extendPen(active.id, at)
+  else if (active.kind === 'bend') bendTo(active.id, at)
   else board.updateSegment(active.id, at)
 }
 
@@ -490,6 +539,8 @@ function onPointerUp(event: PointerEvent) {
   } else if (active.kind === 'pen') {
     board.extendPen(active.id, at)
     board.finishDrawing(active.id)
+  } else if (active.kind === 'bend') {
+    bendTo(active.id, at)
   } else {
     board.updateSegment(active.id, at)
     board.finishDrawing(active.id)
@@ -534,6 +585,12 @@ function onPointerUp(event: PointerEvent) {
         :label="label"
         :rotated="board.state.pitch.rotated"
         @grab="onLabelGrab(label.id, $event)"
+      />
+      <BendHandle
+        v-for="arrow in bendHandles"
+        :key="`bend-${arrow.id}`"
+        :arrow="arrow"
+        @grab="onBendGrab(arrow.id, $event)"
       />
       <BallToken
         v-if="board.state.ball.visible"

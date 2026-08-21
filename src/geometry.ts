@@ -93,3 +93,67 @@ export function snapToAxis(from: Vec, to: Vec): Vec {
   if (Math.abs(dx) <= Math.abs(dy) * tolerance) return { x: from.x, y: to.y }
   return { ...to }
 }
+
+/**
+ * How far off the chord the bend handle must be dragged before the arrow
+ * bows at all, in pitch units.
+ *
+ * A curve of a fraction of a unit is invisible at any projected size, but it
+ * still costs the arrow its straightness — and a coach who drags the handle
+ * back to the line means "straight", not "very nearly straight". Matching
+ * the board's tap tolerance keeps a hand's wobble from bending anything.
+ */
+export const BEND_DEADBAND = 0.75
+
+/**
+ * The unit normal of the chord from `from` to `to`, or null when there is no
+ * chord to take a normal of.
+ *
+ * Rotating the direction a quarter turn rather than picking an axis is what
+ * makes a bend mean the same thing on a diagonal arrow as on a flat one.
+ */
+function chordNormal(from: Vec, to: Vec): Vec | null {
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  const length = Math.hypot(dx, dy)
+  if (length === 0) return null
+  return { x: -dy / length, y: dx / length }
+}
+
+/**
+ * The control point of the quadratic that draws an arrow with this bend.
+ *
+ * Twice the bend, because a quadratic Bezier passes through the point
+ * halfway between its chord midpoint and its control point — so a control
+ * point one bend out would draw a curve only half a bend out, and the
+ * handle would not sit on the line it is bending.
+ */
+export function curveControlPoint(from: Vec, to: Vec, bend: number): Vec {
+  const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 }
+  const normal = chordNormal(from, to)
+  if (!normal) return mid
+  return { x: mid.x + normal.x * 2 * bend, y: mid.y + normal.y * 2 * bend }
+}
+
+/** Where the drawn curve actually passes at its midpoint: the handle's home. */
+export function curveMidpoint(from: Vec, to: Vec, bend: number): Vec {
+  const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 }
+  const normal = chordNormal(from, to)
+  if (!normal) return mid
+  return { x: mid.x + normal.x * bend, y: mid.y + normal.y * bend }
+}
+
+/**
+ * The bend a handle dragged to `at` asks for.
+ *
+ * Only the component across the chord counts: sliding the handle along the
+ * arrow does not describe a rounder or flatter pass, so ignoring that axis
+ * keeps the gesture doing one thing.
+ */
+export function bendFor(from: Vec, to: Vec, at: Vec): number {
+  const normal = chordNormal(from, to)
+  if (!normal) return 0
+  const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 }
+  const bend = (at.x - mid.x) * normal.x + (at.y - mid.y) * normal.y
+  return Math.abs(bend) < BEND_DEADBAND ? 0 : bend
+}

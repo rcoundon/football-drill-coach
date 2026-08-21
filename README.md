@@ -32,7 +32,7 @@ the text takes the label away again.
 
 | Tool | Key | What it does |
 | --- | --- | --- |
-| Move | `V` | Drag counters and the ball |
+| Move | `V` | Drag counters and the ball, and bend arrows |
 | Draw | `P` | Freehand pen |
 | Run | `R` | Solid arrow |
 | Pass | `S` | Dashed arrow |
@@ -42,6 +42,13 @@ the text takes the label away again.
 | Erase | `E` | Remove whatever you press |
 
 Undo is `Ctrl+Z` (`Cmd+Z` on a Mac), redo is `Ctrl+Shift+Z`.
+
+**Curved passes and runs.** Drag out a Run or a Pass as usual, then switch to
+**Move**: every arrow shows a small dot at its midpoint. Drag that dot to bow
+the arrow — a whipped cross, a pass bent round a defender, a run curving in
+behind. The arrowhead swings round to the angle the curve arrives at. Drag the
+dot back onto the straight line to make the arrow straight again. The dots are
+an editing aid only: they never appear in an exported image.
 
 **Drill notes** sit beside the board on a wide screen and beneath it on a
 narrow one: setup, coaching points, progressions. They are saved with the
