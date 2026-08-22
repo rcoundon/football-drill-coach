@@ -320,4 +320,36 @@ describe('arrow bend', () => {
     const board = useBoard()
     expect(() => board.setArrowBend('nope', 6)).not.toThrow()
   })
+
+  it('records where along the arrow the bow peaks', () => {
+    const board = useBoard()
+    const id = drawArrow()
+    board.setArrowBend(id, 6, 0.2)
+    expect((board.drawingById(id) as ArrowDrawing).bendAlong).toBe(0.2)
+  })
+
+  it('leaves an evenly bowed arrow with no offset to store', () => {
+    const board = useBoard()
+    const id = drawArrow()
+    board.setArrowBend(id, 6)
+    expect(board.drawingById(id)).not.toHaveProperty('bendAlong')
+  })
+
+  it('recentres the peak when the offset is dragged back to nothing', () => {
+    const board = useBoard()
+    const id = drawArrow()
+    board.setArrowBend(id, 6, 0.2)
+    board.setArrowBend(id, 6, 0)
+    expect(board.drawingById(id)).not.toHaveProperty('bendAlong')
+  })
+
+  it('takes the skew away with the bow when the arrow is straightened', () => {
+    const board = useBoard()
+    const id = drawArrow()
+    board.setArrowBend(id, 6, 0.2)
+    board.setArrowBend(id, 0, 0.2)
+    const arrow = board.drawingById(id) as ArrowDrawing
+    expect(arrow).not.toHaveProperty('bend')
+    expect(arrow).not.toHaveProperty('bendAlong')
+  })
 })

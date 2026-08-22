@@ -121,39 +121,82 @@ function chordNormal(from: Vec, to: Vec): Vec | null {
 }
 
 /**
- * The control point of the quadratic that draws an arrow with this bend.
+ * How far the handle may slide along the chord, as a fraction of its length,
+ * either side of the midpoint.
  *
- * Twice the bend, because a quadratic Bezier passes through the point
- * halfway between its chord midpoint and its control point — so a control
- * point one bend out would draw a curve only half a bend out, and the
- * handle would not sit on the line it is bending.
+ * Not a matter of taste: the control point slides twice as far as the handle,
+ * so at a quarter it reaches the chord's own end. Past that it leaves the
+ * chord's span, the curve doubles back on itself before reaching the far end,
+ * and what the coach sees is a kink rather than a curl.
  */
-export function curveControlPoint(from: Vec, to: Vec, bend: number): Vec {
-  const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 }
-  const normal = chordNormal(from, to)
-  if (!normal) return mid
-  return { x: mid.x + normal.x * 2 * bend, y: mid.y + normal.y * 2 * bend }
-}
+export const MAX_BEND_ALONG = 0.25
 
-/** Where the drawn curve actually passes at its midpoint: the handle's home. */
-export function curveMidpoint(from: Vec, to: Vec, bend: number): Vec {
-  const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 }
-  const normal = chordNormal(from, to)
-  if (!normal) return mid
-  return { x: mid.x + normal.x * bend, y: mid.y + normal.y * bend }
+/** The chord midpoint: where a straight arrow's handle sits. */
+function chordMidpoint(from: Vec, to: Vec): Vec {
+  return { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 }
 }
 
 /**
- * The bend a handle dragged to `at` asks for.
+ * Where the handle sits: the point the drawn curve passes through halfway
+ * along, offset from the chord midpoint both across the chord (`bend`) and
+ * along it (`bendAlong`, as a fraction of the chord's length).
  *
- * Only the component across the chord counts: sliding the handle along the
- * arrow does not describe a rounder or flatter pass, so ignoring that axis
- * keeps the gesture doing one thing.
+ * Holding both offsets relative to the chord rather than as board
+ * coordinates is what keeps a curve the same shape through a rotation.
  */
-export function bendFor(from: Vec, to: Vec, at: Vec): number {
+export function curveHandle(from: Vec, to: Vec, bend: number, bendAlong = 0): Vec {
+  const mid = chordMidpoint(from, to)
   const normal = chordNormal(from, to)
-  if (!normal) return 0
-  const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 }
-  const bend = (at.x - mid.x) * normal.x + (at.y - mid.y) * normal.y
-  return Math.abs(bend) < BEND_DEADBAND ? 0 : bend
+  if (!normal) return mid
+  const length = distance(from, to)
+  const along = clampBendAlong(bendAlong) * length
+  // The tangent is the normal turned back the other quarter turn.
+  return {
+    x: mid.x + normal.x * bend + normal.y * along,
+    y: mid.y + normal.y * bend - normal.x * along,
+  }
+}
+
+/**
+ * The control point of the quadratic that draws this arrow.
+ *
+ * Twice the handle's offset in both directions, because a quadratic Bezier
+ * passes through the point halfway between its chord midpoint and its
+ * control point — so a control point one offset out would draw a curve only
+ * half an offset out, and the handle would not sit on the line it is bending.
+ */
+export function curveControlPoint(from: Vec, to: Vec, bend: number, bendAlong = 0): Vec {
+  const mid = chordMidpoint(from, to)
+  const handle = curveHandle(from, to, bend, bendAlong)
+  return { x: 2 * handle.x - mid.x, y: 2 * handle.y - mid.y }
+}
+
+function clampBendAlong(along: number): number {
+  return Math.min(MAX_BEND_ALONG, Math.max(-MAX_BEND_ALONG, along))
+}
+
+/**
+ * The bend a handle dragged to `at` asks for: how deep the bow is, and where
+ * along the arrow it peaks.
+ *
+ * One drag sets both, so the handle simply follows the pointer. Straightening
+ * the arrow takes the skew with it — an arrow with no bow has no peak to
+ * place, and keeping a stale offset would make the next bend land off centre
+ * for no reason the coach could see.
+ */
+export function bendFor(from: Vec, to: Vec, at: Vec): { bend: number; along: number } {
+  const normal = chordNormal(from, to)
+  if (!normal) return { bend: 0, along: 0 }
+
+  const mid = chordMidpoint(from, to)
+  const offX = at.x - mid.x
+  const offY = at.y - mid.y
+
+  const bend = offX * normal.x + offY * normal.y
+  if (Math.abs(bend) < BEND_DEADBAND) return { bend: 0, along: 0 }
+
+  const alongDistance = offX * normal.y - offY * normal.x
+  if (Math.abs(alongDistance) < BEND_DEADBAND) return { bend, along: 0 }
+
+  return { bend, along: clampBendAlong(alongDistance / distance(from, to)) }
 }

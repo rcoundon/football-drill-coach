@@ -21,10 +21,10 @@ function penPath(drawing: PenDrawing): string {
  * a curved pass in the first place.
  */
 function arrowPath(drawing: ArrowDrawing): string {
-  const { from, to, bend } = drawing
+  const { from, to, bend, bendAlong } = drawing
   const start = `M ${n(from.x)} ${n(from.y)}`
   if (!bend) return `${start} L ${n(to.x)} ${n(to.y)}`
-  const control = curveControlPoint(from, to, bend)
+  const control = curveControlPoint(from, to, bend, bendAlong ?? 0)
   return `${start} Q ${n(control.x)} ${n(control.y)} ${n(to.x)} ${n(to.y)}`
 }
 </script>

@@ -1292,6 +1292,58 @@ describe('curving an arrow', () => {
     expect((board.drawingById(id) as { bend?: number }).bend).toBeUndefined()
   })
 
+  it('draws a bow that peaks off centre through a control point slid along the chord', async () => {
+    const board = useBoard()
+    const id = drawPass()
+    board.setArrowBend(id, 5, 0.1)
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+    // The chord is 40 long, so the control point slides 2 x 0.1 x 40 = 8.
+    expect(wrapper.find('[data-drawing]').attributes('d')).toBe('M 20 30 Q 48 40 60 30')
+  })
+
+  it("puts the handle where the bow peaks, not at the arrow's midpoint", async () => {
+    const board = useBoard()
+    const id = drawPass()
+    board.setArrowBend(id, 5, 0.25)
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+    const handle = wrapper.find('[data-bend]')
+    expect(Number(handle.attributes('cx'))).toBeCloseTo(50, 6)
+    expect(Number(handle.attributes('cy'))).toBeCloseTo(35, 6)
+  })
+
+  it('slides the peak along the arrow as the handle is dragged along it', async () => {
+    const board = useBoard()
+    const id = drawPass()
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    const handle = wrapper.find('[data-bend-handle]')
+    await firePointer(handle, 'pointerdown', clientFor(40, 30))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(48, 38))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(48, 38))
+
+    const arrow = board.drawingById(id) as { bend?: number; bendAlong?: number }
+    expect(arrow.bend).toBeCloseTo(8, 6)
+    expect(arrow.bendAlong).toBeCloseTo(0.2, 6)
+  })
+
+  it('recentres the peak when the handle is dragged back over the midpoint', async () => {
+    const board = useBoard()
+    const id = drawPass()
+    board.setArrowBend(id, 8, 0.2)
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    const handle = wrapper.find('[data-bend-handle]')
+    await firePointer(handle, 'pointerdown', clientFor(48, 38))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(40, 38))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(40, 38))
+
+    expect(board.drawingById(id)).not.toHaveProperty('bendAlong')
+  })
+
   it('keeps the handle on the pitch, so a curve cannot bow off the touchline', async () => {
     const board = useBoard()
     const id = drawPass()

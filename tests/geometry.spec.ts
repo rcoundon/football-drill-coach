@@ -10,9 +10,10 @@ import {
   clampToPitch,
   distance,
   curveControlPoint,
-  curveMidpoint,
+  curveHandle,
   bendFor,
   BEND_DEADBAND,
+  MAX_BEND_ALONG,
 } from '../src/geometry'
 
 describe('pitch dimensions', () => {
@@ -195,7 +196,7 @@ describe('curveControlPoint', () => {
     expect(curveControlPoint(from, to, 0)).toEqual({ x: 40, y: 30 })
   })
 
-  it('sits twice the bend off the chord, so the curve itself passes through the bend', () => {
+  it('sits twice the bend off the chord, so the curve itself passes through the handle', () => {
     // A quadratic Bezier's own midpoint is halfway to its control point.
     expect(curveControlPoint(from, to, 5)).toEqual({ x: 40, y: 40 })
   })
@@ -210,32 +211,52 @@ describe('curveControlPoint', () => {
     expect(control.y).toBeCloseTo(7, 5)
   })
 
+  it('slides twice as far along the chord as the handle does', () => {
+    // The handle is a tenth of the 40-unit chord past the midpoint, at x = 44.
+    expect(curveControlPoint(from, to, 5, 0.1)).toEqual({ x: 48, y: 40 })
+  })
+
+  it('slides the other way for a negative offset', () => {
+    expect(curveControlPoint(from, to, 5, -0.1)).toEqual({ x: 32, y: 40 })
+  })
+
   it('is the shared point of a zero-length chord rather than a division by zero', () => {
-    expect(curveControlPoint(from, { ...from }, 5)).toEqual(from)
+    expect(curveControlPoint(from, { ...from }, 5, 0.1)).toEqual(from)
   })
 })
 
-describe('curveMidpoint', () => {
+describe('curveHandle', () => {
   const from = { x: 20, y: 30 }
   const to = { x: 60, y: 30 }
 
-  it('is the chord midpoint when there is no bend', () => {
-    expect(curveMidpoint(from, to, 0)).toEqual({ x: 40, y: 30 })
+  it('is the chord midpoint when the arrow is straight', () => {
+    expect(curveHandle(from, to, 0)).toEqual({ x: 40, y: 30 })
   })
 
   it('is exactly one bend off the chord, where the drawn curve passes', () => {
-    expect(curveMidpoint(from, to, 5)).toEqual({ x: 40, y: 35 })
+    expect(curveHandle(from, to, 5)).toEqual({ x: 40, y: 35 })
   })
 
-  it('lies on the quadratic the same bend produces', () => {
-    const control = curveControlPoint(from, to, 7)
-    const onCurve = {
-      x: 0.25 * from.x + 0.5 * control.x + 0.25 * to.x,
-      y: 0.25 * from.y + 0.5 * control.y + 0.25 * to.y,
+  it('moves along the chord by the given fraction of its length', () => {
+    expect(curveHandle(from, to, 5, 0.25)).toEqual({ x: 50, y: 35 })
+  })
+
+  it('lies on the quadratic its own control point produces, skewed or not', () => {
+    for (const along of [0, 0.15, -0.25]) {
+      const control = curveControlPoint(from, to, 7, along)
+      const onCurve = {
+        x: 0.25 * from.x + 0.5 * control.x + 0.25 * to.x,
+        y: 0.25 * from.y + 0.5 * control.y + 0.25 * to.y,
+      }
+      const handle = curveHandle(from, to, 7, along)
+      expect(handle.x).toBeCloseTo(onCurve.x, 10)
+      expect(handle.y).toBeCloseTo(onCurve.y, 10)
     }
-    const mid = curveMidpoint(from, to, 7)
-    expect(mid.x).toBeCloseTo(onCurve.x, 10)
-    expect(mid.y).toBeCloseTo(onCurve.y, 10)
+  })
+
+  it('refuses to slide past the point where the curve would double back', () => {
+    const clamped = curveHandle(from, to, 5, 0.9)
+    expect(clamped).toEqual(curveHandle(from, to, 5, MAX_BEND_ALONG))
   })
 })
 
@@ -244,27 +265,50 @@ describe('bendFor', () => {
   const to = { x: 60, y: 30 }
 
   it('reads the perpendicular distance of the dragged point off the chord', () => {
-    expect(bendFor(from, to, { x: 40, y: 38 })).toBeCloseTo(8, 10)
+    expect(bendFor(from, to, { x: 40, y: 38 }).bend).toBeCloseTo(8, 10)
   })
 
   it('is negative on the other side of the chord', () => {
-    expect(bendFor(from, to, { x: 40, y: 22 })).toBeCloseTo(-8, 10)
+    expect(bendFor(from, to, { x: 40, y: 22 }).bend).toBeCloseTo(-8, 10)
   })
 
-  it('ignores travel along the chord, which changes nothing about the bow', () => {
-    expect(bendFor(from, to, { x: 55, y: 38 })).toBeCloseTo(8, 10)
+  it('reads travel along the chord as a fraction of its length', () => {
+    // Four units along a chord of forty.
+    expect(bendFor(from, to, { x: 44, y: 38 }).along).toBeCloseTo(0.1, 10)
+  })
+
+  it('is negative for travel back towards the start', () => {
+    expect(bendFor(from, to, { x: 36, y: 38 }).along).toBeCloseTo(-0.1, 10)
+  })
+
+  it('keeps the depth of the bow unchanged as the handle slides along', () => {
+    expect(bendFor(from, to, { x: 50, y: 38 }).bend).toBeCloseTo(8, 10)
+  })
+
+  it('stops the handle where the curve would otherwise double back', () => {
+    expect(bendFor(from, to, { x: 200, y: 38 }).along).toBe(MAX_BEND_ALONG)
+    expect(bendFor(from, to, { x: -200, y: 38 }).along).toBe(-MAX_BEND_ALONG)
   })
 
   it('straightens rather than leaving an invisible wobble', () => {
-    expect(bendFor(from, to, { x: 40, y: 30 + BEND_DEADBAND / 2 })).toBe(0)
+    expect(bendFor(from, to, { x: 40, y: 30 + BEND_DEADBAND / 2 }).bend).toBe(0)
   })
 
   it('keeps a bend just past the deadband', () => {
-    const bend = bendFor(from, to, { x: 40, y: 30 + BEND_DEADBAND * 2 })
+    const { bend } = bendFor(from, to, { x: 40, y: 30 + BEND_DEADBAND * 2 })
     expect(bend).toBeCloseTo(BEND_DEADBAND * 2, 10)
   })
 
-  it('is zero for a zero-length chord rather than a division by zero', () => {
-    expect(bendFor(from, { ...from }, { x: 40, y: 38 })).toBe(0)
+  it('recentres a handle nudged only slightly along, so an even arc stays even', () => {
+    expect(bendFor(from, to, { x: 40 + BEND_DEADBAND / 2, y: 38 }).along).toBe(0)
+  })
+
+  it('is straight and centred for a zero-length chord rather than a division by zero', () => {
+    expect(bendFor(from, { ...from }, { x: 40, y: 38 })).toEqual({ bend: 0, along: 0 })
+  })
+
+  it('reports no offset along a chord it has straightened, so nothing skewed is kept', () => {
+    const at = { x: 50, y: 30 + BEND_DEADBAND / 2 }
+    expect(bendFor(from, to, at)).toEqual({ bend: 0, along: 0 })
   })
 })

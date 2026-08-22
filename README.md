@@ -44,11 +44,17 @@ the text takes the label away again.
 Undo is `Ctrl+Z` (`Cmd+Z` on a Mac), redo is `Ctrl+Shift+Z`.
 
 **Curved passes and runs.** Drag out a Run or a Pass and it keeps a small dot
-at its midpoint. Drag that dot to bow the arrow — a whipped cross, a pass bent
-round a defender, a run curving in behind — and the arrowhead swings round to
-the angle the curve arrives at. Press anywhere else and you are drawing the
-next arrow, which takes the dot in turn. Drag a dot back onto the straight line
-to make that arrow straight again.
+at its midpoint. Drag that dot and the curve follows it: out from the line to
+bow the arrow, and along the line to move where the bow peaks — an even arc for
+a pass bent round a defender, a late one for a cross whipped in at the far
+post, an early one for a run that curves away and then straightens. The
+arrowhead swings round to the angle the curve arrives at. Press anywhere else
+and you are drawing the next arrow, which takes the dot in turn. Drag a dot
+back onto the straight line to make that arrow straight again.
+
+The dot slides between a quarter and three quarters of the way along. Further
+than that the curve doubles back on itself before reaching the far end, which
+reads as a kink rather than a curl.
 
 **Move** shows a dot on every arrow, for going back to one drawn earlier. The
 dots are an editing aid only: they never appear in an exported image.

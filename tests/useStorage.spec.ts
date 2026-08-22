@@ -521,6 +521,21 @@ describe('curved arrows', () => {
     expect(() => parsePattern(broken)).toThrow(/damaged drawing/i)
   })
 
+  it('round-trips a skewed bow through save and load', () => {
+    const store = useStorage()
+    const skewed = { ...curved, bendAlong: 0.2 }
+    const saved = store.savePattern('Switch', { ...snap(), drawings: [skewed] })
+    expect(store.patternToSnapshot(saved).drawings).toEqual([skewed])
+  })
+
+  it('rejects an offset along the arrow that is not a number', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Switch', { ...snap(), drawings: [curved] })
+    const broken = structuredClone(saved)
+    ;(broken.drawings[0] as { bendAlong?: unknown }).bendAlong = 'near the end'
+    expect(() => parsePattern(broken)).toThrow(/damaged drawing/i)
+  })
+
   it('rejects a bend of Infinity, which has no place on a pitch', () => {
     const store = useStorage()
     const saved = store.savePattern('Switch', { ...snap(), drawings: [curved] })
