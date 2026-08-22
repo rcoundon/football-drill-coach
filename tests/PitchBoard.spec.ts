@@ -1331,3 +1331,118 @@ describe('curving an arrow', () => {
     expect(board.state.drawings).toHaveLength(1)
   })
 })
+
+describe('bending the arrow just drawn', () => {
+  /** Drag an arrow out on the board with whichever tool is selected. */
+  async function dragArrow(wrapper: ReturnType<typeof mountBoard>) {
+    await firePointer(wrapper.find('svg'), 'pointerdown', clientFor(20, 30))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(60, 30))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(60, 30))
+  }
+
+  it('leaves a handle on the arrow without a trip through the move tool', async () => {
+    const wrapper = mountBoard('arrow-pass')
+    await wrapper.vm.$nextTick()
+    await dragArrow(wrapper)
+    expect(wrapper.findAll('[data-bend]')).toHaveLength(1)
+  })
+
+  it('does the same for a run', async () => {
+    const wrapper = mountBoard('arrow-run')
+    await wrapper.vm.$nextTick()
+    await dragArrow(wrapper)
+    expect(wrapper.findAll('[data-bend]')).toHaveLength(1)
+  })
+
+  it('bends that arrow when the handle is dragged', async () => {
+    const board = useBoard()
+    const wrapper = mountBoard('arrow-pass')
+    await wrapper.vm.$nextTick()
+    await dragArrow(wrapper)
+
+    const handle = wrapper.find('[data-bend-handle]')
+    await firePointer(handle, 'pointerdown', clientFor(40, 30))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(40, 38))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(40, 38))
+
+    expect((board.state.drawings[0] as { bend?: number }).bend).toBeCloseTo(8, 6)
+    expect(board.state.drawings).toHaveLength(1)
+  })
+
+  it('starts a fresh arrow when the press lands away from the handle', async () => {
+    const board = useBoard()
+    const wrapper = mountBoard('arrow-pass')
+    await wrapper.vm.$nextTick()
+    await dragArrow(wrapper)
+
+    await firePointer(wrapper.find('svg'), 'pointerdown', clientFor(20, 50))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(60, 50))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(60, 50))
+
+    expect(board.state.drawings).toHaveLength(2)
+  })
+
+  it('hands the handle to the newer arrow, so only one is offered at a time', async () => {
+    const wrapper = mountBoard('arrow-pass')
+    await wrapper.vm.$nextTick()
+    await dragArrow(wrapper)
+
+    await firePointer(wrapper.find('svg'), 'pointerdown', clientFor(20, 50))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(60, 50))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(60, 50))
+
+    const handles = wrapper.findAll('[data-bend]')
+    expect(handles).toHaveLength(1)
+    expect(Number(handles[0].attributes('cy'))).toBeCloseTo(50, 6)
+  })
+
+  it('offers no handle for a stray tap, which draws no arrow at all', async () => {
+    const board = useBoard()
+    const wrapper = mountBoard('arrow-pass')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('svg'), 'pointerdown', clientFor(20, 30))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(20, 30))
+
+    expect(board.state.drawings).toHaveLength(0)
+    expect(wrapper.find('[data-bend]').exists()).toBe(false)
+  })
+
+  it('takes the handle away when another tool is picked', async () => {
+    const wrapper = mountBoard('arrow-pass')
+    await wrapper.vm.$nextTick()
+    await dragArrow(wrapper)
+
+    await wrapper.setProps({ tool: 'pen' })
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[data-bend]').exists()).toBe(false)
+  })
+
+  it('takes the handle away when the arrow is undone', async () => {
+    const board = useBoard()
+    const wrapper = mountBoard('arrow-pass')
+    await wrapper.vm.$nextTick()
+    await dragArrow(wrapper)
+
+    board.undo()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[data-bend]').exists()).toBe(false)
+  })
+
+  it('still shows every arrow a handle under the move tool', async () => {
+    const wrapper = mountBoard('arrow-pass')
+    await wrapper.vm.$nextTick()
+    await dragArrow(wrapper)
+
+    await firePointer(wrapper.find('svg'), 'pointerdown', clientFor(20, 50))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(60, 50))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(60, 50))
+
+    await wrapper.setProps({ tool: 'select' })
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.findAll('[data-bend]')).toHaveLength(2)
+  })
+})

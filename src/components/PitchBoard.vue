@@ -29,7 +29,7 @@ export const STALE_DRAG_MS = 10_000
 </script>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { ArrowDrawing, ToolMode, Vec } from '../types'
 import { PITCH_H, PITCH_W, bendFor, clampToPitch, clientToPitch, distance, viewBoxOf } from '../geometry'
 import { useBoard } from '../composables/useBoard'
@@ -378,17 +378,46 @@ function onDrawingHit(id: string) {
 }
 
 /**
- * Every arrow's bend handle, shown only under the Move tool.
+ * The arrow drawn most recently under an arrow tool, so it can be bent
+ * without a trip through the Move tool first.
  *
- * Bending an arrow is moving part of it, so it belongs to the same mode as
- * moving a player. Keeping the handles out of the drawing modes also means
- * a press meant to start a new arrow can never land on one instead.
+ * Only the newest one: a handle on every arrow while an arrow tool is
+ * selected would put a hit target over each of them, and the next press is
+ * far more likely to be a new arrow than a second thought about an old one.
  */
-const bendHandles = computed(() =>
-  props.tool === 'select'
-    ? board.state.drawings.filter((d): d is ArrowDrawing => d.kind === 'arrow')
-    : [],
+const liveArrowId = ref<string | null>(null)
+
+/** Drawing arrows is the only mode that keeps one arrow live. */
+function isArrowTool(tool: ToolMode): boolean {
+  return tool === 'arrow-run' || tool === 'arrow-pass'
+}
+
+watch(
+  () => props.tool,
+  (tool) => {
+    if (!isArrowTool(tool)) liveArrowId.value = null
+  },
 )
+
+/**
+ * Which arrows offer a bend handle.
+ *
+ * Under Move, all of them: bending an arrow is moving part of it. Under Run
+ * or Pass, only the one last drawn, so a curved pass is one unbroken
+ * sequence — drag it out, bend it, then press elsewhere for the next arrow.
+ * Under any other tool, none, so a press meant to draw can never land on a
+ * handle instead.
+ *
+ * Derived from the drawings rather than from a remembered object, so an
+ * arrow that is undone, erased, or discarded as a stray tap takes its handle
+ * with it without anyone having to remember to clear it.
+ */
+const bendHandles = computed<ArrowDrawing[]>(() => {
+  const arrows = board.state.drawings.filter((d): d is ArrowDrawing => d.kind === 'arrow')
+  if (props.tool === 'select') return arrows
+  if (!isArrowTool(props.tool)) return []
+  return arrows.filter((a) => a.id === liveArrowId.value)
+})
 
 function onBendGrab(id: string, event: PointerEvent) {
   if (dragIsLive()) return
@@ -544,6 +573,10 @@ function onPointerUp(event: PointerEvent) {
   } else {
     board.updateSegment(active.id, at)
     board.finishDrawing(active.id)
+    // Only an arrow that survived gets a handle: `finishDrawing` discards a
+    // stray tap, and a handle on nothing would leave a hit target sitting
+    // exactly where the coach is about to press again.
+    if (isArrowTool(props.tool)) liveArrowId.value = board.drawingById(active.id) ? active.id : null
   }
   clearDrag()
 }
