@@ -247,3 +247,77 @@ describe('state stays structured-cloneable after a discarded stroke', () => {
     expect(() => board.undo()).not.toThrow()
   })
 })
+
+describe('arrow bend', () => {
+  /** A finished arrow along the horizontal, ready to be bent. */
+  function drawArrow(style: 'run' | 'pass' = 'pass'): string {
+    const board = useBoard()
+    const id = board.startArrow({ x: 20, y: 30 }, '#fff', style)
+    board.updateSegment(id, { x: 60, y: 30 })
+    board.finishDrawing(id)
+    return id
+  }
+
+  it('leaves a freshly drawn arrow straight', () => {
+    const board = useBoard()
+    expect((board.drawingById(drawArrow()) as ArrowDrawing).bend).toBeUndefined()
+  })
+
+  it('records the bend the handle was dragged to', () => {
+    const board = useBoard()
+    const id = drawArrow()
+    board.setArrowBend(id, 6)
+    expect((board.drawingById(id) as ArrowDrawing).bend).toBe(6)
+  })
+
+  it('bends runs as well as passes', () => {
+    const board = useBoard()
+    const id = drawArrow('run')
+    board.setArrowBend(id, -4)
+    expect((board.drawingById(id) as ArrowDrawing).bend).toBe(-4)
+  })
+
+  it('does not commit, because it is called on every pointer move of a drag', () => {
+    const board = useBoard()
+    const id = drawArrow()
+    board.setArrowBend(id, 6)
+    // One undo entry exists — the arrow's own. Bending pushed none of its
+    // own, so undo goes back past the whole arrow rather than to a straight one.
+    board.undo()
+    expect(board.state.drawings).toEqual([])
+    expect(board.canUndo.value).toBe(false)
+  })
+
+  it('is undone with the commit the handle grab made', () => {
+    const board = useBoard()
+    const id = drawArrow()
+    board.commit()
+    board.setArrowBend(id, 6)
+    board.undo()
+    expect((board.drawingById(id) as ArrowDrawing).bend).toBeUndefined()
+  })
+
+  it('is restored by redo', () => {
+    const board = useBoard()
+    const id = drawArrow()
+    board.commit()
+    board.setArrowBend(id, 6)
+    board.undo()
+    board.redo()
+    expect((board.drawingById(id) as ArrowDrawing).bend).toBe(6)
+  })
+
+  it('ignores a bend on a plain line, which marks out ground rather than movement', () => {
+    const board = useBoard()
+    const id = board.startLine({ x: 20, y: 30 }, '#fff')
+    board.updateSegment(id, { x: 60, y: 30 })
+    board.finishDrawing(id)
+    board.setArrowBend(id, 6)
+    expect(board.drawingById(id)).not.toHaveProperty('bend')
+  })
+
+  it('ignores an id that names nothing', () => {
+    const board = useBoard()
+    expect(() => board.setArrowBend('nope', 6)).not.toThrow()
+  })
+})

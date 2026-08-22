@@ -481,6 +481,55 @@ describe('straight-line drawings', () => {
   })
 })
 
+describe('curved arrows', () => {
+  const curved = {
+    id: 'a1',
+    kind: 'arrow' as const,
+    color: '#fff',
+    style: 'pass' as const,
+    from: { x: 20, y: 30 },
+    to: { x: 60, y: 30 },
+    bend: 6,
+  }
+
+  it('round-trips a bend through save and load', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Switch', { ...snap(), drawings: [curved] })
+    expect(store.patternToSnapshot(saved).drawings).toEqual([curved])
+  })
+
+  it('accepts a curved arrow in an imported file', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Switch', { ...snap(), drawings: [curved] })
+    expect(() => parsePattern(saved)).not.toThrow()
+  })
+
+  it('loads an arrow saved before curves existed as the straight one it was', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Switch', { ...snap(), drawings: [curved] })
+    const old = structuredClone(saved)
+    delete (old.drawings[0] as { bend?: number }).bend
+    expect(() => parsePattern(old)).not.toThrow()
+    expect(store.patternToSnapshot(old).drawings[0]).not.toHaveProperty('bend')
+  })
+
+  it('rejects a bend that is not a number, which would draw an unreadable path', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Switch', { ...snap(), drawings: [curved] })
+    const broken = structuredClone(saved)
+    ;(broken.drawings[0] as { bend: unknown }).bend = 'a lot'
+    expect(() => parsePattern(broken)).toThrow(/damaged drawing/i)
+  })
+
+  it('rejects a bend of Infinity, which has no place on a pitch', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Switch', { ...snap(), drawings: [curved] })
+    const broken = structuredClone(saved)
+    ;(broken.drawings[0] as { bend: unknown }).bend = Infinity
+    expect(() => parsePattern(broken)).toThrow(/damaged drawing/i)
+  })
+})
+
 describe('cones', () => {
   it('round-trips cones through save and load', () => {
     const store = useStorage()

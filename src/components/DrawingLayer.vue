@@ -1,11 +1,31 @@
 <script setup lang="ts">
-import type { Drawing, PenDrawing } from '../types'
+import type { ArrowDrawing, Drawing, PenDrawing } from '../types'
+import { curveControlPoint } from '../geometry'
 
 defineProps<{ drawings: Drawing[] }>()
 defineEmits<{ hit: [id: string] }>()
 
+/** Trim the floating-point tail off a coordinate; the pitch is 100 units wide. */
+function n(value: number): number {
+  return Number(value.toFixed(4))
+}
+
 function penPath(drawing: PenDrawing): string {
-  return drawing.points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
+  return drawing.points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${n(p.x)} ${n(p.y)}`).join(' ')
+}
+
+/**
+ * An arrow is a path rather than a line so a bent one can be the same
+ * element as a straight one — and so `orient="auto"` swings the head round
+ * to the angle the curve actually arrives at, which is the point of drawing
+ * a curved pass in the first place.
+ */
+function arrowPath(drawing: ArrowDrawing): string {
+  const { from, to, bend } = drawing
+  const start = `M ${n(from.x)} ${n(from.y)}`
+  if (!bend) return `${start} L ${n(to.x)} ${n(to.y)}`
+  const control = curveControlPoint(from, to, bend)
+  return `${start} Q ${n(control.x)} ${n(control.y)} ${n(to.x)} ${n(to.y)}`
 }
 </script>
 
@@ -37,6 +57,16 @@ function penPath(drawing: PenDrawing): string {
         stroke-width="0.5"
         @pointerdown="$emit('hit', d.id)"
       />
+      <path
+        v-else-if="d.kind === 'arrow'"
+        data-drawing
+        :d="arrowPath(d)"
+        :stroke="d.color"
+        stroke-width="0.5"
+        :stroke-dasharray="d.style === 'pass' ? '1.6 1.2' : undefined"
+        :marker-end="`url(#head-${d.id})`"
+        @pointerdown="$emit('hit', d.id)"
+      />
       <line
         v-else
         data-drawing
@@ -46,8 +76,6 @@ function penPath(drawing: PenDrawing): string {
         :y2="d.to.y"
         :stroke="d.color"
         stroke-width="0.5"
-        :stroke-dasharray="d.kind === 'arrow' && d.style === 'pass' ? '1.6 1.2' : undefined"
-        :marker-end="d.kind === 'arrow' ? `url(#head-${d.id})` : undefined"
         @pointerdown="$emit('hit', d.id)"
       />
     </template>
