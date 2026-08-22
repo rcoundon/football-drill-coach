@@ -52,7 +52,7 @@ arrowhead swings round to the angle the curve arrives at. Press anywhere else
 and you are drawing the next arrow, which takes the dot in turn. Drag a dot
 back onto the straight line to make that arrow straight again.
 
-The dot slides between a quarter and three quarters of the way along. Further
+The dot slides between a quarter and three-quarters of the way along. Further
 than that the curve doubles back on itself before reaching the far end, which
 reads as a kink rather than a curl.
 
