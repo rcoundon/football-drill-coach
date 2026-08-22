@@ -449,7 +449,8 @@ function onBendGrab(id: string, event: PointerEvent) {
 function bendTo(id: string, at: Vec): void {
   const arrow = board.drawingById(id)
   if (!arrow || arrow.kind !== 'arrow') return
-  board.setArrowBend(id, bendFor(arrow.from, arrow.to, clampToPitch(at)))
+  const { bend, along } = bendFor(arrow.from, arrow.to, clampToPitch(at))
+  board.setArrowBend(id, bend, along)
 }
 
 function onPointerDown(event: PointerEvent) {

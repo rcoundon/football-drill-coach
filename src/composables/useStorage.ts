@@ -89,15 +89,20 @@ function markersOf(value: Record<string, unknown>): unknown[] {
   return Array.isArray(value.markers) ? value.markers : []
 }
 
+/** Absent, or a number the renderer can actually put in a path. */
+function isOptionalNumber(value: unknown): boolean {
+  return value === undefined || (typeof value === 'number' && Number.isFinite(value))
+}
+
 function isValidDrawing(value: unknown): boolean {
   if (!isObject(value)) return false
   if (value.kind === 'pen') return Array.isArray(value.points)
   if (value.kind === 'arrow' || value.kind === 'line') {
     if (!isVec(value.from) || !isVec(value.to)) return false
-    // Curves arrived after version 1, so an arrow with no bend is a straight
-    // one saved before them. A bend that is present must still be a real
-    // distance: anything else reaches the renderer as an unreadable path.
-    return value.bend === undefined || (typeof value.bend === 'number' && Number.isFinite(value.bend))
+    // Curves arrived after version 1, so an arrow with neither field is a
+    // straight one saved before them. A value that is present must still be a
+    // real number: anything else reaches the renderer as an unreadable path.
+    return isOptionalNumber(value.bend) && isOptionalNumber(value.bendAlong)
   }
   return false
 }

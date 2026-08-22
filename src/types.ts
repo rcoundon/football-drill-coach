@@ -59,6 +59,16 @@ export type ArrowDrawing = {
    * straight one it was.
    */
   bend?: number
+  /**
+   * Where along the arrow the bow peaks, as a signed fraction of the
+   * straight-line length either side of the midpoint. Absent or zero is an
+   * even arc; positive leans towards the arrowhead.
+   *
+   * A fraction rather than a distance, so a curve keeps its shape if the
+   * arrow's length ever changes, and relative to the chord like `bend` so it
+   * survives the board being rotated.
+   */
+  bendAlong?: number
 }
 
 /**

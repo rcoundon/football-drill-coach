@@ -581,17 +581,26 @@ function updateSegment(id: string, to: Vec): void {
 }
 
 /**
- * Bow an arrow off its straight line. Called on every pointer-move of a
- * handle drag, so it deliberately does not commit — the grab does that.
+ * Bow an arrow off its straight line, and set where along it the bow peaks.
+ * Called on every pointer-move of a handle drag, so it deliberately does not
+ * commit — the grab does that.
  *
- * A bend of zero is stored as an absent field rather than a zero, so a
- * straightened arrow is indistinguishable from one that was never bent.
+ * Zeroes are stored as absent fields rather than zeroes, so a straightened
+ * arrow is indistinguishable from one that was never bent and an even arc
+ * from one that was never skewed. Straightening drops the skew as well:
+ * there is no peak to place on an arrow with no bow.
  */
-function setArrowBend(id: string, bend: number): void {
+function setArrowBend(id: string, bend: number, bendAlong = 0): void {
   const drawing = drawingById(id)
   if (!drawing || drawing.kind !== 'arrow') return
-  if (bend === 0) delete drawing.bend
-  else drawing.bend = bend
+  if (bend === 0) {
+    delete drawing.bend
+    delete drawing.bendAlong
+    return
+  }
+  drawing.bend = bend
+  if (bendAlong === 0) delete drawing.bendAlong
+  else drawing.bendAlong = bendAlong
 }
 
 /** Erase every trace of a drawing from the undo and redo history. */
