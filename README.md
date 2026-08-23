@@ -25,7 +25,9 @@ npm run dev
 
 ## Using it
 
-Click a colour under **Players** to drop a counter, then drag it into position.
+Click a colour under **Players** to drop a counter, then drag it into position. Dropping
+one switches you to **Move**, since positioning the new player is nearly always the next
+thing you do.
 Counters arrive unlabelled: most drills are explained by colour and position. If you want
 numbers or initials, double-press a counter and type them — up to four characters. Clearing
 the text takes the label away again.
@@ -56,8 +58,25 @@ The dot slides between a quarter and three-quarters of the way along. Further
 than that the curve doubles back on itself before reaching the far end, which
 reads as a kink rather than a curl.
 
-**Move** shows a dot on every arrow, for going back to one drawn earlier. The
-dots are an editing aid only: they never appear in an exported image.
+A hollow ring sits at each end of the arrow or line you just drew, alongside
+the bend dot. Drag a ring to move that end without leaving the tool — a curve
+keeps its shape and its lean while its ends move, and a line still snaps back
+onto the horizontal or vertical. Lines get rings too, though they have no bend
+dot: a line marks out ground rather than describing a movement.
+
+**Going back to a drawing.** Under **Move**, press any drawing to pick it up.
+It gets a pale halo and its handles appear — nothing else on the board does,
+so a busy drill stays readable. Drag its body to slide the whole thing without
+changing its shape, drag a ring to move one end, drag the dot to bend it.
+`Delete` or `Backspace` rubs it out. Press bare grass, press `Escape`, or
+change tool to put it down again. Everything is undoable.
+
+Handles sit above the players, so where one lands on a player the handle wins
+the press. That only happens for a drawing you deliberately picked up, and one
+press on grass gives the player back.
+
+The halo, dots and rings are an editing aid only: they never appear in an
+exported image.
 
 **Drill notes** sit beside the board on a wide screen and beneath it on a
 narrow one: setup, coaching points, progressions. They are saved with the
@@ -126,3 +145,6 @@ rotating the board, and switching between pitch types never move a counter.
 Recording and playing back movement. The saved format already stores a `frames` array
 with one frame per pattern, so recording can append frames without changing the schema
 or invalidating anything already saved.
+
+See [docs/roadmap.md](docs/roadmap.md) for that and the rest of what is worth building
+next.

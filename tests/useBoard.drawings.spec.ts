@@ -6,6 +6,7 @@ import {
   MIN_SEGMENT_LENGTH,
 } from '../src/composables/useBoard'
 import type { ArrowDrawing, PenDrawing } from '../src/types'
+import { PITCH_W } from '../src/geometry'
 
 beforeEach(() => __resetBoardForTests())
 
@@ -351,5 +352,198 @@ describe('arrow bend', () => {
     const arrow = board.drawingById(id) as ArrowDrawing
     expect(arrow).not.toHaveProperty('bend')
     expect(arrow).not.toHaveProperty('bendAlong')
+  })
+})
+
+describe('moving a segment end', () => {
+  function drawArrow(): string {
+    const board = useBoard()
+    const id = board.startArrow({ x: 20, y: 30 }, '#fff', 'pass')
+    board.updateSegment(id, { x: 60, y: 30 })
+    board.finishDrawing(id)
+    return id
+  }
+
+  function drawLine(): string {
+    const board = useBoard()
+    const id = board.startLine({ x: 20, y: 30 }, '#fff')
+    board.updateSegment(id, { x: 60, y: 30 })
+    board.finishDrawing(id)
+    return id
+  }
+
+  it('moves the end the coach grabbed', () => {
+    const board = useBoard()
+    const id = drawArrow()
+    board.moveSegmentEnd(id, 'to', { x: 70, y: 40 })
+    expect((board.drawingById(id) as ArrowDrawing).to).toEqual({ x: 70, y: 40 })
+  })
+
+  it('leaves the other end where it was', () => {
+    const board = useBoard()
+    const id = drawArrow()
+    board.moveSegmentEnd(id, 'to', { x: 70, y: 40 })
+    expect((board.drawingById(id) as ArrowDrawing).from).toEqual({ x: 20, y: 30 })
+  })
+
+  it('moves the start end too', () => {
+    const board = useBoard()
+    const id = drawArrow()
+    board.moveSegmentEnd(id, 'from', { x: 10, y: 10 })
+    expect((board.drawingById(id) as ArrowDrawing).from).toEqual({ x: 10, y: 10 })
+  })
+
+  it('keeps the end on the pitch', () => {
+    const board = useBoard()
+    const id = drawArrow()
+    board.moveSegmentEnd(id, 'to', { x: 500, y: -40 })
+    expect((board.drawingById(id) as ArrowDrawing).to).toEqual({ x: PITCH_W, y: 0 })
+  })
+
+  it('keeps a curve bowed the same way, because the bend is held against the chord', () => {
+    const board = useBoard()
+    const id = drawArrow()
+    board.setArrowBend(id, 6, 0.2)
+    board.moveSegmentEnd(id, 'to', { x: 60, y: 50 })
+    const arrow = board.drawingById(id) as ArrowDrawing
+    expect(arrow.bend).toBe(6)
+    expect(arrow.bendAlong).toBe(0.2)
+  })
+
+  it('does not commit, because it is called on every pointer move of a drag', () => {
+    const board = useBoard()
+    const id = drawArrow()
+    board.moveSegmentEnd(id, 'to', { x: 70, y: 40 })
+    board.undo()
+    expect(board.state.drawings).toEqual([])
+    expect(board.canUndo.value).toBe(false)
+  })
+
+  it('snaps a line back onto the horizontal, the way drawing one does', () => {
+    const board = useBoard()
+    const id = drawLine()
+    board.moveSegmentEnd(id, 'to', { x: 70, y: 31 })
+    expect((board.drawingById(id) as LineDrawing).to).toEqual({ x: 70, y: 30 })
+  })
+
+  it('snaps a line against the end that stayed put, not always against its start', () => {
+    const board = useBoard()
+    const id = drawLine()
+    board.moveSegmentEnd(id, 'from', { x: 10, y: 31 })
+    expect((board.drawingById(id) as LineDrawing).from).toEqual({ x: 10, y: 30 })
+  })
+
+  it('leaves an arrow unsnapped, since an arrow traces a movement', () => {
+    const board = useBoard()
+    const id = drawArrow()
+    board.moveSegmentEnd(id, 'to', { x: 70, y: 31 })
+    expect((board.drawingById(id) as ArrowDrawing).to).toEqual({ x: 70, y: 31 })
+  })
+
+  it('ignores a pen stroke, which has no two ends to speak of', () => {
+    const board = useBoard()
+    const id = board.startPen({ x: 10, y: 10 }, '#fff')
+    board.extendPen(id, { x: 20, y: 20 })
+    board.finishDrawing(id)
+    expect(() => board.moveSegmentEnd(id, 'to', { x: 70, y: 40 })).not.toThrow()
+    expect((board.drawingById(id) as PenDrawing).points).toHaveLength(2)
+  })
+
+  it('ignores an id that names nothing', () => {
+    const board = useBoard()
+    expect(() => board.moveSegmentEnd('nope', 'to', { x: 70, y: 40 })).not.toThrow()
+  })
+})
+
+describe('translateDrawing', () => {
+  function drawArrow(from = { x: 20, y: 30 }, to = { x: 60, y: 30 }): string {
+    const board = useBoard()
+    const id = board.startArrow(from, '#fff', 'pass')
+    board.updateSegment(id, to)
+    board.finishDrawing(id)
+    return id
+  }
+
+  function drawPen(points: { x: number; y: number }[]): string {
+    const board = useBoard()
+    const id = board.startPen(points[0], '#fff')
+    for (const point of points.slice(1)) board.extendPen(id, point)
+    board.finishDrawing(id)
+    return id
+  }
+
+  it('slides both ends of a segment by the same amount', () => {
+    const board = useBoard()
+    const id = drawArrow()
+    board.translateDrawing(id, { x: 5, y: -10 })
+    const arrow = board.drawingById(id) as ArrowDrawing
+    expect(arrow.from).toEqual({ x: 25, y: 20 })
+    expect(arrow.to).toEqual({ x: 65, y: 20 })
+  })
+
+  it('slides every point of a pen stroke', () => {
+    const board = useBoard()
+    const id = drawPen([
+      { x: 10, y: 10 },
+      { x: 20, y: 20 },
+      { x: 30, y: 10 },
+    ])
+    board.translateDrawing(id, { x: 5, y: 5 })
+    expect((board.drawingById(id) as PenDrawing).points).toEqual([
+      { x: 15, y: 15 },
+      { x: 25, y: 25 },
+      { x: 35, y: 15 },
+    ])
+  })
+
+  it('leaves a curve bowed the same way, since the bend rides the chord', () => {
+    const board = useBoard()
+    const id = drawArrow()
+    board.setArrowBend(id, 6, 0.2)
+    board.translateDrawing(id, { x: 5, y: 5 })
+    const arrow = board.drawingById(id) as ArrowDrawing
+    expect(arrow.bend).toBe(6)
+    expect(arrow.bendAlong).toBe(0.2)
+  })
+
+  it('stops at the touchline rather than carrying the drawing off the pitch', () => {
+    const board = useBoard()
+    const id = drawArrow({ x: 20, y: 30 }, { x: 60, y: 30 })
+    board.translateDrawing(id, { x: 1000, y: 0 })
+    const arrow = board.drawingById(id) as ArrowDrawing
+    expect(arrow.to.x).toBe(PITCH_W)
+    // The whole shape moved together: the 40-unit gap between the ends held.
+    expect(arrow.from.x).toBe(PITCH_W - 40)
+  })
+
+  it('keeps sliding along an edge it is already against', () => {
+    const board = useBoard()
+    const id = drawArrow({ x: 20, y: 0 }, { x: 60, y: 0 })
+    board.translateDrawing(id, { x: 10, y: -5 })
+    const arrow = board.drawingById(id) as ArrowDrawing
+    expect(arrow.from).toEqual({ x: 30, y: 0 })
+    expect(arrow.to).toEqual({ x: 70, y: 0 })
+  })
+
+  it('does not distort a drawing wider than the pitch it is pushed against', () => {
+    const board = useBoard()
+    const id = drawArrow({ x: 0, y: 30 }, { x: PITCH_W, y: 30 })
+    board.translateDrawing(id, { x: 20, y: 0 })
+    const arrow = board.drawingById(id) as ArrowDrawing
+    expect(arrow.to.x - arrow.from.x).toBe(PITCH_W)
+  })
+
+  it('does not commit, because it is called on every pointer move of a drag', () => {
+    const board = useBoard()
+    const id = drawArrow()
+    board.translateDrawing(id, { x: 5, y: 5 })
+    board.undo()
+    expect(board.state.drawings).toEqual([])
+    expect(board.canUndo.value).toBe(false)
+  })
+
+  it('ignores an id that names nothing', () => {
+    const board = useBoard()
+    expect(() => board.translateDrawing('nope', { x: 5, y: 5 })).not.toThrow()
   })
 })

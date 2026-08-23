@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { ToolMode } from '../types'
+import type { CounterColor, ToolMode } from '../types'
 import { COUNTER_COLORS } from '../geometry'
 import { useBoard } from '../composables/useBoard'
 import { useViewport } from '../composables/useViewport'
@@ -34,6 +34,22 @@ const emit = defineEmits<{
 }>()
 
 const board = useBoard()
+
+/**
+ * A new player arrives where the board decides, which is rarely where the
+ * coach wants them, so the next thing they do is drag them. Switching to
+ * Move saves a trip to the tool row for a step that follows nearly every
+ * time — and unlike Cone, a colour swatch is not a tool the coach chose to
+ * stay in, so there is nothing to switch back to.
+ *
+ * The rail does the same thing. Both are covered by their own tests, so the
+ * two layouts cannot drift apart on this.
+ */
+function addPlayer(color: CounterColor): void {
+  board.addCounter(color)
+  if (props.tool !== 'select') emit('update:tool', 'select')
+}
+
 const { isNarrow } = useViewport()
 const menuOpen = ref(false)
 
@@ -74,7 +90,7 @@ const saveTitle = computed(() =>
         :style="{ background: SWATCHES[color] }"
         :title="`Add a ${color} player`"
         :aria-label="`Add a ${color} player`"
-        @click="board.addCounter(color)"
+        @click="addPlayer(color)"
       />
     </div>
 

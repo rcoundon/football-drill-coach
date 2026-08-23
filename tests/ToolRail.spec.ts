@@ -29,6 +29,18 @@ describe('the tool rail', () => {
     expect(board.state.counters[0].color).toBe('blue')
   })
 
+  it('switches to Move, so the new player can be dragged straight away', async () => {
+    const wrapper = mountRail('arrow-pass')
+    await wrapper.find('[data-add-counter="blue"]').trigger('click')
+    expect(wrapper.emitted('update:tool')!.at(-1)).toEqual(['select'])
+  })
+
+  it('does not bother emitting when Move is already selected', async () => {
+    const wrapper = mountRail('select')
+    await wrapper.find('[data-add-counter="blue"]').trigger('click')
+    expect(wrapper.emitted('update:tool')).toBeUndefined()
+  })
+
   it('emits the chosen tool', async () => {
     const wrapper = mountRail()
     await wrapper.find('[data-tool="cone"]').trigger('click')

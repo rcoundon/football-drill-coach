@@ -24,6 +24,18 @@ describe('colour palette', () => {
     expect(board.state.counters).toHaveLength(1)
     expect(board.state.counters[0].color).toBe('blue')
   })
+
+  it('switches to Move, so the new player can be dragged straight away', async () => {
+    const wrapper = mountToolbar('arrow-pass')
+    await wrapper.find('[data-add-counter="blue"]').trigger('click')
+    expect(wrapper.emitted('update:tool')!.at(-1)).toEqual(['select'])
+  })
+
+  it('does not bother emitting when Move is already selected', async () => {
+    const wrapper = mountToolbar('select')
+    await wrapper.find('[data-add-counter="blue"]').trigger('click')
+    expect(wrapper.emitted('update:tool')).toBeUndefined()
+  })
 })
 
 describe('tool selection', () => {
