@@ -25,7 +25,9 @@ npm run dev
 
 ## Using it
 
-Click a colour under **Players** to drop a counter, then drag it into position.
+Click a colour under **Players** to drop a counter, then drag it into position. Dropping
+one switches you to **Move**, since positioning the new player is nearly always the next
+thing you do.
 Counters arrive unlabelled: most drills are explained by colour and position. If you want
 numbers or initials, double-press a counter and type them — up to four characters. Clearing
 the text takes the label away again.
