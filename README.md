@@ -56,12 +56,16 @@ The dot slides between a quarter and three-quarters of the way along. Further
 than that the curve doubles back on itself before reaching the far end, which
 reads as a kink rather than a curl.
 
-**Move** shows a dot on every arrow, for going back to one drawn earlier, and
-a hollow ring at each end of every arrow and line. Drag a ring to move that
-end — a curve keeps its shape and its lean while its ends move, and a line
-still snaps back onto the horizontal or vertical. Where a ring sits on top of
-a player, the player wins the press: dragging players is the commonest thing
-in Move mode, and the ring is still reachable anywhere the two do not overlap.
+A hollow ring sits at each end of the arrow or line you just drew, alongside
+the bend dot. Drag a ring to move that end without leaving the tool — a curve
+keeps its shape and its lean while its ends move, and a line still snaps back
+onto the horizontal or vertical. Lines get rings too, though they have no bend
+dot: a line marks out ground rather than describing a movement.
+
+**Move** shows the dot and both rings on every arrow, and the rings on every
+line, for going back to one drawn earlier. Where a ring sits on top of a
+player the player wins the press: dragging players is the commonest thing in
+Move mode, and the ring is still reachable anywhere the two do not overlap.
 
 The dots and rings are an editing aid only: they never appear in an exported
 image.

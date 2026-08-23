@@ -30,9 +30,11 @@ Still to do:
 ### A selection model, probably
 
 Endpoint handles exposed something worth deciding before either of the above.
-Every arrow now shows three handles the whole time **Move** is active, so a
-board with nine drawings carries twenty-seven of them. On a busy drill that
-is a lot of furniture over the top of the thing the coach is trying to read.
+Every arrow shows three handles the whole time **Move** is active, so a board
+with nine drawings carries twenty-seven of them. On a busy drill that is a lot
+of furniture over the top of the thing the coach is trying to read. The
+drawing tools escape this by showing handles only for the segment last drawn,
+which is exactly the selection idea below, arrived at from the other end.
 
 It also forced a priority call. An arrow nearly always starts or ends *on* a
 player — that is what a pass is — so both hit circles cover the same spot and

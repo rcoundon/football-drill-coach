@@ -1484,6 +1484,78 @@ describe('bending the arrow just drawn', () => {
     expect(wrapper.find('[data-bend]').exists()).toBe(false)
   })
 
+  it('leaves end handles on the arrow just drawn, so it can be adjusted straight away', async () => {
+    const wrapper = mountBoard('arrow-pass')
+    await wrapper.vm.$nextTick()
+    await dragArrow(wrapper)
+    expect(wrapper.findAll('[data-end]')).toHaveLength(2)
+  })
+
+  it('does the same for a line, which is drawn wrong as often as an arrow', async () => {
+    const wrapper = mountBoard('line')
+    await wrapper.vm.$nextTick()
+    await dragArrow(wrapper)
+    expect(wrapper.findAll('[data-end]')).toHaveLength(2)
+  })
+
+  it('offers a line no bend handle, since a line marks out ground', async () => {
+    const wrapper = mountBoard('line')
+    await wrapper.vm.$nextTick()
+    await dragArrow(wrapper)
+    expect(wrapper.find('[data-bend]').exists()).toBe(false)
+  })
+
+  it('moves the end of the arrow just drawn without a trip through the move tool', async () => {
+    const board = useBoard()
+    const wrapper = mountBoard('arrow-pass')
+    await wrapper.vm.$nextTick()
+    await dragArrow(wrapper)
+
+    const ends = wrapper.findAll('[data-end-handle]')
+    await firePointer(ends[0], 'pointerdown', clientFor(20, 30))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(10, 12))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(10, 12))
+
+    const arrow = board.state.drawings[0] as { from: Vec }
+    expect(arrow.from.x).toBeCloseTo(10, 6)
+    expect(board.state.drawings).toHaveLength(1)
+  })
+
+  it('hands the end handles to the newer arrow along with the bend handle', async () => {
+    const wrapper = mountBoard('arrow-pass')
+    await wrapper.vm.$nextTick()
+    await dragArrow(wrapper)
+
+    await firePointer(wrapper.find('svg'), 'pointerdown', clientFor(20, 50))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(60, 50))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(60, 50))
+
+    const ends = wrapper.findAll('[data-end]')
+    expect(ends).toHaveLength(2)
+    for (const end of ends) expect(Number(end.attributes('cy'))).toBeCloseTo(50, 6)
+  })
+
+  it('takes the end handles away when another tool is picked', async () => {
+    const wrapper = mountBoard('arrow-pass')
+    await wrapper.vm.$nextTick()
+    await dragArrow(wrapper)
+
+    await wrapper.setProps({ tool: 'pen' })
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[data-end]').exists()).toBe(false)
+  })
+
+  it('offers no end handles for a stray tap, which draws nothing at all', async () => {
+    const wrapper = mountBoard('arrow-pass')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('svg'), 'pointerdown', clientFor(20, 30))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(20, 30))
+
+    expect(wrapper.find('[data-end]').exists()).toBe(false)
+  })
+
   it('still shows every arrow a handle under the move tool', async () => {
     const wrapper = mountBoard('arrow-pass')
     await wrapper.vm.$nextTick()
@@ -1552,9 +1624,16 @@ describe('moving the ends of a drawing', () => {
     expect(xs[1]).toBeCloseTo(60, 6)
   })
 
-  it('hides them while a drawing tool is active, so they cannot be drawn over', async () => {
+  it('offers none on an arrow drawn earlier while a drawing tool is active', async () => {
     drawPass()
     const wrapper = mountBoard('arrow-pass')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-end]').exists()).toBe(false)
+  })
+
+  it('offers none at all under a tool that draws neither arrows nor lines', async () => {
+    drawPass()
+    const wrapper = mountBoard('pen')
     await wrapper.vm.$nextTick()
     expect(wrapper.find('[data-end]').exists()).toBe(false)
   })

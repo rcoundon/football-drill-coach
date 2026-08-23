@@ -380,16 +380,23 @@ function onDrawingHit(id: string) {
 }
 
 /**
- * The arrow drawn most recently under an arrow tool, so it can be bent
- * without a trip through the Move tool first.
+ * The segment drawn most recently under the tool that drew it, so it can be
+ * adjusted — bent, or its ends moved — without a trip through the Move tool
+ * first.
  *
- * Only the newest one: a handle on every arrow while an arrow tool is
- * selected would put a hit target over each of them, and the next press is
- * far more likely to be a new arrow than a second thought about an old one.
+ * Only the newest one: handles on every segment while a drawing tool is
+ * selected would put hit targets across the whole board, and the next press
+ * is far more likely to be a new drawing than a second thought about an old
+ * one.
  */
-const liveArrowId = ref<string | null>(null)
+const liveSegmentId = ref<string | null>(null)
 
-/** Drawing arrows is the only mode that keeps one arrow live. */
+/** The tools that draw a segment, and so keep one live afterwards. */
+function isSegmentTool(tool: ToolMode): boolean {
+  return tool === 'arrow-run' || tool === 'arrow-pass' || tool === 'line'
+}
+
+/** Arrows are the only drawings that bend; a line marks out ground. */
 function isArrowTool(tool: ToolMode): boolean {
   return tool === 'arrow-run' || tool === 'arrow-pass'
 }
@@ -397,7 +404,7 @@ function isArrowTool(tool: ToolMode): boolean {
 watch(
   () => props.tool,
   (tool) => {
-    if (!isArrowTool(tool)) liveArrowId.value = null
+    if (!isSegmentTool(tool)) liveSegmentId.value = null
   },
 )
 
@@ -418,22 +425,26 @@ const bendHandles = computed<ArrowDrawing[]>(() => {
   const arrows = board.state.drawings.filter((d): d is ArrowDrawing => d.kind === 'arrow')
   if (props.tool === 'select') return arrows
   if (!isArrowTool(props.tool)) return []
-  return arrows.filter((a) => a.id === liveArrowId.value)
+  return arrows.filter((a) => a.id === liveSegmentId.value)
 })
 
 /**
- * Every segment that offers handles on its two ends, under the Move tool
- * only.
+ * Every segment that offers handles on its two ends.
  *
- * Not under Run or Pass, the way the bend handle is: an end handle sits
- * exactly where the coach presses to start the next arrow, so leaving them
- * out while drawing keeps that press meaning what it looks like it means.
+ * The same rule as the bend handle: all of them under Move, and just the one
+ * last drawn under the tool that drew it, so a segment put down in the wrong
+ * place is fixed in the same breath rather than after a trip through Move.
+ *
+ * Lines are in as well as arrows. A line cannot bend, but it is drawn to the
+ * wrong spot exactly as often, and leaving it out would be a gap with no
+ * reason behind it.
  */
-const endHandles = computed<SegmentDrawing[]>(() =>
-  props.tool === 'select'
-    ? board.state.drawings.filter((d): d is SegmentDrawing => d.kind !== 'pen')
-    : [],
-)
+const endHandles = computed<SegmentDrawing[]>(() => {
+  const segments = board.state.drawings.filter((d): d is SegmentDrawing => d.kind !== 'pen')
+  if (props.tool === 'select') return segments
+  if (!isSegmentTool(props.tool)) return []
+  return segments.filter((seg) => seg.id === liveSegmentId.value)
+})
 
 function onEndGrab(id: string, end: 'from' | 'to', event: PointerEvent) {
   if (dragIsLive()) return
@@ -618,10 +629,12 @@ function onPointerUp(event: PointerEvent) {
   } else {
     board.updateSegment(active.id, at)
     board.finishDrawing(active.id)
-    // Only an arrow that survived gets a handle: `finishDrawing` discards a
-    // stray tap, and a handle on nothing would leave a hit target sitting
+    // Only a segment that survived gets handles: `finishDrawing` discards a
+    // stray tap, and handles on nothing would leave hit targets sitting
     // exactly where the coach is about to press again.
-    if (isArrowTool(props.tool)) liveArrowId.value = board.drawingById(active.id) ? active.id : null
+    if (isSegmentTool(props.tool)) {
+      liveSegmentId.value = board.drawingById(active.id) ? active.id : null
+    }
   }
   clearDrag()
 }
