@@ -196,6 +196,80 @@ describe('keyboard shortcuts', () => {
   })
 })
 
+describe('the chosen drawing and the keyboard', () => {
+  /** Draw an arrow, then choose it by pressing it, as a coach would. */
+  async function chooseAnArrow(app: VueWrapper) {
+    const board = useBoard()
+    const id = board.startArrow({ x: 20, y: 30 }, '#ffffff', 'pass')
+    board.updateSegment(id, { x: 60, y: 30 })
+    board.finishDrawing(id)
+    await app.vm.$nextTick()
+    const path = app.find('[data-drawing]').element
+    await firePointer(path, 'pointerdown', clientFor(40, 30))
+    await firePointer(app.find('svg').element, 'pointerup', clientFor(40, 30))
+  }
+
+  it('rubs the chosen drawing out on Delete', async () => {
+    const board = useBoard()
+    wrapper = mount(App)
+    await chooseAnArrow(wrapper)
+
+    fire({ key: 'Delete' })
+    await wrapper.vm.$nextTick()
+
+    expect(board.state.drawings).toEqual([])
+  })
+
+  it('does the same on Backspace, which is the key a laptop offers', async () => {
+    const board = useBoard()
+    wrapper = mount(App)
+    await chooseAnArrow(wrapper)
+
+    fire({ key: 'Backspace' })
+    await wrapper.vm.$nextTick()
+
+    expect(board.state.drawings).toEqual([])
+  })
+
+  it('leaves the board alone when no drawing has been chosen', async () => {
+    const board = useBoard()
+    const id = board.startArrow({ x: 20, y: 30 }, '#ffffff', 'pass')
+    board.updateSegment(id, { x: 60, y: 30 })
+    board.finishDrawing(id)
+    wrapper = mount(App)
+
+    fire({ key: 'Delete' })
+    await wrapper.vm.$nextTick()
+
+    expect(board.state.drawings).toHaveLength(1)
+  })
+
+  it('puts the drawing down on Escape without rubbing it out', async () => {
+    const board = useBoard()
+    wrapper = mount(App)
+    await chooseAnArrow(wrapper)
+    expect(wrapper.find('[data-selected]').exists()).toBe(true)
+
+    fire({ key: 'Escape' })
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[data-selected]').exists()).toBe(false)
+    expect(board.state.drawings).toHaveLength(1)
+  })
+
+  it('leaves Delete to the field while a dialog is up', async () => {
+    const board = useBoard()
+    wrapper = mount(App)
+    await chooseAnArrow(wrapper)
+    await wrapper.find('[data-save]').trigger('click')
+
+    fire({ key: 'Delete' })
+    await wrapper.vm.$nextTick()
+
+    expect(board.state.drawings).toHaveLength(1)
+  })
+})
+
 describe('renaming a counter label', () => {
   it('opens empty on a fresh counter, saves what is typed, and is undoable', async () => {
     const board = useBoard()

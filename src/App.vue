@@ -254,6 +254,22 @@ function onKeydown(event: KeyboardEvent) {
 
   if (modifier) return
 
+  if (event.key === 'Escape') {
+    boardRef.value?.clearSelection()
+    return
+  }
+
+  /*
+   * Delete rubs out the chosen drawing. Backspace does the same because a
+   * laptop keyboard has no Delete to speak of — and neither can reach here
+   * while a field has focus, which the guard at the top of this function
+   * already ensures.
+   */
+  if (event.key === 'Delete' || event.key === 'Backspace') {
+    boardRef.value?.deleteSelected()
+    return
+  }
+
   if (event.key.toLowerCase() === 'b') {
     board.toggleBallVisible()
     return
