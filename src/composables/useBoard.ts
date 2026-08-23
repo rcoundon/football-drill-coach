@@ -603,6 +603,27 @@ function setArrowBend(id: string, bend: number, bendAlong = 0): void {
   else drawing.bendAlong = bendAlong
 }
 
+/**
+ * Move one end of a segment that is already drawn. Called on every
+ * pointer-move of a handle drag, so it deliberately does not commit — the
+ * grab does that.
+ *
+ * A line still snaps to the horizontal or vertical, exactly as it does while
+ * being drawn, and it snaps against the end that stayed put rather than
+ * always against its start. An arrow still does not: it traces a run or a
+ * pass, and squaring it off would misstate the movement.
+ *
+ * A curve needs nothing done to it. `bend` and `bendAlong` are held against
+ * the chord, so the bow keeps its shape and its lean while the ends move.
+ */
+function moveSegmentEnd(id: string, end: 'from' | 'to', pos: Vec): void {
+  const drawing = drawingById(id)
+  if (!drawing || drawing.kind === 'pen') return
+  const anchor = end === 'to' ? drawing.from : drawing.to
+  const point = clampToPitch(pos)
+  drawing[end] = drawing.kind === 'line' ? snapToAxis(anchor, point) : point
+}
+
 /** Erase every trace of a drawing from the undo and redo history. */
 function forgetDrawingInHistory(id: string): void {
   for (const stack of [undoStack, redoStack]) {
@@ -705,6 +726,7 @@ const board = {
   startArrow,
   startLine,
   updateSegment,
+  moveSegmentEnd,
   setArrowBend,
   finishDrawing,
   deleteDrawing,

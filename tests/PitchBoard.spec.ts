@@ -5,7 +5,7 @@ import PitchBoard, { DOUBLE_PRESS_MS, STALE_DRAG_MS } from '../src/components/Pi
 import { useBoard, __resetBoardForTests } from '../src/composables/useBoard'
 import { BALL_HIT_RADIUS_ATTACHED } from '../src/components/BallToken.vue'
 import { PITCH_H, PITCH_W } from '../src/geometry'
-import type { ToolMode } from '../src/types'
+import type { ToolMode, Vec } from '../src/types'
 
 /**
  * Dispatches a real PointerEvent directly, bypassing @vue/test-utils'
@@ -37,7 +37,8 @@ async function firePointer(
     target.element.hasAttribute('data-ball') ||
     target.element.hasAttribute('data-marker') ||
     target.element.hasAttribute('data-label') ||
-    target.element.hasAttribute('data-bend-handle')
+    target.element.hasAttribute('data-bend-handle') ||
+    target.element.hasAttribute('data-end-handle')
   const node = (isHitGroup ? target.element.lastElementChild : null) ?? target.element
   const event = new PointerEvent(type, { bubbles: true, cancelable: true, ...opts })
   node.dispatchEvent(event)
@@ -1496,5 +1497,178 @@ describe('bending the arrow just drawn', () => {
     await wrapper.vm.$nextTick()
 
     expect(wrapper.findAll('[data-bend]')).toHaveLength(2)
+  })
+})
+
+describe('moving the ends of a drawing', () => {
+  /** A finished horizontal pass across the middle of the pitch. */
+  function drawPass(): string {
+    const board = useBoard()
+    const id = board.startArrow({ x: 20, y: 30 }, '#ffffff', 'pass')
+    board.updateSegment(id, { x: 60, y: 30 })
+    board.finishDrawing(id)
+    return id
+  }
+
+  function drawLine(): string {
+    const board = useBoard()
+    const id = board.startLine({ x: 20, y: 30 }, '#ffffff')
+    board.updateSegment(id, { x: 60, y: 30 })
+    board.finishDrawing(id)
+    return id
+  }
+
+  it('offers a handle at each end of an arrow under the move tool', async () => {
+    drawPass()
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('[data-end]')).toHaveLength(2)
+  })
+
+  it('offers them on a plain line too, which is just as often drawn wrong', async () => {
+    drawLine()
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('[data-end]')).toHaveLength(2)
+  })
+
+  it('offers none on a pen stroke, which has no two ends to speak of', async () => {
+    const board = useBoard()
+    const id = board.startPen({ x: 10, y: 10 }, '#ffffff')
+    board.extendPen(id, { x: 30, y: 30 })
+    board.finishDrawing(id)
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-end]').exists()).toBe(false)
+  })
+
+  it('puts them on the ends themselves', async () => {
+    drawPass()
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+    const ends = wrapper.findAll('[data-end]')
+    const xs = ends.map((e) => Number(e.attributes('cx'))).sort((a, b) => a - b)
+    expect(xs[0]).toBeCloseTo(20, 6)
+    expect(xs[1]).toBeCloseTo(60, 6)
+  })
+
+  it('hides them while a drawing tool is active, so they cannot be drawn over', async () => {
+    drawPass()
+    const wrapper = mountBoard('arrow-pass')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-end]').exists()).toBe(false)
+  })
+
+  it('moves the end that was grabbed', async () => {
+    const board = useBoard()
+    const id = drawPass()
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-end-handle]'), 'pointerdown', clientFor(20, 30))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(10, 12))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(10, 12))
+
+    const arrow = board.drawingById(id) as { from: Vec; to: Vec }
+    expect(arrow.from.x).toBeCloseTo(10, 6)
+    expect(arrow.from.y).toBeCloseTo(12, 6)
+    expect(arrow.to).toEqual({ x: 60, y: 30 })
+  })
+
+  it('picks the end up where it is rather than snapping it under the pointer', async () => {
+    const board = useBoard()
+    const id = drawPass()
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    // Press a unit off the end, inside its hit circle, then travel ten units.
+    await firePointer(wrapper.find('[data-end-handle]'), 'pointerdown', clientFor(21, 30))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(31, 30))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(31, 30))
+
+    expect((board.drawingById(id) as { from: Vec }).from.x).toBeCloseTo(30, 6)
+  })
+
+  it('undoes the whole drag in one step', async () => {
+    const board = useBoard()
+    const id = drawPass()
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-end-handle]'), 'pointerdown', clientFor(20, 30))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(15, 20))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(10, 12))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(10, 12))
+    board.undo()
+
+    expect((board.drawingById(id) as { from: Vec }).from).toEqual({ x: 20, y: 30 })
+  })
+
+  it('keeps a curve bowed the same way while its end moves', async () => {
+    const board = useBoard()
+    const id = drawPass()
+    board.setArrowBend(id, 6)
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-end-handle]'), 'pointerdown', clientFor(20, 30))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(10, 12))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(10, 12))
+
+    expect((board.drawingById(id) as { bend?: number }).bend).toBe(6)
+  })
+
+  it('does not start a fresh stroke on the board when an end is grabbed', async () => {
+    const board = useBoard()
+    drawPass()
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('[data-end-handle]'), 'pointerdown', clientFor(20, 30))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(20, 30))
+
+    expect(board.state.drawings).toHaveLength(1)
+  })
+
+  /*
+   * An arrow nearly always starts or ends ON a player — that is what a pass
+   * is. Both hit circles then cover the same spot, and in an SVG the one
+   * painted later takes the press. Dragging a player is the commonest thing
+   * anyone does in Move mode, so the player has to win; the handle stays
+   * reachable anywhere along the rest of the arrow.
+   *
+   * jsdom does no hit-testing, so this asserts the paint order itself rather
+   * than dispatching a press and hoping.
+   */
+  it('paints the handles under the players, so a player on an arrow end stays grabbable', async () => {
+    const board = useBoard()
+    drawPass()
+    board.addCounter('red')
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    const painted = [...wrapper.element.querySelectorAll('[data-end-handle], [data-counter]')]
+    expect(painted[0].hasAttribute('data-end-handle')).toBe(true)
+    expect(painted.at(-1)!.hasAttribute('data-counter')).toBe(true)
+  })
+
+  it('paints the bend handle under the players for the same reason', async () => {
+    const board = useBoard()
+    drawPass()
+    board.addCounter('red')
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    const painted = [...wrapper.element.querySelectorAll('[data-bend-handle], [data-counter]')]
+    expect(painted[0].hasAttribute('data-bend-handle')).toBe(true)
+  })
+
+  it('paints the handles under the ball, which is grabbed as often as a player', async () => {
+    drawPass()
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    const painted = [...wrapper.element.querySelectorAll('[data-end-handle], [data-ball]')]
+    expect(painted.at(-1)!.hasAttribute('data-ball')).toBe(true)
   })
 })

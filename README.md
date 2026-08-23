@@ -56,8 +56,15 @@ The dot slides between a quarter and three-quarters of the way along. Further
 than that the curve doubles back on itself before reaching the far end, which
 reads as a kink rather than a curl.
 
-**Move** shows a dot on every arrow, for going back to one drawn earlier. The
-dots are an editing aid only: they never appear in an exported image.
+**Move** shows a dot on every arrow, for going back to one drawn earlier, and
+a hollow ring at each end of every arrow and line. Drag a ring to move that
+end — a curve keeps its shape and its lean while its ends move, and a line
+still snaps back onto the horizontal or vertical. Where a ring sits on top of
+a player, the player wins the press: dragging players is the commonest thing
+in Move mode, and the ring is still reachable anywhere the two do not overlap.
+
+The dots and rings are an editing aid only: they never appear in an exported
+image.
 
 **Drill notes** sit beside the board on a wide screen and beneath it on a
 narrow one: setup, coaching points, progressions. They are saved with the
@@ -126,3 +133,6 @@ rotating the board, and switching between pitch types never move a counter.
 Recording and playing back movement. The saved format already stores a `frames` array
 with one frame per pattern, so recording can append frames without changing the schema
 or invalidating anything already saved.
+
+See [docs/roadmap.md](docs/roadmap.md) for that and the rest of what is worth building
+next.

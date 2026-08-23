@@ -30,7 +30,7 @@ export const STALE_DRAG_MS = 10_000
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { ArrowDrawing, ToolMode, Vec } from '../types'
+import type { ArrowDrawing, SegmentDrawing, ToolMode, Vec } from '../types'
 import { PITCH_H, PITCH_W, bendFor, clampToPitch, clientToPitch, distance, viewBoxOf } from '../geometry'
 import { useBoard } from '../composables/useBoard'
 import PitchMarkings from './PitchMarkings.vue'
@@ -40,6 +40,7 @@ import ConeMarker from './ConeMarker.vue'
 import PitchLabel from './PitchLabel.vue'
 import DrawingLayer from './DrawingLayer.vue'
 import BendHandle from './BendHandle.vue'
+import EndHandle from './EndHandle.vue'
 
 const props = defineProps<{ tool: ToolMode; drawColor: string }>()
 const emit = defineEmits<{ rename: [id: string]; addLabel: [at: Vec]; editLabel: [id: string] }>()
@@ -57,6 +58,7 @@ type DragTarget =
   | { kind: 'pen'; id: string }
   | { kind: 'segment'; id: string }
   | { kind: 'bend'; id: string }
+  | { kind: 'end'; id: string; end: 'from' | 'to' }
 
 /**
  * There is one drag at a time, and it belongs to one pointer.
@@ -419,6 +421,45 @@ const bendHandles = computed<ArrowDrawing[]>(() => {
   return arrows.filter((a) => a.id === liveArrowId.value)
 })
 
+/**
+ * Every segment that offers handles on its two ends, under the Move tool
+ * only.
+ *
+ * Not under Run or Pass, the way the bend handle is: an end handle sits
+ * exactly where the coach presses to start the next arrow, so leaving them
+ * out while drawing keeps that press meaning what it looks like it means.
+ */
+const endHandles = computed<SegmentDrawing[]>(() =>
+  props.tool === 'select'
+    ? board.state.drawings.filter((d): d is SegmentDrawing => d.kind !== 'pen')
+    : [],
+)
+
+function onEndGrab(id: string, end: 'from' | 'to', event: PointerEvent) {
+  if (dragIsLive()) return
+  const segment = board.drawingById(id)
+  if (!segment || segment.kind === 'pen') return
+  event.stopPropagation()
+  capture(event)
+  // The whole drag is one change, so the grab commits and the moves do not.
+  board.commit()
+  const at = toPitch(event)
+  const anchor = segment[end]
+  drag.value = {
+    kind: 'end',
+    id,
+    end,
+    pointerId: event.pointerId,
+    origin: at,
+    // The hit circle is nearly three times the drawn ring, so a press lands
+    // off the end routinely. Carrying the offset picks the end up where it
+    // is instead of snapping it under the pointer.
+    grabOffset: { x: anchor.x - at.x, y: anchor.y - at.y },
+    moved: false,
+    startedAt: Date.now(),
+  }
+}
+
 function onBendGrab(id: string, event: PointerEvent) {
   if (dragIsLive()) return
   event.stopPropagation()
@@ -505,6 +546,7 @@ function onPointerMove(event: PointerEvent) {
     if (active.moved) board.moveBall(at)
   } else if (active.kind === 'pen') board.extendPen(active.id, at)
   else if (active.kind === 'bend') bendTo(active.id, at)
+  else if (active.kind === 'end') board.moveSegmentEnd(active.id, active.end, carried)
   else board.updateSegment(active.id, at)
 }
 
@@ -571,6 +613,8 @@ function onPointerUp(event: PointerEvent) {
     board.finishDrawing(active.id)
   } else if (active.kind === 'bend') {
     bendTo(active.id, at)
+  } else if (active.kind === 'end') {
+    board.moveSegmentEnd(active.id, active.end, withGrabOffset(active, at))
   } else {
     board.updateSegment(active.id, at)
     board.finishDrawing(active.id)
@@ -598,6 +642,29 @@ function onPointerUp(event: PointerEvent) {
       <rect :x="0" :y="0" :width="PITCH_W" :height="PITCH_H" fill="#2e7d32" />
       <PitchMarkings :type="board.state.pitch.type" />
       <DrawingLayer :drawings="board.state.drawings" @hit="onDrawingHit" />
+      <!--
+        The handles belong with the drawings they edit, and every token is
+        painted over them. An arrow nearly always starts or ends ON a player,
+        so both hit circles cover the same spot and the one painted later
+        takes the press. Dragging a player is the commonest thing anyone does
+        in Move mode, so the player wins; the handle is still reachable
+        anywhere the two do not overlap.
+      -->
+      <BendHandle
+        v-for="arrow in bendHandles"
+        :key="`bend-${arrow.id}`"
+        :arrow="arrow"
+        @grab="onBendGrab(arrow.id, $event)"
+      />
+      <template v-for="segment in endHandles" :key="`ends-${segment.id}`">
+        <EndHandle
+          v-for="end in (['from', 'to'] as const)"
+          :key="end"
+          :at="segment[end]"
+          :color="segment.color"
+          @grab="onEndGrab(segment.id, end, $event)"
+        />
+      </template>
       <ConeMarker
         v-for="marker in board.state.markers"
         :key="marker.id"
@@ -619,12 +686,6 @@ function onPointerUp(event: PointerEvent) {
         :label="label"
         :rotated="board.state.pitch.rotated"
         @grab="onLabelGrab(label.id, $event)"
-      />
-      <BendHandle
-        v-for="arrow in bendHandles"
-        :key="`bend-${arrow.id}`"
-        :arrow="arrow"
-        @grab="onBendGrab(arrow.id, $event)"
       />
       <BallToken
         v-if="board.state.ball.visible"
