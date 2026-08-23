@@ -48,7 +48,7 @@ const emit = defineEmits<{ rename: [id: string]; addLabel: [at: Vec]; editLabel:
 const board = useBoard()
 const svgEl = ref<SVGSVGElement | null>(null)
 
-defineExpose({ svgEl })
+defineExpose({ svgEl, deleteSelected, clearSelection })
 
 type DragTarget =
   | { kind: 'counter'; id: string }
@@ -59,6 +59,7 @@ type DragTarget =
   | { kind: 'segment'; id: string }
   | { kind: 'bend'; id: string }
   | { kind: 'end'; id: string; end: 'from' | 'to' }
+  | { kind: 'body'; id: string }
 
 /**
  * There is one drag at a time, and it belongs to one pointer.
@@ -375,21 +376,91 @@ function onBallGrab(event: PointerEvent) {
   }
 }
 
-function onDrawingHit(id: string) {
-  if (props.tool === 'erase') board.deleteDrawing(id)
+/**
+ * A press on a drawing. Under Erase it rubs it out; under Move it chooses
+ * that drawing and begins a drag of the whole thing.
+ *
+ * The press is swallowed so it cannot also reach the board underneath, where
+ * `onPointerDown` would read it as a press on bare grass and immediately let
+ * go of what was just chosen.
+ */
+function onDrawingHit(id: string, event: PointerEvent) {
+  if (props.tool === 'erase') {
+    board.deleteDrawing(id)
+    return
+  }
+  if (props.tool !== 'select') return
+  if (dragIsLive()) return
+  event.stopPropagation()
+  activeDrawingId.value = id
+  capture(event)
+  drag.value = {
+    kind: 'body',
+    id,
+    pointerId: event.pointerId,
+    origin: toPitch(event),
+    // The drawing is slid by how far the pointer travels, not carried at a
+    // fixed offset, so there is nothing to hold here.
+    grabOffset: { x: 0, y: 0 },
+    moved: false,
+    startedAt: Date.now(),
+  }
 }
 
 /**
- * The segment drawn most recently under the tool that drew it, so it can be
- * adjusted — bent, or its ends moved — without a trip through the Move tool
- * first.
+ * Where the pointer was on the previous move of a body drag.
  *
- * Only the newest one: handles on every segment while a drawing tool is
- * selected would put hit targets across the whole board, and the next press
- * is far more likely to be a new drawing than a second thought about an old
- * one.
+ * The drawing is slid by the step between moves rather than from the press
+ * point, so that a drawing stopped against a touchline keeps sliding along
+ * it instead of springing back once the pointer comes away from the edge.
  */
-const liveSegmentId = ref<string | null>(null)
+let bodyDragFrom: Vec | null = null
+
+/**
+ * True once a body drag has committed. Choosing a drawing must not touch the
+ * history — a coach pressing five arrows to look at them would otherwise
+ * bury their real work under five entries that changed nothing — so unlike
+ * every other grab on this board, the commit waits for the first movement.
+ */
+let bodyDragCommitted = false
+
+function dragBody(active: Drag & { kind: 'body' }, at: Vec): void {
+  if (!active.moved) return
+  if (!bodyDragCommitted) {
+    board.commit()
+    bodyDragCommitted = true
+  }
+  const previous = bodyDragFrom ?? active.origin
+  board.translateDrawing(active.id, { x: at.x - previous.x, y: at.y - previous.y })
+  bodyDragFrom = at
+}
+
+/** Put down whatever drawing is being worked on. */
+function clearSelection(): void {
+  activeDrawingId.value = null
+}
+
+/** Rub out the chosen drawing. Undoable, like every other deletion. */
+function deleteSelected(): void {
+  const id = activeDrawingId.value
+  if (id === null) return
+  activeDrawingId.value = null
+  board.deleteDrawing(id)
+}
+
+/**
+ * The one drawing the handles belong to.
+ *
+ * Under Move it is the drawing the coach chose by pressing it. Under a
+ * drawing tool it is the one they just drew, so a segment can be adjusted
+ * without a trip through Move first. Two readings of the same idea — this is
+ * the drawing being worked on — so they share a field rather than racing
+ * each other.
+ *
+ * Never board state: choosing a drawing changes nothing about the drill, so
+ * it has no business in undo, in the autosaved draft, or in a saved pattern.
+ */
+const activeDrawingId = ref<string | null>(null)
 
 /** The tools that draw a segment, and so keep one live afterwards. */
 function isSegmentTool(tool: ToolMode): boolean {
@@ -401,50 +472,50 @@ function isArrowTool(tool: ToolMode): boolean {
   return tool === 'arrow-run' || tool === 'arrow-pass'
 }
 
+/** Changing tool puts the current drawing down; nothing carries across. */
 watch(
   () => props.tool,
-  (tool) => {
-    if (!isSegmentTool(tool)) liveSegmentId.value = null
+  () => {
+    activeDrawingId.value = null
   },
 )
 
+/** The drawing the handles belong to, or undefined once it is gone. */
+const activeDrawing = computed(() =>
+  board.state.drawings.find((d) => d.id === activeDrawingId.value),
+)
+
 /**
- * Which arrows offer a bend handle.
+ * The bend handle, when the drawing being worked on is an arrow.
  *
- * Under Move, all of them: bending an arrow is moving part of it. Under Run
- * or Pass, only the one last drawn, so a curved pass is one unbroken
- * sequence — drag it out, bend it, then press elsewhere for the next arrow.
- * Under any other tool, none, so a press meant to draw can never land on a
- * handle instead.
- *
- * Derived from the drawings rather than from a remembered object, so an
- * arrow that is undone, erased, or discarded as a stray tap takes its handle
- * with it without anyone having to remember to clear it.
+ * Looked up in the drawings rather than remembered as an object, so an arrow
+ * that is undone, erased, or discarded as a stray tap takes its handle with
+ * it without anyone having to remember to clear it.
  */
 const bendHandles = computed<ArrowDrawing[]>(() => {
-  const arrows = board.state.drawings.filter((d): d is ArrowDrawing => d.kind === 'arrow')
-  if (props.tool === 'select') return arrows
-  if (!isArrowTool(props.tool)) return []
-  return arrows.filter((a) => a.id === liveSegmentId.value)
+  const drawing = activeDrawing.value
+  if (!drawing || drawing.kind !== 'arrow') return []
+  if (props.tool !== 'select' && !isArrowTool(props.tool)) return []
+  return [drawing]
 })
 
 /**
- * Every segment that offers handles on its two ends.
- *
- * The same rule as the bend handle: all of them under Move, and just the one
- * last drawn under the tool that drew it, so a segment put down in the wrong
- * place is fixed in the same breath rather than after a trip through Move.
+ * The two end handles, when the drawing being worked on is a segment.
  *
  * Lines are in as well as arrows. A line cannot bend, but it is drawn to the
  * wrong spot exactly as often, and leaving it out would be a gap with no
- * reason behind it.
+ * reason behind it. A pen stroke has no two ends to speak of, so it gets
+ * neither handle — it can still be chosen, dragged and deleted.
  */
 const endHandles = computed<SegmentDrawing[]>(() => {
-  const segments = board.state.drawings.filter((d): d is SegmentDrawing => d.kind !== 'pen')
-  if (props.tool === 'select') return segments
-  if (!isSegmentTool(props.tool)) return []
-  return segments.filter((seg) => seg.id === liveSegmentId.value)
+  const drawing = activeDrawing.value
+  if (!drawing || drawing.kind === 'pen') return []
+  if (props.tool !== 'select' && !isSegmentTool(props.tool)) return []
+  return [drawing]
 })
+
+/** The drawing to draw a halo behind: the chosen one, and only under Move. */
+const selectedId = computed(() => (props.tool === 'select' ? activeDrawingId.value : null))
 
 function onEndGrab(id: string, end: 'from' | 'to', event: PointerEvent) {
   if (dragIsLive()) return
@@ -541,6 +612,10 @@ function onPointerDown(event: PointerEvent) {
   } else if (props.tool === 'line') {
     capture(event)
     drag.value = { kind: 'segment', id: board.startLine(at, props.drawColor), ...shared }
+  } else if (props.tool === 'select') {
+    // Bare grass: a press on a drawing, a handle or a token stops before it
+    // reaches here, so getting this far means the coach pressed nothing.
+    clearSelection()
   }
 }
 
@@ -558,6 +633,7 @@ function onPointerMove(event: PointerEvent) {
   } else if (active.kind === 'pen') board.extendPen(active.id, at)
   else if (active.kind === 'bend') bendTo(active.id, at)
   else if (active.kind === 'end') board.moveSegmentEnd(active.id, active.end, carried)
+  else if (active.kind === 'body') dragBody(active, at)
   else board.updateSegment(active.id, at)
 }
 
@@ -596,7 +672,11 @@ function onPointerCancel(event: PointerEvent): void {
 
   // Only this pointer's drag ends. A cancel from some other pointer - a
   // rejected palm beside a stylus - must not abandon the drag in progress.
-  if (drag.value?.pointerId === event.pointerId) clearDrag()
+  if (drag.value?.pointerId === event.pointerId) {
+    bodyDragFrom = null
+    bodyDragCommitted = false
+    clearDrag()
+  }
 }
 
 function onPointerUp(event: PointerEvent) {
@@ -626,6 +706,10 @@ function onPointerUp(event: PointerEvent) {
     bendTo(active.id, at)
   } else if (active.kind === 'end') {
     board.moveSegmentEnd(active.id, active.end, withGrabOffset(active, at))
+  } else if (active.kind === 'body') {
+    dragBody(active, at)
+    bodyDragFrom = null
+    bodyDragCommitted = false
   } else {
     board.updateSegment(active.id, at)
     board.finishDrawing(active.id)
@@ -633,7 +717,7 @@ function onPointerUp(event: PointerEvent) {
     // stray tap, and handles on nothing would leave hit targets sitting
     // exactly where the coach is about to press again.
     if (isSegmentTool(props.tool)) {
-      liveSegmentId.value = board.drawingById(active.id) ? active.id : null
+      activeDrawingId.value = board.drawingById(active.id) ? active.id : null
     }
   }
   clearDrag()
@@ -654,30 +738,11 @@ function onPointerUp(event: PointerEvent) {
     <g :transform="boardTransform">
       <rect :x="0" :y="0" :width="PITCH_W" :height="PITCH_H" fill="#2e7d32" />
       <PitchMarkings :type="board.state.pitch.type" />
-      <DrawingLayer :drawings="board.state.drawings" @hit="onDrawingHit" />
-      <!--
-        The handles belong with the drawings they edit, and every token is
-        painted over them. An arrow nearly always starts or ends ON a player,
-        so both hit circles cover the same spot and the one painted later
-        takes the press. Dragging a player is the commonest thing anyone does
-        in Move mode, so the player wins; the handle is still reachable
-        anywhere the two do not overlap.
-      -->
-      <BendHandle
-        v-for="arrow in bendHandles"
-        :key="`bend-${arrow.id}`"
-        :arrow="arrow"
-        @grab="onBendGrab(arrow.id, $event)"
+      <DrawingLayer
+        :drawings="board.state.drawings"
+        :selected-id="selectedId"
+        @hit="onDrawingHit"
       />
-      <template v-for="segment in endHandles" :key="`ends-${segment.id}`">
-        <EndHandle
-          v-for="end in (['from', 'to'] as const)"
-          :key="end"
-          :at="segment[end]"
-          :color="segment.color"
-          @grab="onEndGrab(segment.id, end, $event)"
-        />
-      </template>
       <ConeMarker
         v-for="marker in board.state.markers"
         :key="marker.id"
@@ -706,6 +771,29 @@ function onPointerUp(event: PointerEvent) {
         :attached="ballAttached"
         @grab="onBallGrab"
       />
+      <!--
+        Painted over the tokens, unlike everything else that can be grabbed.
+        An arrow nearly always starts or ends ON a player, so a handle and a
+        player often cover the same spot and the one painted later takes the
+        press. Handles only exist for a drawing the coach deliberately chose,
+        so when the two overlap the handle is what they are reaching for; a
+        press on bare grass puts the drawing down and gives the player back.
+      -->
+      <BendHandle
+        v-for="arrow in bendHandles"
+        :key="`bend-${arrow.id}`"
+        :arrow="arrow"
+        @grab="onBendGrab(arrow.id, $event)"
+      />
+      <template v-for="segment in endHandles" :key="`ends-${segment.id}`">
+        <EndHandle
+          v-for="end in (['from', 'to'] as const)"
+          :key="end"
+          :at="segment[end]"
+          :color="segment.color"
+          @grab="onEndGrab(segment.id, end, $event)"
+        />
+      </template>
     </g>
   </svg>
 </template>

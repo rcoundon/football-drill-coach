@@ -15,41 +15,42 @@ This bites on every drill. A pass is drawn to where a player was standing
 before you nudged them, and the only remedy is to erase the arrow and draw
 it again.
 
-Endpoint handles have since landed: every arrow and line offers a handle on
-each end under **Move**. Because `bend` and `bendAlong` are held relative to
-the chord, a curve keeps its shape while its ends move — that fell out of the
+Endpoint handles have since landed, and so has a selection model. Under
+**Move**, pressing a drawing picks it up: it gets a halo, its handles appear,
+and dragging its body slides the whole thing. `Delete` removes it. Nothing
+else on the board shows a handle, so a busy drill stays readable.
+
+Because `bend` and `bendAlong` are held relative to the chord, a curve keeps
+its shape while its ends move or the whole arrow slides — that fell out of the
 model rather than needing code.
 
 Still to do:
 
-- **Moving a whole drawing.** Dragging the body of an arrow, line or pen
-  stroke to reposition it without changing its shape.
 - **Multi-select.** Shifting a group of counters and drawings together, so a
-  shape can be slid ten metres up the pitch in one gesture.
+  shape can be slid ten metres up the pitch in one gesture. Selection is the
+  foundation; the open questions are how a group is gathered (a lasso? shift
+  to add?) and whether counters join in, which they currently do not.
+- **Duplicating a drawing.** Cheap once something is selected, and a mirrored
+  pass on the other flank is a common thing to want.
 
-### A selection model, probably
+### What selection settled
 
-Endpoint handles exposed something worth deciding before either of the above.
-Every arrow shows three handles the whole time **Move** is active, so a board
-with nine drawings carries twenty-seven of them. On a busy drill that is a lot
-of furniture over the top of the thing the coach is trying to read. The
-drawing tools escape this by showing handles only for the segment last drawn,
-which is exactly the selection idea below, arrived at from the other end.
+It replaced always-on handles, which had two problems worth recording. Every
+arrow used to show three handles the whole time Move was active, so a board
+with nine drawings carried twenty-seven of them — a lot of furniture over the
+top of the thing the coach is trying to read.
 
 It also forced a priority call. An arrow nearly always starts or ends *on* a
 player — that is what a pass is — so both hit circles cover the same spot and
-whichever is painted later takes the press. Players win, because dragging one
-is the commonest thing anyone does in Move mode; the endpoint handle is still
-reachable anywhere the two do not overlap. That is the right trade, but it is
-a trade.
+whichever is painted later takes the press. While handles were always on, the
+player had to win. Now that a handle only exists for a drawing the coach
+deliberately picked up, the handle wins instead, because at that moment it is
+what they are reaching for. One press on bare grass gives the player back.
 
-Both problems have the same answer: press a drawing to select it, and show
-handles only for the selection. Nothing is on screen until you ask for it, the
-overlap stops mattering because a selected arrow's handles can safely sit on
-top, and "moving a whole drawing" and "multi-select" both become natural
-extensions rather than separate features.
-
-Worth designing properly before more handles are added.
+One deliberate oddity lives here too. Every other grab on this board commits
+to the undo history on the press. A body drag waits for the first movement,
+because choosing a drawing must cost nothing: pressing five arrows to look at
+them would otherwise bury real work under five entries that changed nothing.
 
 ## Frames and playback
 

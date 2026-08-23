@@ -624,6 +624,47 @@ function moveSegmentEnd(id: string, end: 'from' | 'to', pos: Vec): void {
   drawing[end] = drawing.kind === 'line' ? snapToAxis(anchor, point) : point
 }
 
+/** Every point a drawing is made of, in no particular order. */
+function pointsOf(drawing: Drawing): Vec[] {
+  return drawing.kind === 'pen' ? drawing.points : [drawing.from, drawing.to]
+}
+
+/**
+ * Slide a whole drawing across the pitch. Called on every pointer-move of a
+ * drag, so it deliberately does not commit — the drag does that on its first
+ * real movement.
+ *
+ * The delta is trimmed against the drawing's bounding box rather than each
+ * point being clamped on its own. Clamping points individually squashes a
+ * shape against the touchline instead of stopping it there, which turns a
+ * drag off the edge into silent damage. Trimming also lets a drawing already
+ * resting on an edge keep sliding along it.
+ *
+ * A curve needs nothing done to it: `bend` and `bendAlong` are held against
+ * the chord, so the bow travels with its ends.
+ */
+function translateDrawing(id: string, delta: Vec): void {
+  const drawing = drawingById(id)
+  if (!drawing) return
+
+  const points = pointsOf(drawing)
+  if (points.length === 0) return
+
+  const xs = points.map((p) => p.x)
+  const ys = points.map((p) => p.y)
+
+  // A drawing wider than the pitch cannot be brought inside, and squeezing it
+  // would distort it, so the room it has is allowed to go negative and the
+  // min/max below simply cancel the move on that axis.
+  const dx = Math.min(PITCH_W - Math.max(...xs), Math.max(-Math.min(...xs), delta.x))
+  const dy = Math.min(PITCH_H - Math.max(...ys), Math.max(-Math.min(...ys), delta.y))
+
+  for (const point of points) {
+    point.x += dx
+    point.y += dy
+  }
+}
+
 /** Erase every trace of a drawing from the undo and redo history. */
 function forgetDrawingInHistory(id: string): void {
   for (const stack of [undoStack, redoStack]) {
@@ -727,6 +768,7 @@ const board = {
   startLine,
   updateSegment,
   moveSegmentEnd,
+  translateDrawing,
   setArrowBend,
   finishDrawing,
   deleteDrawing,

@@ -64,13 +64,19 @@ keeps its shape and its lean while its ends move, and a line still snaps back
 onto the horizontal or vertical. Lines get rings too, though they have no bend
 dot: a line marks out ground rather than describing a movement.
 
-**Move** shows the dot and both rings on every arrow, and the rings on every
-line, for going back to one drawn earlier. Where a ring sits on top of a
-player the player wins the press: dragging players is the commonest thing in
-Move mode, and the ring is still reachable anywhere the two do not overlap.
+**Going back to a drawing.** Under **Move**, press any drawing to pick it up.
+It gets a pale halo and its handles appear — nothing else on the board does,
+so a busy drill stays readable. Drag its body to slide the whole thing without
+changing its shape, drag a ring to move one end, drag the dot to bend it.
+`Delete` or `Backspace` rubs it out. Press bare grass, press `Escape`, or
+change tool to put it down again. Everything is undoable.
 
-The dots and rings are an editing aid only: they never appear in an exported
-image.
+Handles sit above the players, so where one lands on a player the handle wins
+the press. That only happens for a drawing you deliberately picked up, and one
+press on grass gives the player back.
+
+The halo, dots and rings are an editing aid only: they never appear in an
+exported image.
 
 **Drill notes** sit beside the board on a wide screen and beneath it on a
 narrow one: setup, coaching points, progressions. They are saved with the
