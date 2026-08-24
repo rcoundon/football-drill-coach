@@ -103,6 +103,41 @@ press on grass gives the player back.
 The halo, dots and rings are an editing aid only: they never appear in an
 exported image.
 
+**Frames.** A drill is a sequence, not a picture. **+ Frame** adds a moment,
+copied from the one you are on, so the next frame starts as the same players a
+few yards from where they were. Move them, move the ball, draw on it — the
+frame you came from is untouched.
+
+Once there are two, the strip opens: numbered chips for each moment, ◀ and ▶
+to move the one you are on earlier or later, **Delete frame** to remove it, a
+field for how long the move into it takes — hidden on the first frame, since
+nothing moves into the start of a drill — and play, rewind and a scrub slider.
+
+`Space` plays and pauses, except when a button, link or select has focus,
+since those already act on Space themselves. A coach who has just tapped a
+chip and then presses Space gets that chip pressed again, not playback —
+worth knowing if the shortcut ever seems to do nothing.
+
+Players ease away and settle; the ball travels in a straight line and leaves
+the passer's boot as it goes, so a pass looks like a pass. A drawing belongs to
+the moment it describes, so the arrow showing a pass is on screen while the
+pass happens and gone once you rub it out on the next frame.
+
+Your squad is the same in every moment. Adding, removing or renaming a
+player, cone or label reaches every frame; only positions and drawings differ
+between them. Nobody appears halfway through a drill. **Copy** reaches every
+frame too: duplicating a player copies their run rather than just where they
+stand right now, so the copy repeats the same movement, offset, through the
+whole drill.
+
+**GIF** saves the whole thing as an animation that loops — it plays inline in a
+message or a document, which is where a session plan goes. It appears once
+there is more than one frame; a single moment is what **PNG** is for.
+
+While a drill is playing, or while you are dragging the scrub slider, the board
+is showing a blend of two moments rather than a moment, so it will not take an
+edit. Let go of the slider and it lands on the nearest frame.
+
 **Drill notes** sit beside the board on a wide screen and beneath it on a
 narrow one: setup, coaching points, progressions. They are saved with the
 pattern and come out in the PNG export in a band under the pitch, so a
@@ -124,8 +159,9 @@ them with **Move** and remove them with **Erase**.
 
 **Clear players** takes everyone off and leaves your drawings and cones. **Clear drawings**
 does the reverse. **Reset** starts a fresh board for the next drill — it clears
-players, cones, ball and drawings, but keeps the pitch and orientation you are on, since
-that is almost always the pitch you want next. All three are undoable.
+players, cones, ball and drawings, and drops back to a single frame, but keeps the pitch
+and orientation you are on, since that is almost always the pitch you want next. All
+three are undoable.
 
 Drop the ball on a player to give them possession — the player gets a white ring and the
 ball travels with them. Drag it onto empty grass to release it.
@@ -159,6 +195,10 @@ backup or to move patterns to another machine, and **Import** to read one back. 
 never overwrites: a pattern whose id already exists arrives under a new id with
 `(imported)` appended to its name.
 
+A pattern saved before frames existed still opens: it comes back as a single frame with
+its drawings carried onto it, exactly as it looked when you saved it, so nothing already
+in your library needs redoing.
+
 ## Coordinate system
 
 Positions are stored in pitch units — x from 0 to 100, y from 0 to 64.76 — which is a
@@ -167,9 +207,8 @@ rotating the board, and switching between pitch types never move a counter.
 
 ## Not built yet
 
-Recording and playing back movement. The saved format already stores a `frames` array
-with one frame per pattern, so recording can append frames without changing the schema
-or invalidating anything already saved.
+Timing one movement against another — a run that starts before the pass that
+finds it. Every object on a frame currently moves over the same duration.
 
-See [docs/roadmap.md](docs/roadmap.md) for that and the rest of what is worth building
-next.
+See [docs/roadmap.md](docs/roadmap.md) for that and the rest of what is worth
+building next.
