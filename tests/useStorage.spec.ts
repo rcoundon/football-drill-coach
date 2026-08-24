@@ -56,7 +56,9 @@ describe('savePattern and listPatterns', () => {
     }
     const saved = store.savePattern('Drill', withDrawing)
     expect(saved.drawings).toHaveLength(1)
-    expect(saved.frames[0]).not.toHaveProperty('drawings')
+    // The frame carries its own (currently always empty) drawings field per
+    // the Frame type, but the drawing itself is not duplicated into it.
+    expect(saved.frames[0].drawings).toEqual([])
   })
 
   it('updates in place when given an existing id', () => {

@@ -10,20 +10,11 @@ import type {
   SelectionRef,
   Vec,
 } from '../types'
-import { PITCH_H, PITCH_W, clampToPitch, distance, snapToAxis } from '../geometry'
+import { BALL_OFFSET, PITCH_H, PITCH_W, clampToPitch, distance, snapToAxis } from '../geometry'
+
+export { BALL_OFFSET } from '../geometry'
 
 export const UNDO_LIMIT = 50
-
-/**
- * Where an attached ball sits relative to its holder, in pitch units.
- *
- * Far enough out that the ball's own hit circle clears the whole drawn
- * counter: the ball is painted after the counters, so any overlap steals the
- * press, and an overlap reaching the counter's centre means pressing the
- * middle of a player in possession grabs the ball instead of the player.
- * See BALL_HIT_RADIUS_ATTACHED in BallToken.vue for the other half.
- */
-export const BALL_OFFSET: Vec = { x: 3.4, y: 3.4 }
 
 /**
  * How close to a counter the ball must land to be taken into possession, in

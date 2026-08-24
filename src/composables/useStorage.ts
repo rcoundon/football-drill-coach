@@ -293,6 +293,10 @@ function toPattern(name: string, snap: BoardSnapshot, id: string, createdAt: str
         markers: copy.markers ?? [],
         labels: copy.labels ?? [],
         ball: copy.ball,
+        // Stopgap: v1 has exactly one frame and its drawings live on the
+        // pattern. Task 4 rewrites this function to build real per-frame
+        // drawings once multiple frames exist.
+        drawings: [],
       },
     ],
     labelsVisible: copy.labelsVisible ?? true,

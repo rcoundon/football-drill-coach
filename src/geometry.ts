@@ -9,6 +9,21 @@ const PITCH_SCALE = 100 / 105
 export const PITCH_W = 100
 export const PITCH_H = Number((68 * PITCH_SCALE).toFixed(2)) // 64.76
 
+/**
+ * Where an attached ball sits relative to its holder, in pitch units.
+ *
+ * Far enough out that the ball's own hit circle clears the whole drawn
+ * counter: the ball is painted after the counters, so any overlap steals the
+ * press, and an overlap reaching the counter's centre means pressing the
+ * middle of a player in possession grabs the ball instead of the player.
+ * See BALL_HIT_RADIUS_ATTACHED in BallToken.vue for the other half.
+ *
+ * It lives here rather than in useBoard so animation.ts can resolve where an
+ * attached ball is drawn without importing useBoard, which would import
+ * animation.ts back.
+ */
+export const BALL_OFFSET: Vec = { x: 3.4, y: 3.4 }
+
 export const COUNTER_COLORS = ['red', 'blue', 'yellow', 'purple', 'black'] as const satisfies readonly CounterColor[]
 
 /** Metres to pitch units. Used by the markings component. */
