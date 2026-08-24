@@ -28,41 +28,53 @@ describe('a drill with one frame', () => {
   })
 })
 
-describe('finding your way in', () => {
+describe('saying what the strip is for', () => {
   /**
-   * The way into frames was a grey chip below the pitch, identical to every
-   * other chip and the only control region on the page with no heading. A
-   * coach who did not already know frames existed had no reason to press it.
+   * The strip used to state an action with no purpose attached: a chip that
+   * added a "frame", then a "moment", neither of which told a coach that this
+   * is how a drill gets built and played back. Naming the container better was
+   * never going to fix that — the region has to say what it is FOR.
    */
-  it('names the region, as every other group of controls does', () => {
+  it('leads with the purpose rather than the name of the thing', () => {
     const wrapper = mount(FrameStrip)
-    expect(wrapper.find('[data-strip-label]').text()).toBe('Moments')
+    expect(wrapper.find('[data-strip-label]').text()).toBe('Build the drill')
   })
 
-  it('keeps the heading once the strip opens, so the row is not unexplained', () => {
+  it('explains itself while the drill is a single phase', () => {
+    const wrapper = mount(FrameStrip)
+    expect(wrapper.find('[data-strip-hint]').text()).toBe(
+      'Show it phase by phase, then play it back.',
+    )
+  })
+
+  /**
+   * The explanation is teaching, and a coach who has built a sequence has
+   * learnt it. Leaving it there would cost space on every board forever to
+   * say something its owner already knows.
+   */
+  it('drops the explanation once the coach has plainly understood', () => {
     board.addFrame()
     const wrapper = mount(FrameStrip)
+    expect(wrapper.find('[data-strip-hint]').exists()).toBe(false)
     expect(wrapper.find('[data-strip-label]').exists()).toBe(true)
   })
 
   it('makes the way in the one control that does not look like the others', () => {
     const wrapper = mount(FrameStrip)
-    const add = wrapper.find('[data-add-frame]')
-    expect(add.classes()).toContain('chip--primary')
+    expect(wrapper.find('[data-add-frame]').classes()).toContain('chip--primary')
     // Nothing else may claim it, or it stops standing out.
-    const others = wrapper.findAll('.chip--primary')
-    expect(others).toHaveLength(1)
+    expect(wrapper.findAll('.chip--primary')).toHaveLength(1)
   })
 
-  it('says what it does rather than naming the data structure', () => {
+  it('calls it a phase, the word a coach already uses', () => {
     const wrapper = mount(FrameStrip)
-    expect(wrapper.find('[data-add-frame]').text()).toBe('+ Add a moment')
+    expect(wrapper.find('[data-add-frame]').text()).toBe('+ Add a phase')
   })
 
-  it('calls a moment a moment throughout, so two controls cannot disagree', () => {
+  it('calls it a phase throughout, so two controls cannot disagree', () => {
     board.addFrame()
     const wrapper = mount(FrameStrip)
-    expect(wrapper.find('[data-delete-frame]').text()).toBe('Delete moment')
+    expect(wrapper.find('[data-delete-frame]').text()).toBe('Delete phase')
   })
 })
 

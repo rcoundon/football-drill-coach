@@ -9,7 +9,7 @@ withDefaults(defineProps<{ /** True while a GIF export is sampling the board. */
 
 const board = useBoard()
 
-/** Why adding, deleting, reordering and retiming a moment refuse mid-move. */
+/** Why adding, deleting, reordering and retiming a phase refuse mid-move. */
 const lockedTitle = 'Nothing can change while the drill is playing or mid-move'
 
 /** Why Play, Rewind and the scrubber are locked — only true during an export. */
@@ -60,19 +60,28 @@ function togglePlay(): void {
 <template>
   <div class="strip" :class="{ 'is-open': hasSequence }">
     <!--
-      Named like every other group of controls on the page. Without it this
-      was the one region with no heading, which is most of why the way into
-      frames read as stray furniture below the pitch rather than a thing the
-      board offers.
+      The heading says what the region is FOR, not what the thing inside it is
+      called. Naming the container — a frame, a moment — told a coach nothing
+      about why they would press anything here. This is the means to an end,
+      and the end is a drill that plays back, so that is what it says.
     -->
-    <span data-strip-label class="group-label">Moments</span>
+    <span data-strip-label class="group-label">Build the drill</span>
+    <!--
+      Shown only while the drill is a single phase, which is exactly when the
+      coach does not yet know what any of this does. Once they have built a
+      sequence they have learnt it, and a permanent explanation would cost
+      space on every board to say something its owner already knows.
+    -->
+    <span v-if="!hasSequence" data-strip-hint class="hint">
+      Show it phase by phase, then play it back.
+    </span>
     <button
       data-add-frame
       class="chip chip--primary"
       :disabled="board.isDerived.value"
-      :title="board.isDerived.value ? lockedTitle : 'Add a moment, copied from the one you are on'"
+      :title="board.isDerived.value ? lockedTitle : 'Add a phase, copied from the one you are on'"
       @click="board.addFrame()"
-    >+ Add a moment</button>
+    >+ Add a phase</button>
 
     <template v-if="hasSequence">
       <div class="frames">
@@ -81,7 +90,7 @@ function togglePlay(): void {
           :key="index"
           :data-frame="index"
           :class="['chip', 'frame', { 'is-active': index === current }]"
-          :title="`Go to moment ${index + 1}`"
+          :title="`Go to phase ${index + 1}`"
           @click="board.goToFrame(index)"
         >{{ index + 1 }}</button>
       </div>
@@ -91,25 +100,25 @@ function togglePlay(): void {
           data-frame-earlier
           class="chip"
           :disabled="current === 0 || board.isDerived.value"
-          :title="board.isDerived.value ? lockedTitle : 'Move this moment earlier'"
-          aria-label="Move this moment earlier"
+          :title="board.isDerived.value ? lockedTitle : 'Move this phase earlier'"
+          aria-label="Move this phase earlier"
           @click="board.moveFrame(current, current - 1)"
         >◀</button>
         <button
           data-frame-later
           class="chip"
           :disabled="current === last || board.isDerived.value"
-          :title="board.isDerived.value ? lockedTitle : 'Move this moment later'"
-          aria-label="Move this moment later"
+          :title="board.isDerived.value ? lockedTitle : 'Move this phase later'"
+          aria-label="Move this phase later"
           @click="board.moveFrame(current, current + 1)"
         >▶</button>
         <button
           data-delete-frame
           class="chip"
           :disabled="board.isDerived.value"
-          :title="board.isDerived.value ? lockedTitle : 'Remove this moment'"
+          :title="board.isDerived.value ? lockedTitle : 'Remove this phase'"
           @click="board.deleteFrame(current)"
-        >Delete moment</button>
+        >Delete phase</button>
       </div>
 
       <!--
@@ -196,6 +205,8 @@ function togglePlay(): void {
   border-radius: 0.4rem;
 }
 .group-label { font-size: 0.7rem; text-transform: uppercase; opacity: 0.65; margin-right: 0.2rem; }
+/* Quiet enough to read as explanation rather than as another control. */
+.hint { font-size: 0.8rem; opacity: 0.75; }
 .frames { display: flex; flex-wrap: wrap; gap: 0.3rem; }
 .group { display: flex; gap: 0.3rem; align-items: center; }
 .transport { flex: 1 1 12rem; min-width: 0; }

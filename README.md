@@ -103,13 +103,15 @@ press on grass gives the player back.
 The halo, dots and rings are an editing aid only: they never appear in an
 exported image.
 
-**Frames.** A drill is a sequence, not a picture. **+ Add a moment** adds one,
-copied from the one you are on, so the next frame starts as the same players a
-few yards from where they were. Move them, move the ball, draw on it — the
-frame you came from is untouched.
+**Building a drill.** A drill is a sequence, not a picture, so you build it up
+in phases. A phase is the board at one point in the drill: where everyone
+stands, and what is drawn over them. **+ Add a phase** adds one, copied from
+the phase you are on, so the next starts as the same players a few yards from
+where they were. Move them, move the ball, draw on it — the phase you came
+from is untouched.
 
 Once there are two, the strip opens: numbered chips for each moment, ◀ and ▶
-to move the one you are on earlier or later, **Delete moment** to remove it, a
+to move the one you are on earlier or later, **Delete phase** to remove it, a
 field for how long the move into it takes — hidden on the first frame, since
 nothing moves into the start of a drill — and play, rewind and a scrub slider.
 
