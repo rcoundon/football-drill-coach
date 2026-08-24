@@ -67,8 +67,18 @@ dot: a line marks out ground rather than describing a movement.
 **Gathering a group.** Under **Move**, drag from bare grass to draw a box:
 every player, cone, label and drawing inside joins the group and gets a
 highlight. Drag any member and the whole shape slides together, formation
-intact. `Delete` takes the lot off in one go. A plain press on grass, `Escape`,
-or changing tool puts everything down.
+intact. A plain press on grass, `Escape`, or changing tool puts everything
+down.
+
+**Copy** duplicates whatever is held, dropping the copy a little down and to
+the right and leaving you holding it, ready to drag into place — a mirrored
+shape on the other flank in two gestures. **Delete** takes the lot off in one
+go. Both sit beside Undo, and both are undoable.
+
+On a keyboard, `Cmd+D` or `Ctrl+D` copies and `Delete` or `Backspace` removes.
+The buttons are not just shortcuts for those: a tablet has neither key, so
+they are the only way in on the device this board is mostly used on. `Cmd+D`
+is left to the browser whenever nothing is held.
 
 Pressing a single player still drags that player and nothing else, exactly as
 it always has — the box is the only way into a group. A drawing joins the box

@@ -691,3 +691,133 @@ describe('deleting a group', () => {
     expect(board.canUndo.value).toBe(false)
   })
 })
+
+describe('duplicating a group', () => {
+  it('leaves the original where it was', () => {
+    const board = useBoard()
+    const counter = board.addCounter('red')
+    board.moveCounter(counter.id, { x: 20, y: 20 })
+    board.duplicateGroup([{ kind: 'counter', id: counter.id }], { x: 4, y: 4 })
+    expect(board.counterById(counter.id)!.pos).toEqual({ x: 20, y: 20 })
+  })
+
+  it('drops the copy at the offset asked for', () => {
+    const board = useBoard()
+    const counter = board.addCounter('red')
+    board.moveCounter(counter.id, { x: 20, y: 20 })
+    const [copy] = board.duplicateGroup([{ kind: 'counter', id: counter.id }], { x: 4, y: 4 })
+    expect(board.counterById(copy.id)!.pos).toEqual({ x: 24, y: 24 })
+  })
+
+  it('gives the copy an id of its own', () => {
+    const board = useBoard()
+    const counter = board.addCounter('red')
+    const [copy] = board.duplicateGroup([{ kind: 'counter', id: counter.id }], { x: 4, y: 4 })
+    expect(copy.id).not.toBe(counter.id)
+    expect(board.state.counters).toHaveLength(2)
+  })
+
+  it('keeps what makes each member what it is', () => {
+    const board = useBoard()
+    const counter = board.addCounter('blue')
+    board.setCounterLabel(counter.id, '7')
+    const label = board.addLabel({ x: 30, y: 30 }, 'press')!
+    const arrow = board.startArrow({ x: 10, y: 10 }, '#e53935', 'run')
+    board.updateSegment(arrow, { x: 40, y: 10 })
+    board.finishDrawing(arrow)
+    board.setArrowBend(arrow, 5, 0.2)
+
+    const copies = board.duplicateGroup(
+      [
+        { kind: 'counter', id: counter.id },
+        { kind: 'label', id: label.id },
+        { kind: 'drawing', id: arrow },
+      ],
+      { x: 4, y: 4 },
+    )
+
+    const copiedCounter = board.counterById(copies[0].id)!
+    expect(copiedCounter.color).toBe('blue')
+    expect(copiedCounter.label).toBe('7')
+    expect(board.labelById(copies[1].id)!.text).toBe('press')
+    const copiedArrow = board.drawingById(copies[2].id) as ArrowDrawing
+    expect(copiedArrow.color).toBe('#e53935')
+    expect(copiedArrow.style).toBe('run')
+    expect(copiedArrow.bend).toBe(5)
+    expect(copiedArrow.bendAlong).toBe(0.2)
+  })
+
+  it('hands back the copies, so the coach is left holding them', () => {
+    const board = useBoard()
+    const counter = board.addCounter('red')
+    const cone = board.addMarker({ x: 20, y: 20 })
+    const copies = board.duplicateGroup(
+      [
+        { kind: 'counter', id: counter.id },
+        { kind: 'marker', id: cone.id },
+      ],
+      { x: 4, y: 4 },
+    )
+    expect(copies.map((c) => c.kind)).toEqual(['counter', 'marker'])
+    expect(board.state.counters).toHaveLength(2)
+    expect(board.state.markers).toHaveLength(2)
+  })
+
+  it('trims the offset so a copy of a shape at the edge stays on the pitch', () => {
+    const board = useBoard()
+    const counter = board.addCounter('red')
+    board.moveCounter(counter.id, { x: PITCH_W, y: 20 })
+    const [copy] = board.duplicateGroup([{ kind: 'counter', id: counter.id }], { x: 4, y: 4 })
+    expect(board.counterById(copy.id)!.pos.x).toBe(PITCH_W)
+  })
+
+  it('gives the copy no ball, whoever was carrying the original', () => {
+    const board = useBoard()
+    const counter = board.addCounter('red')
+    board.moveCounter(counter.id, { x: 30, y: 30 })
+    board.dropBall({ x: 30, y: 30 })
+    expect(board.state.ball.attachedTo).toBe(counter.id)
+
+    const [copy] = board.duplicateGroup([{ kind: 'counter', id: counter.id }], { x: 4, y: 4 })
+
+    expect(board.state.ball.attachedTo).toBe(counter.id)
+    expect(board.state.ball.attachedTo).not.toBe(copy.id)
+  })
+
+  it('is one undo entry, not one per member', () => {
+    const board = useBoard()
+    const first = board.addCounter('red')
+    const second = board.addCounter('blue')
+    board.duplicateGroup(
+      [
+        { kind: 'counter', id: first.id },
+        { kind: 'counter', id: second.id },
+      ],
+      { x: 4, y: 4 },
+    )
+    board.undo()
+    expect(board.state.counters).toHaveLength(2)
+  })
+
+  it('does nothing, and costs no history, for an empty group', () => {
+    const board = useBoard()
+    board.addCounter('red')
+    expect(board.duplicateGroup([], { x: 4, y: 4 })).toEqual([])
+    board.undo()
+    expect(board.state.counters).toEqual([])
+    expect(board.canUndo.value).toBe(false)
+  })
+
+  it('skips members that have since gone', () => {
+    const board = useBoard()
+    const counter = board.addCounter('red')
+    const copies = board.duplicateGroup(
+      [
+        { kind: 'counter', id: counter.id },
+        { kind: 'drawing', id: 'gone' },
+      ],
+      { x: 4, y: 4 },
+    )
+    expect(copies).toHaveLength(1)
+  })
+})

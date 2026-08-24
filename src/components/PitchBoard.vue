@@ -43,12 +43,22 @@ import BendHandle from './BendHandle.vue'
 import EndHandle from './EndHandle.vue'
 
 const props = defineProps<{ tool: ToolMode; drawColor: string }>()
-const emit = defineEmits<{ rename: [id: string]; addLabel: [at: Vec]; editLabel: [id: string] }>()
+const emit = defineEmits<{
+  rename: [id: string]
+  addLabel: [at: Vec]
+  editLabel: [id: string]
+  /**
+   * How many things the coach is holding. The toolbar needs this to offer
+   * Copy and Delete buttons, which are the only way to reach either on a
+   * tablet — there is no Cmd key and no Delete key under a finger.
+   */
+  selectionSize: [count: number]
+}>()
 
 const board = useBoard()
 const svgEl = ref<SVGSVGElement | null>(null)
 
-defineExpose({ svgEl, deleteSelected, clearSelection })
+defineExpose({ svgEl, deleteSelected, duplicateSelected, clearSelection })
 
 type DragTarget =
   | { kind: 'counter'; id: string }
@@ -503,6 +513,22 @@ function clearSelection(): void {
   selection.value = []
 }
 
+/**
+ * How far a copy lands from what it was copied from, in pitch units. Enough
+ * to read as a separate shape at a glance, little enough that it is plainly
+ * the same shape rather than something new.
+ */
+const DUPLICATE_OFFSET: Vec = { x: 4, y: 4 }
+
+/**
+ * Copy everything being held, and hold the copy instead. The next thing
+ * anyone does after duplicating a shape is drag it where they want it.
+ */
+function duplicateSelected(): void {
+  if (selection.value.length === 0) return
+  selection.value = board.duplicateGroup(selection.value, DUPLICATE_OFFSET)
+}
+
 /** Rub out everything being held, in one undo entry. */
 function deleteSelected(): void {
   if (selection.value.length === 0) return
@@ -581,6 +607,12 @@ function isSelected(kind: SelectionRef['kind'], id: string): boolean {
 
 /** True when a drag on any member should carry the whole group with it. */
 const hasGroup = computed(() => selection.value.length > 1)
+
+watch(
+  () => selection.value.length,
+  (count) => emit('selectionSize', count),
+  { immediate: true },
+)
 
 /** The tools that draw a segment, and so keep one live afterwards. */
 function isSegmentTool(tool: ToolMode): boolean {

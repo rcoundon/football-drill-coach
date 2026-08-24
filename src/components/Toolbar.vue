@@ -17,8 +17,14 @@ const props = withDefaults(
      * bar must not repeat them.
      */
     railed?: boolean
+    /**
+     * How many things the coach is holding on the board. A tablet has no Cmd
+     * key and no Delete key, so buttons are the only way to copy or remove a
+     * gathered group there.
+     */
+    selectionSize?: number
   }>(),
-  { patternName: '', railed: false },
+  { patternName: '', railed: false, selectionSize: 0 },
 )
 
 const emit = defineEmits<{
@@ -31,6 +37,8 @@ const emit = defineEmits<{
   exportJson: []
   importJson: []
   reset: []
+  duplicate: []
+  deleteSelection: []
 }>()
 
 const board = useBoard()
@@ -76,6 +84,11 @@ const saveTitle = computed(() =>
   props.patternName ? `Update “${props.patternName}”` : 'Save as a new pattern',
 )
 
+/** Names what the button would act on, so a coach can see before pressing. */
+const heldLabel = computed(() =>
+  props.selectionSize === 1 ? '1 thing' : `${props.selectionSize} things`,
+)
+
 </script>
 
 <template>
@@ -118,6 +131,25 @@ const saveTitle = computed(() =>
     <div class="group">
       <button data-undo class="chip" :disabled="!board.canUndo.value" @click="board.undo()">Undo</button>
       <button data-redo class="chip" :disabled="!board.canRedo.value" @click="board.redo()">Redo</button>
+      <!--
+        Beside Undo, which is the one group never folded behind the More
+        menu. A tablet has no Cmd+D and no Delete key, so on the device this
+        board is mostly used on these buttons are the only way in.
+      -->
+      <button
+        data-duplicate
+        class="chip"
+        :disabled="selectionSize === 0"
+        :title="`Copy the ${heldLabel} you are holding`"
+        @click="emit('duplicate')"
+      >Copy</button>
+      <button
+        data-delete-selection
+        class="chip"
+        :disabled="selectionSize === 0"
+        :title="`Remove the ${heldLabel} you are holding`"
+        @click="emit('deleteSelection')"
+      >Delete</button>
     </div>
 
     <button

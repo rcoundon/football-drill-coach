@@ -753,6 +753,60 @@ function deleteGroup(refs: SelectionRef[]): void {
   state.drawings = rawFilter(state.drawings, (d) => !ids.drawing.has(d.id))
 }
 
+/**
+ * Copy a whole group, offset a little so the copy is plainly a copy rather
+ * than something that quietly landed on top of the original.
+ *
+ * Returns the copies, so the caller can leave the coach holding them: the
+ * next thing anyone does after duplicating a shape is drag it into place.
+ *
+ * The offset goes through `translateGroup`, so a shape duplicated against
+ * the touchline stays on the pitch and keeps its formation. A copied player
+ * never inherits the ball — a drill has one ball, and duplicating a shape is
+ * not a reason to grow another.
+ */
+function duplicateGroup(refs: SelectionRef[], offset: Vec): SelectionRef[] {
+  const live = refs.filter((ref) => pointsOfRef(ref) !== null)
+  if (live.length === 0) return []
+
+  commit()
+
+  const copies: SelectionRef[] = []
+  for (const ref of live) {
+    if (ref.kind === 'counter') {
+      const original = counterById(ref.id)!
+      const copy: Counter = {
+        id: newId(),
+        color: original.color,
+        label: original.label,
+        pos: { ...original.pos },
+      }
+      state.counters.push(copy)
+      copies.push({ kind: 'counter', id: copy.id })
+    } else if (ref.kind === 'marker') {
+      const original = markerById(ref.id)!
+      const copy: Marker = { id: newId(), pos: { ...original.pos } }
+      state.markers.push(copy)
+      copies.push({ kind: 'marker', id: copy.id })
+    } else if (ref.kind === 'label') {
+      const original = labelById(ref.id)!
+      const copy: Label = { id: newId(), pos: { ...original.pos }, text: original.text }
+      state.labels.push(copy)
+      copies.push({ kind: 'label', id: copy.id })
+    } else {
+      // Cloned whole rather than field by field, so a bend, a dash style or
+      // anything a drawing grows later comes along without being listed here.
+      const copy = clone(drawingById(ref.id)!)
+      copy.id = newId()
+      state.drawings.push(copy)
+      copies.push({ kind: 'drawing', id: copy.id })
+    }
+  }
+
+  translateGroup(copies, offset)
+  return copies
+}
+
 /** Erase every trace of a drawing from the undo and redo history. */
 function forgetDrawingInHistory(id: string): void {
   for (const stack of [undoStack, redoStack]) {
@@ -858,6 +912,7 @@ const board = {
   moveSegmentEnd,
   translateDrawing,
   translateGroup,
+  duplicateGroup,
   deleteGroup,
   setArrowBend,
   finishDrawing,

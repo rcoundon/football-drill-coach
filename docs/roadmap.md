@@ -32,10 +32,14 @@ no shift key on a tablet; and counters do join, because sliding a shape is
 mostly about players, which is what multi-select was wanted for. Pressing a
 single player still drags that player alone.
 
+Duplication has landed with it: **Copy** and **Delete** buttons beside Undo,
+plus `Cmd/Ctrl+D`. The buttons are not conveniences — a tablet has no Cmd key
+and no Delete key, so on the device this board is mostly used on they are the
+only way in. Anything reachable only by keyboard is, in practice, unreachable
+here; worth remembering for whatever comes next.
+
 Still to do:
 
-- **Duplicating a selection.** Cheap now that a group exists, and a mirrored
-  shape on the other flank is a common thing to want.
 - **Nudging with the arrow keys.** Once something is held, the keyboard is the
   obvious way to move it a metre rather than a handful.
 - **Rotating or flipping a group.** Harder, and worth waiting to see whether

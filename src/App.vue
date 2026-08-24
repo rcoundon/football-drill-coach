@@ -18,6 +18,13 @@ const exporter = useExport()
 const tool = ref<ToolMode>('select')
 const drawColor = ref('#ffffff')
 const boardRef = ref<InstanceType<typeof PitchBoard> | null>(null)
+
+/**
+ * How many things the board is holding. Kept here rather than read back out
+ * of the board so the toolbar can be driven by a plain prop, the way every
+ * other control in it already is.
+ */
+const selectionSize = ref(0)
 const notice = ref<string | null>(null)
 
 const libraryOpen = ref(false)
@@ -252,6 +259,17 @@ function onKeydown(event: KeyboardEvent) {
     return
   }
 
+  /*
+   * Only swallowed when there is something to copy. With an empty board the
+   * key belongs to the browser, and taking Cmd+D away from a coach trying to
+   * bookmark their own tactics board would be a poor trade.
+   */
+  if (modifier && event.key.toLowerCase() === 'd' && selectionSize.value > 0) {
+    event.preventDefault()
+    boardRef.value?.duplicateSelected()
+    return
+  }
+
   if (modifier) return
 
   if (event.key === 'Escape') {
@@ -321,6 +339,9 @@ watch(
       v-model:drawColor="drawColor"
       :pattern-name="currentName"
       :railed="isRail"
+      :selection-size="selectionSize"
+      @duplicate="boardRef?.duplicateSelected()"
+      @deleteSelection="boardRef?.deleteSelected()"
       @save="openSavePrompt"
       @saveAs="openSaveAsPrompt"
       @open="libraryOpen = true"
@@ -344,6 +365,7 @@ watch(
           @rename="openRenamePrompt"
           @add-label="promptNewLabel"
           @edit-label="promptEditLabel"
+          @selection-size="selectionSize = $event"
         />
       </div>
 

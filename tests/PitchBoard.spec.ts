@@ -2266,3 +2266,90 @@ describe('moving a group', () => {
     expect(board.state.counters).toEqual([])
   })
 })
+
+describe('duplicating what is held', () => {
+  function boxTwoPlayers(board: ReturnType<typeof useBoard>) {
+    const red = board.addCounter('red')
+    board.moveCounter(red.id, { x: 15, y: 15 })
+    const blue = board.addCounter('blue')
+    board.moveCounter(blue.id, { x: 30, y: 15 })
+    return { red, blue }
+  }
+
+  async function boxTheShape(wrapper: ReturnType<typeof mountBoard>) {
+    const svg = wrapper.find('svg')
+    await firePointer(svg, 'pointerdown', clientFor(5, 5))
+    await firePointer(svg, 'pointermove', clientFor(40, 30))
+    await firePointer(svg, 'pointerup', clientFor(40, 30))
+  }
+
+  it('copies every member of the group', async () => {
+    const board = useBoard()
+    boxTwoPlayers(board)
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+    await boxTheShape(wrapper)
+
+    wrapper.vm.duplicateSelected()
+    await wrapper.vm.$nextTick()
+
+    expect(board.state.counters).toHaveLength(4)
+  })
+
+  it('leaves the coach holding the copy, ready to drag it into place', async () => {
+    const board = useBoard()
+    const shape = boxTwoPlayers(board)
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+    await boxTheShape(wrapper)
+
+    wrapper.vm.duplicateSelected()
+    await wrapper.vm.$nextTick()
+
+    // Still two rings, but on the copies rather than on the originals.
+    expect(wrapper.findAll('[data-selected-token]')).toHaveLength(2)
+    await firePointer(wrapper.findAll('[data-counter]')[2], 'pointerdown', clientFor(19, 19))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(39, 39))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(39, 39))
+
+    // The originals never budged.
+    expect(board.counterById(shape.red.id)!.pos).toEqual({ x: 15, y: 15 })
+    expect(board.counterById(shape.blue.id)!.pos).toEqual({ x: 30, y: 15 })
+  })
+
+  it('does nothing when nothing is held', async () => {
+    const board = useBoard()
+    boxTwoPlayers(board)
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    wrapper.vm.duplicateSelected()
+
+    expect(board.state.counters).toHaveLength(2)
+  })
+
+  it('is undone in one step', async () => {
+    const board = useBoard()
+    boxTwoPlayers(board)
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+    await boxTheShape(wrapper)
+
+    wrapper.vm.duplicateSelected()
+    board.undo()
+
+    expect(board.state.counters).toHaveLength(2)
+  })
+
+  it('tells the app how many things are held, so a button can be offered', async () => {
+    const board = useBoard()
+    boxTwoPlayers(board)
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('selectionSize')?.at(-1)).toEqual([0])
+
+    await boxTheShape(wrapper)
+
+    expect(wrapper.emitted('selectionSize')?.at(-1)).toEqual([2])
+  })
+})
