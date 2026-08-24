@@ -654,25 +654,7 @@ function pointsOf(drawing: Drawing): Vec[] {
  * the chord, so the bow travels with its ends.
  */
 function translateDrawing(id: string, delta: Vec): void {
-  const drawing = drawingById(id)
-  if (!drawing) return
-
-  const points = pointsOf(drawing)
-  if (points.length === 0) return
-
-  const xs = points.map((p) => p.x)
-  const ys = points.map((p) => p.y)
-
-  // A drawing wider than the pitch cannot be brought inside, and squeezing it
-  // would distort it, so the room it has is allowed to go negative and the
-  // min/max below simply cancel the move on that axis.
-  const dx = Math.min(PITCH_W - Math.max(...xs), Math.max(-Math.min(...xs), delta.x))
-  const dy = Math.min(PITCH_H - Math.max(...ys), Math.max(-Math.min(...ys), delta.y))
-
-  for (const point of points) {
-    point.x += dx
-    point.y += dy
-  }
+  translateGroup([{ kind: 'drawing', id }], delta)
 }
 
 /**
@@ -713,6 +695,10 @@ function translateGroup(refs: SelectionRef[], delta: Vec): void {
 
   const xs = points.map((p) => p.x)
   const ys = points.map((p) => p.y)
+
+  // Something wider than the pitch cannot be brought inside, and squeezing it
+  // would distort it, so the room it has is allowed to go negative and the
+  // min/max below simply cancel the move on that axis.
   const dx = Math.min(PITCH_W - Math.max(...xs), Math.max(-Math.min(...xs), delta.x))
   const dy = Math.min(PITCH_H - Math.max(...ys), Math.max(-Math.min(...ys), delta.y))
 

@@ -558,11 +558,11 @@ function isInside(box: { x: number; y: number; width: number; height: number }, 
 /**
  * Gather everything the box covers.
  *
- * A drawing joins if any of the points it is made of falls inside. That is a
- * stricter rule than testing its bounding box, and a more predictable one: a
- * long arrow crossing the corner of the box is left alone, which is what a
- * coach boxing a shape means. Both ends of it would have to be in the box for
- * it to come along.
+ * A drawing joins if any of the points it is made of falls inside — one end
+ * of an arrow is enough. That is a stricter rule than testing its bounding
+ * box, and a more predictable one: an arrow whose bounding box overlaps the
+ * corner of the selection but which passes nowhere near it is left alone,
+ * which is what a coach boxing a shape means.
  */
 function gatherInto(box: { x: number; y: number; width: number; height: number }): void {
   const found: SelectionRef[] = []
