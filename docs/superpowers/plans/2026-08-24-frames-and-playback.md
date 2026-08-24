@@ -2444,6 +2444,28 @@ describe('rendering the playhead', () => {
     expect(board.state.frames[0].counters.find((c) => c.id === id)!.pos).toEqual({ x: 10, y: 30 })
   })
 
+  it('follows the coach to another frame', async () => {
+    // Carried forward from Task 2's review: the plan rests on a rendered
+    // board actually following the current frame, and until now that was
+    // only ever asserted by reading state directly, which would pass even
+    // if nothing re-rendered.
+    const board = useBoard()
+    board.addCounter('red')
+    const id = board.state.counters[0].id
+    board.moveCounter(id, { x: 10, y: 30 })
+    board.addFrame()
+    board.moveCounter(id, { x: 50, y: 30 })
+
+    const wrapper = mountBoard()
+    board.goToFrame(0)
+    await nextTick()
+    expect(Number(wrapper.find(`[data-counter="${id}"]`).attributes('data-x'))).toBeCloseTo(10, 4)
+
+    board.goToFrame(1)
+    await nextTick()
+    expect(Number(wrapper.find(`[data-counter="${id}"]`).attributes('data-x'))).toBeCloseTo(50, 4)
+  })
+
   it('clears the selection when play starts', async () => {
     const board = useBoard()
     const drawingId = board.startLine({ x: 5, y: 5 }, '#fff')
