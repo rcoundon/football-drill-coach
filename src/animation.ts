@@ -123,6 +123,38 @@ function tweenAll<T extends { id: string; pos: Vec }>(from: T[], to: T[], e: num
  * Drawings are the source frame's throughout, so the arrow describing a pass
  * is on screen while the pass happens and gone once it has.
  */
+/**
+ * How often the exported animation is sampled.
+ *
+ * 12.5 a second is 80ms, and GIF expresses delays in hundredths of a second,
+ * so this lands on a whole one. Fast enough to read as movement, slow enough
+ * that a ten-second drill is not hundreds of frames.
+ */
+export const GIF_FPS = 12.5
+
+/** A beat on the last frame, so the loop does not snap back. */
+export const GIF_TAIL_MS = 500
+
+export type GifSample = { atMs: number; delayMs: number }
+
+/**
+ * When to sample the board, and how long each sample is held.
+ *
+ * Pure and separate from the rasterising, which is the half that cannot be
+ * tested here: jsdom has no canvas.
+ */
+export function gifSchedule(frames: Frame[], fps = GIF_FPS): GifSample[] {
+  // Rounded to a whole hundredth, because that is GIF's unit; anything else
+  // is silently rounded by the encoder and the animation drifts.
+  const step = Math.max(10, Math.round(1000 / fps / 10) * 10)
+  const total = timelineOf(frames).total
+
+  const samples: GifSample[] = []
+  for (let at = 0; at < total; at += step) samples.push({ atMs: at, delayMs: step })
+  samples.push({ atMs: total, delayMs: GIF_TAIL_MS })
+  return samples
+}
+
 export function interpolateFrames(a: Frame, b: Frame, t: number): FrameView {
   const e = easeInOut(t)
   return {

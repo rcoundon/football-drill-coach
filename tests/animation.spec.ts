@@ -3,9 +3,12 @@ import type { Ball, Counter, Frame, Marker } from '../src/types'
 import { BALL_OFFSET } from '../src/geometry'
 import {
   DEFAULT_FRAME_MS,
+  GIF_FPS,
+  GIF_TAIL_MS,
   ballPositionIn,
   durationOf,
   easeInOut,
+  gifSchedule,
   interpolateFrames,
   lerp,
   timelineOf,
@@ -173,5 +176,47 @@ describe('interpolateFrames', () => {
     const drawing = { id: 'd1', kind: 'line', color: '#fff', from: { x: 0, y: 0 }, to: { x: 1, y: 1 } } as const
     const a = frame({ drawings: [drawing] })
     expect(interpolateFrames(a, frame(), 0.9).drawings).toEqual([drawing])
+  })
+})
+
+describe('gifSchedule', () => {
+  it('samples the whole drill at the given rate', () => {
+    // 1000ms at 12.5fps is 80ms a sample: 0, 80, ... 960, then the last frame.
+    const samples = gifSchedule([frame(), frame({ duration: 1000 })], GIF_FPS)
+    expect(samples[0].atMs).toBe(0)
+    expect(samples[1].atMs).toBe(80)
+    expect(samples.at(-1)!.atMs).toBe(1000)
+  })
+
+  it('holds on the last frame so the loop does not snap', () => {
+    const samples = gifSchedule([frame(), frame({ duration: 1000 })], GIF_FPS)
+    expect(samples.at(-1)!.delayMs).toBe(GIF_TAIL_MS)
+  })
+
+  it('gives every other sample the frame interval', () => {
+    const samples = gifSchedule([frame(), frame({ duration: 1000 })], GIF_FPS)
+    expect(samples[0].delayMs).toBe(80)
+    expect(samples.at(-2)!.delayMs).toBe(80)
+  })
+
+  it('uses delays GIF can actually express, in whole hundredths', () => {
+    const samples = gifSchedule([frame(), frame({ duration: 1000 })], GIF_FPS)
+    for (const sample of samples) expect(sample.delayMs % 10).toBe(0)
+  })
+
+  it('never samples past the end of the drill', () => {
+    const samples = gifSchedule([frame(), frame({ duration: 250 })], GIF_FPS)
+    for (const sample of samples) expect(sample.atMs).toBeLessThanOrEqual(250)
+  })
+
+  it('a single frame is one still, held', () => {
+    const samples = gifSchedule([frame()], GIF_FPS)
+    expect(samples).toEqual([{ atMs: 0, delayMs: GIF_TAIL_MS }])
+  })
+
+  it('follows the durations rather than assuming they are equal', () => {
+    const samples = gifSchedule([frame(), frame({ duration: 160 }), frame({ duration: 800 })], GIF_FPS)
+    expect(samples.at(-1)!.atMs).toBe(960)
+    expect(samples).toHaveLength(Math.floor(960 / 80) + 1)
   })
 })
