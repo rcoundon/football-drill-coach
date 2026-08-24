@@ -971,6 +971,23 @@ describe('space plays and pauses', () => {
     await nextTick()
     expect(board.playback.playing).toBe(true)
   })
+
+  it('leaves a focused chip alone, so the chip still responds to its own Space press', async () => {
+    const board = useBoard()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    wrapper = mountApp()
+
+    // The add-frame chip is a real <button>, exactly like every chip in
+    // Toolbar, ToolRail and FrameStrip. Space is the platform's own way to
+    // press a focused button, so the shortcut must not steal it — a coach
+    // who just clicked a chip still has that chip focused.
+    const chip = wrapper.find('[data-add-frame]').element as HTMLButtonElement
+    chip.focus()
+    fire({ key: ' ' }, chip)
+    await nextTick()
+    expect(board.playback.playing).toBe(false)
+  })
 })
 
 describe('autosave during playback', () => {

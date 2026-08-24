@@ -241,7 +241,22 @@ const isDialogOpen = computed(
 
 function onKeydown(event: KeyboardEvent) {
   const target = event.target as HTMLElement | null
-  if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return
+  /*
+   * Not just "is the coach typing": a focused button, link or select acts
+   * on its own key presses too — Space activates a button — so shortcuts
+   * must leave those alone as well, or a focused chip stops responding to
+   * its own key and starts driving the board behind it instead.
+   */
+  if (
+    target &&
+    (target.tagName === 'INPUT' ||
+      target.tagName === 'TEXTAREA' ||
+      target.tagName === 'BUTTON' ||
+      target.tagName === 'A' ||
+      target.tagName === 'SELECT' ||
+      target.isContentEditable)
+  )
+    return
 
   /*
    * Shortcuts must not reach the board while a dialog is up. Checking the
@@ -290,9 +305,11 @@ function onKeydown(event: KeyboardEvent) {
   }
 
   if (event.key === ' ') {
-    // Space is the universal play/pause, but it is also a character. The
-    // typing guard above is what keeps a space in the drill notes from
-    // starting the animation.
+    // Space is the universal play/pause, but it is also a character typed
+    // into a field and the platform's own way to press a focused button,
+    // link or select. The guard above is what keeps a space in the drill
+    // notes — or on a focused chip — from starting the animation instead
+    // of doing what the coach's focus expects.
     event.preventDefault()
     if (board.playback.playing) board.pause()
     else board.play()
