@@ -89,27 +89,11 @@ function downloadText(text: string, filename: string, mime = 'application/json')
   downloadBlob(new Blob([text], { type: mime }), filename)
 }
 
-/**
- * Rasterise the live board SVG.
- *
- * The SVG is serialised to a data URL rather than a blob URL: a blob URL for
- * an SVG is treated as cross-origin by canvas, which taints it and makes
- * toBlob throw a SecurityError.
- */
 /** Notes band layout, in pixels at the exported width. */
 const NOTES_PADDING = 40
 const NOTES_FONT_SIZE = 30
 const NOTES_LINE_HEIGHT = 42
 
-/**
- * Rasterise the board, with the drill notes in a band beneath it.
- *
- * The notes are drawn onto the canvas rather than into the SVG. Text in a
- * serialised SVG would need `foreignObject` to wrap, and that reliably
- * fails to rasterise; canvas text also lets us measure and break lines
- * properly. The board keeps its own dimensions either way — the image just
- * grows by however much the notes need, so nothing ever covers the pitch.
- */
 /**
  * A copy of the board with its editing affordances removed.
  *
@@ -130,6 +114,12 @@ export function exportableClone(svg: SVGSVGElement): SVGSVGElement {
  *
  * Shared by the still and the animation, so a change to this layout cannot
  * apply to one and not the other.
+ *
+ * The notes are drawn onto the canvas rather than into the SVG. Text in a
+ * serialised SVG would need `foreignObject` to wrap, and that reliably fails
+ * to rasterise; canvas text also lets us measure and break lines properly.
+ * The board keeps its own dimensions either way — the image just grows by
+ * however much the notes need, so nothing ever covers the pitch.
  */
 function drawBoard(
   image: HTMLImageElement,
@@ -171,6 +161,10 @@ function drawBoard(
 
 /**
  * Build the data URL for the board exactly as it stands, without decoding it.
+ *
+ * A data URL rather than a blob URL: a blob URL for an SVG is treated as
+ * cross-origin by canvas, which taints it and makes `toBlob` throw a
+ * SecurityError.
  *
  * Split out from `rasterise` so an animation's samples can be captured one
  * DOM snapshot at a time — each has to be taken the moment its seek lands,

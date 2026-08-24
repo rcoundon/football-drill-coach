@@ -935,6 +935,46 @@ describe('restoring a draft saved before playback existed', () => {
     )
     expect(useStorage().loadDraft()).toBeNull()
   })
+
+  /**
+   * `isValidFrame` never checked `duration` at all, so a hand-edited or
+   * corrupted draft with `duration: 0` loaded straight through, past the
+   * comment above it claiming this validator holds to the same standard as
+   * `parsePattern` — which already rejects exactly this for a saved
+   * pattern's frames. A restored `0` reaches `durationOf` and, through it,
+   * divides the timeline by a duration that can never be reached.
+   */
+  it('still throws away a draft whose frame duration is not a positive number', () => {
+    const framed = (duration: unknown) => ({
+      frames: [
+        {
+          counters: [],
+          markers: [],
+          labels: [],
+          ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+          drawings: [],
+        },
+        {
+          counters: [],
+          markers: [],
+          labels: [],
+          ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+          drawings: [],
+          duration,
+        },
+      ],
+      currentFrame: 1,
+      labelsVisible: true,
+      notes: '',
+      notesVisible: true,
+      pitch: { type: 'blank', rotated: false },
+    })
+
+    for (const bad of [0, -100, Number.POSITIVE_INFINITY, 'soon']) {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(framed(bad)))
+      expect(useStorage().loadDraft()).toBeNull()
+    }
+  })
 })
 
 describe('drill notes', () => {

@@ -1298,7 +1298,6 @@ const board = {
   moveSegmentEnd,
   translateDrawing,
   translateGroup,
-  translatePoints,
   duplicateGroup,
   deleteGroup,
   setArrowBend,

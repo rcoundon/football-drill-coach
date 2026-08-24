@@ -112,18 +112,6 @@ function tweenAll<T extends { id: string; pos: Vec }>(from: T[], to: T[], e: num
 }
 
 /**
- * Blend two frames.
- *
- * Bodies are eased and the ball is not: a player accelerates away and
- * decelerates into position, a struck ball does neither. The ball is also
- * detached for the whole move, which is what makes a pass render as a ball
- * travelling from one player to another rather than sitting on the passer's
- * boot and teleporting on arrival.
- *
- * Drawings are the source frame's throughout, so the arrow describing a pass
- * is on screen while the pass happens and gone once it has.
- */
-/**
  * How often the exported animation is sampled.
  *
  * 12.5 a second is 80ms, and GIF expresses delays in hundredths of a second,
@@ -155,6 +143,18 @@ export function gifSchedule(frames: Frame[], fps = GIF_FPS): GifSample[] {
   return samples
 }
 
+/**
+ * Blend two frames.
+ *
+ * Bodies are eased and the ball is not: a player accelerates away and
+ * decelerates into position, a struck ball does neither. The ball is also
+ * detached for the whole move, which is what makes a pass render as a ball
+ * travelling from one player to another rather than sitting on the passer's
+ * boot and teleporting on arrival.
+ *
+ * Drawings are the source frame's throughout, so the arrow describing a pass
+ * is on screen while the pass happens and gone once it has.
+ */
 export function interpolateFrames(a: Frame, b: Frame, t: number): FrameView {
   const e = easeInOut(t)
   return {

@@ -451,7 +451,12 @@ function isValidFrame(value: unknown): boolean {
     labelsOf(value).every(isValidLabel) &&
     isValidBall(value.ball) &&
     Array.isArray(value.drawings) &&
-    value.drawings.every(isValidDrawing)
+    value.drawings.every(isValidDrawing) &&
+    // Optional — the first frame of a draft has none — but a present value
+    // has to be one `durationOf` can actually use, exactly as `parsePattern`
+    // already requires for a saved pattern's frames.
+    (value.duration === undefined ||
+      (typeof value.duration === 'number' && Number.isFinite(value.duration) && value.duration > 0))
   )
 }
 
