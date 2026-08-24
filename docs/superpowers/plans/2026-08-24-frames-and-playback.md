@@ -790,14 +790,33 @@ Run: `npx vitest run tests/useBoard.frames.spec.ts`
 Expected: PASS.
 
 Run: `npm test`
-Expected: all 623 existing tests still pass. If they do not, the failure is the getter layer, not the tests — read the failure before touching a spec file. `npm run build` must also be clean.
+Expected: all 623 existing tests still pass. If they do not, the failure is the getter layer, not the tests — read the failure before touching a spec file.
 
-`tests/useStorage.spec.ts` builds `BoardSnapshot` values by hand and will fail to type-check against the new shape. It is Task 4's job to update it; if `vue-tsc` complains there, leave it and note it, since Vitest does not type-check.
+- [ ] **Step 7: Bring `tests/useStorage.spec.ts` onto the new snapshot shape**
 
-- [ ] **Step 7: Commit**
+`tsconfig.json` includes `tests/**/*.ts`, so `npm run build` type-checks the specs. `tests/useStorage.spec.ts` builds `BoardSnapshot` values by hand with the flat fields and will not compile against the new shape.
+
+This is mechanical: every literal snapshot in that file becomes
+
+```ts
+{
+  frames: [{ counters: [...], markers: [...], labels: [...], ball: {...}, drawings: [...] }],
+  currentFrame: 0,
+  labelsVisible: true,
+  notes: '',
+  notesVisible: true,
+  pitch: { type: 'blank', rotated: false },
+}
+```
+
+with whatever values that particular test was using. Likewise every assertion reading `snap.counters` becomes `snap.frames[0].counters`. Work through the errors `npm run build` reports rather than guessing which literals need it. Change only the shape — no test's meaning changes here, and any that seems to want to is a signal you have the shape wrong.
+
+Run `npm test` and `npm run build`. Both clean.
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add src/composables/useBoard.ts tests/useBoard.frames.spec.ts
+git add src/composables/useBoard.ts tests/useBoard.frames.spec.ts tests/useStorage.spec.ts
 git commit -m "feat: the board becomes a list of moments
 
 State holds frames and a current index. The five flat fields survive as
@@ -1690,7 +1709,7 @@ describe('restoring a draft saved before playback existed', () => {
 })
 ```
 
-Also repair the existing tests in this file: every literal `BoardSnapshot` they build needs `frames` and `currentFrame` instead of the flat fields. Work through the type errors from `npm run build` rather than guessing which ones.
+The literal snapshots in this file were already brought onto the new shape in Task 2, so nothing existing needs repairing here — only the new cases above are added.
 
 - [ ] **Step 3: Run the tests and watch them fail**
 
@@ -1997,11 +2016,20 @@ describe('editing while the view is derived', () => {
   })
 
   it('is refused for anything that would commit, too', () => {
-    twoFrameDrill()
-    const before = board.state.frames[0].counters.length
+    const id = twoFrameDrill()
     board.scrubTo(500)
-    board.addCounter('blue')
-    expect(board.state.frames[0].counters).toHaveLength(before)
+    board.deleteCounter(id)
+    expect(board.state.frames[0].counters).toHaveLength(1)
+    expect(board.canUndo.value).toBe(true) // the setup's entries, not a new one
+  })
+
+  it('leaves the drill-wide settings alone — a coach can still rotate or jot a note', () => {
+    twoFrameDrill()
+    board.scrubTo(500)
+    board.setNotes('two touch')
+    board.toggleRotated()
+    expect(board.state.notes).toBe('two touch')
+    expect(board.state.pitch.rotated).toBe(true)
   })
 
   it('is allowed again once the scrub ends', () => {
@@ -2264,9 +2292,17 @@ function locked(): boolean {
 }
 ```
 
-Add `if (locked()) return` as the first line of: `commit`, `moveCounter`, `moveMarker`, `moveLabel`, `moveBall`, `dropBall`, `updateSegment`, `extendPen`, `setArrowBend`, `moveSegmentEnd`, `translateGroup`, `translateDrawing`.
+**Guard what writes a moment, not what writes the drill.** Moving a player, moving the ball or touching a drawing writes into one frame, and the coach would watch it vanish under the blend on the next tick. Renaming the pattern's notes, rotating the board or hiding the labels are drill-wide, harmless mid-play, and blocking them would be a regression with no benefit.
 
-`commit` returning early covers everything that commits, but it returns a `BoardSnapshot` — give it an early exit that still satisfies the signature:
+Add `if (locked()) return` as the first line of:
+
+- the drag-time writers: `moveCounter`, `moveMarker`, `moveLabel`, `moveBall`, `dropBall`, `updateSegment`, `extendPen`, `setArrowBend`, `moveSegmentEnd`, `translateGroup`, `translateDrawing`
+- the committing writers of a moment: `deleteCounter`, `setCounterLabel`, `clearCounters`, `deleteMarker`, `setLabelText`, `deleteLabel`, `deleteDrawing`, `clearDrawings`, `deleteGroup`
+- the ones that change what is being played: `deleteFrame`, `moveFrame`, `setFrameDuration`, `resetBoard`, `loadSnapshot`, `undo`, `redo`
+
+Three need a return value rather than a bare `return`: `addLabel` (`return null` — it is already `Label | null`), `duplicateGroup` (`return []`), and `addFrame` (`return state.currentFrame`).
+
+Keep `commit` guarded too, as a backstop:
 
 ```ts
 function commit(): BoardSnapshot {
@@ -2277,20 +2313,35 @@ function commit(): BoardSnapshot {
 }
 ```
 
-That is not enough on its own: a mutator that calls `commit()` then mutates would still mutate. Guard each one at the top instead, and keep the `commit` guard as a backstop. The mutators needing their own `if (locked()) return` (or `return null` / `return []` to match their signature) are: `addCounter`, `deleteCounter`, `setCounterLabel`, `clearCounters`, `addMarker`, `deleteMarker`, `addLabel`, `setLabelText`, `deleteLabel`, `toggleLabelsVisible`, `setNotes`, `toggleNotesVisible`, `toggleBallVisible`, `startPen`, `startArrow`, `startLine`, `deleteDrawing`, `clearDrawings`, `deleteGroup`, `duplicateGroup`, `addFrame`, `deleteFrame`, `moveFrame`, `setFrameDuration`, `resetBoard`, `setPitchType`, `setRotated`, `loadSnapshot`, `undo`, `redo`.
+**Five are deliberately NOT guarded here**, because guarding them would mean changing a return type that dozens of existing tests depend on, for no gain: `addCounter`, `addMarker`, `startPen`, `startArrow` and `startLine`. Every one of them is reached only through `PitchBoard`'s pointer handlers or the toolbar's player swatches, both of which Task 6 and the step below already block. Add a comment saying exactly that where `locked()` is defined, so nobody adds a guard later and breaks thirty tests wondering why it was missing.
 
-`addCounter` returns `Counter`, so it needs a different shape:
+Also not guarded: `setNotes`, `toggleNotesVisible`, `toggleLabelsVisible`, `toggleBallVisible`, `setPitchType`, `setRotated` — drill-wide, and there is no reason a coach should not rotate the board or jot a note while watching a drill play.
 
-```ts
-function addCounter(color: CounterColor): Counter | null {
-  if (locked()) return null
-  // ...
-}
+`restoreSnapshot` is not guarded either: it restores the draft at startup, before anything can be playing.
+
+- [ ] **Step 5b: Block the player swatches while the view is derived**
+
+`addCounter` is unguarded, so its one route in has to be. In both `src/components/Toolbar.vue` and `src/components/ToolRail.vue`, add `:disabled="board.isDerived.value"` to the player colour swatches, with:
+
+```
+        title="A player appearing mid-drill is never what anyone meant"
 ```
 
-Check its callers before changing the return type — if any rely on it, guard at the call site instead and leave the signature alone.
+on the disabled state, or simply leave the existing title — a greyed swatch reads clearly enough. Both files are covered by their own tests, so the two layouts cannot drift apart on this; add a case to each of `tests/Toolbar.spec.ts` and `tests/ToolRail.spec.ts`:
 
-`restoreSnapshot` is deliberately NOT guarded: it restores the draft at startup, before anything can be playing.
+```ts
+it('will not add a player while the drill is playing', async () => {
+  const board = useBoard()
+  board.addFrame()
+  board.setFrameDuration(1, 1000)
+  board.goToFrame(0)
+  board.scrubTo(500)
+
+  const wrapper = mount(/* as the rest of this file mounts it */)
+  expect(wrapper.find('[data-add-counter="red"]').attributes('disabled')).toBeDefined()
+  board.endScrub()
+})
+```
 
 - [ ] **Step 6: Export the new surface**
 
@@ -3117,11 +3168,9 @@ Split out on its own because it is the only part of GIF export that can be teste
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `tests/animation.spec.ts`:
+Add `GIF_FPS`, `GIF_TAIL_MS` and `gifSchedule` to the existing `from '../src/animation'` import at the top of `tests/animation.spec.ts` — do not append a second import block at the bottom of the file. Then append:
 
 ```ts
-import { GIF_FPS, GIF_TAIL_MS, gifSchedule } from '../src/animation'
-
 describe('gifSchedule', () => {
   it('samples the whole drill at the given rate', () => {
     // 1000ms at 12.5fps is 80ms a sample: 0, 80, ... 960, then the last frame.
