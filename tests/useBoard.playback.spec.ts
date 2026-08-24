@@ -301,6 +301,22 @@ describe('the playback clock', () => {
     expect(board.playback.at).toBe(atAfterPause)
     expect(board.playback.playing).toBe(false)
   })
+
+  it('play() while already playing does not start a second loop', () => {
+    twoFrameDrill()
+    board.play()
+    fireTick(1000)
+
+    const callsBefore = rafCalls
+    board.play() // a double-tapped play button, or a held key repeating
+
+    expect(rafCalls).toBe(callsBefore)
+
+    // Two loops would each advance the playhead on every frame, so the drill
+    // would play at double speed — visible to a coach, and hard to explain.
+    fireTick(1100)
+    expect(board.playback.at).toBe(100)
+  })
 })
 
 describe('the ball in the view', () => {
