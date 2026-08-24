@@ -107,6 +107,24 @@ describe('acting on what is held', () => {
   })
 })
 
+/**
+ * A coach who does not know what a control does has no way to find out —
+ * that gap is what the Help panel exists to close. The chip sits beside
+ * Undo, Redo, Copy and Delete: the one group never folded behind ☰ More.
+ */
+describe('Help', () => {
+  it('sits beside Undo, Redo, Copy and Delete', () => {
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-help]').exists()).toBe(true)
+  })
+
+  it('emits help when pressed', async () => {
+    const wrapper = mountToolbar()
+    await wrapper.find('[data-help]').trigger('click')
+    expect(wrapper.emitted('help')).toBeTruthy()
+  })
+})
+
 describe('pitch controls', () => {
   it('changes the pitch type', async () => {
     const board = useBoard()
@@ -460,6 +478,18 @@ describe('on a narrow screen', () => {
     })
     expect(wrapper.find('[data-duplicate]').exists()).toBe(true)
     expect(wrapper.find('[data-delete-selection]').exists()).toBe(true)
+  })
+
+  /**
+   * Help belongs with Undo, Redo, Copy and Delete rather than behind ☰ More:
+   * a coach who does not know what a control does needs the explanation to
+   * be as reachable as the control itself, on the device this board is
+   * mostly used on.
+   */
+  it('keeps Help out in the open on a narrow screen too', () => {
+    stubNarrow(true)
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-help]').exists()).toBe(true)
   })
 
   /**

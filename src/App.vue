@@ -6,6 +6,7 @@ import Toolbar from './components/Toolbar.vue'
 import ToolRail from './components/ToolRail.vue'
 import PitchBoard from './components/PitchBoard.vue'
 import PatternLibrary from './components/PatternLibrary.vue'
+import HelpPanel from './components/HelpPanel.vue'
 import FrameStrip from './components/FrameStrip.vue'
 import { MAX_LABEL_LENGTH, MAX_NOTES_LENGTH, useBoard } from './composables/useBoard'
 import { useStorage } from './composables/useStorage'
@@ -30,6 +31,7 @@ const selectionSize = ref(0)
 const notice = ref<string | null>(null)
 
 const libraryOpen = ref(false)
+const helpOpen = ref(false)
 
 /**
  * The pattern the board came from, and the single owner of that fact.
@@ -289,6 +291,7 @@ const isDialogOpen = computed(
   () =>
     savePromptOpen.value ||
     libraryOpen.value ||
+    helpOpen.value ||
     renameCounterId.value !== null ||
     labelTarget.value !== null,
 )
@@ -441,6 +444,7 @@ watch(
       @exportJson="exportJson"
       @importJson="importJson"
       @reset="onBoardReset"
+      @help="helpOpen = true"
     />
     <div class="workspace">
       <ToolRail
@@ -483,6 +487,8 @@ watch(
       @rename="onPatternRenamed"
       @delete="onPatternDeleted"
     />
+
+    <HelpPanel :open="helpOpen" @close="helpOpen = false" />
 
     <div v-if="labelTarget" class="overlay" @click.self="labelTarget = null">
       <div class="prompt" role="dialog" aria-label="Label text">

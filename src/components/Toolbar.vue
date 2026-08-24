@@ -42,6 +42,7 @@ const emit = defineEmits<{
   reset: []
   duplicate: []
   deleteSelection: []
+  help: []
 }>()
 
 const board = useBoard()
@@ -200,6 +201,17 @@ const heldLabel = computed(() =>
         :title="`Remove the ${heldLabel} you are holding`"
         @click="emit('deleteSelection')"
       >Delete</button>
+      <!--
+        Also beside Undo rather than behind ☰ More: a coach who does not know
+        what a control does needs the explanation to be at least as reachable
+        as the control itself.
+      -->
+      <button
+        data-help
+        class="chip"
+        title="What everything on this board does"
+        @click="emit('help')"
+      >Help</button>
     </div>
 
     <button
