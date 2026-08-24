@@ -11,6 +11,7 @@ import type {
   Vec,
 } from '../types'
 import { BALL_OFFSET, PITCH_H, PITCH_W, clampToPitch, distance, snapToAxis } from '../geometry'
+import { MAX_FRAME_MS, MIN_FRAME_MS, ballPositionIn } from '../animation'
 import type { FrameView } from '../animation'
 
 export { BALL_OFFSET } from '../geometry'
@@ -156,6 +157,18 @@ function rawFilter<T>(array: T[], keep: (item: T) => boolean): T[] {
   return (toRaw(array) as T[]).filter((item) => keep(toRaw(item) as T))
 }
 
+/**
+ * Every frame, unproxied.
+ *
+ * The cast is drill-wide: adding, removing or renaming a player, cone or
+ * label applies to the whole drill, because a squad does not change halfway
+ * through a session and a player popping into existence mid-animation is
+ * never what anyone meant. Only positions and drawings belong to one moment.
+ */
+function allFrames(): Frame[] {
+  return state.frames
+}
+
 /** A plain copy of the current state, safe to keep. */
 function snapshot(): BoardSnapshot {
   const raw = toRaw(state)
@@ -275,11 +288,13 @@ function resetBoard(): void {
 function clearCounters(): void {
   if (state.counters.length === 0) return
   commit()
-  if (state.ball.attachedTo) {
-    state.ball.pos = ballPosition()
-    state.ball.attachedTo = null
+  for (const frame of allFrames()) {
+    if (frame.ball.attachedTo) {
+      frame.ball.pos = ballPositionIn(frame)
+      frame.ball.attachedTo = null
+    }
+    frame.counters = []
   }
-  state.counters = []
 }
 
 function loadSnapshot(snap: BoardSnapshot): void {
@@ -298,6 +313,61 @@ function loadSnapshot(snap: BoardSnapshot): void {
  */
 function restoreSnapshot(snap: BoardSnapshot): void {
   apply(snap)
+}
+
+/**
+ * Add a moment, as a copy of the one the coach is on.
+ *
+ * A copy rather than a blank board, because the next frame of a drill is
+ * nearly always the same players a few yards further on. It also means the
+ * cast stays in step without anything having to enforce it, and the drawings
+ * carry over so the arrow describing a pass survives until the pass has
+ * happened and the coach rubs it out.
+ */
+function addFrame(): number {
+  commit()
+  const index = state.currentFrame + 1
+  state.frames.splice(index, 0, clone(toRaw(state).frames[state.currentFrame]))
+  state.currentFrame = index
+  return index
+}
+
+/** A drill has to be something. The last frame cannot be removed. */
+function deleteFrame(index: number): void {
+  if (state.frames.length <= 1) return
+  if (index < 0 || index >= state.frames.length) return
+  commit()
+  state.frames.splice(index, 1)
+  state.currentFrame = Math.min(state.currentFrame, state.frames.length - 1)
+}
+
+/** Reorder, keeping the coach on the frame they were looking at. */
+function moveFrame(from: number, to: number): void {
+  const last = state.frames.length - 1
+  if (from < 0 || from > last || to < 0 || to > last || from === to) return
+  commit()
+  const moving = state.currentFrame === from
+  const [frame] = state.frames.splice(from, 1)
+  state.frames.splice(to, 0, frame)
+  if (moving) state.currentFrame = to
+  else state.currentFrame = Math.max(0, Math.min(state.currentFrame, state.frames.length - 1))
+}
+
+function setFrameDuration(index: number, ms: number): void {
+  const frame = state.frames[index]
+  if (!frame) return
+  commit()
+  frame.duration = Math.round(Math.max(MIN_FRAME_MS, Math.min(MAX_FRAME_MS, ms)))
+}
+
+/**
+ * Select a frame. Deliberately not a commit: looking at a moment changes
+ * nothing about the drill, and stepping through five frames to read them
+ * should not bury real work under five entries that changed nothing.
+ */
+function goToFrame(index: number): void {
+  if (index < 0 || index >= state.frames.length) return
+  state.currentFrame = index
 }
 
 function counterById(id: string): Counter | undefined {
@@ -364,8 +434,14 @@ function addCounter(color: CounterColor): Counter {
     label: '',
     pos: nextCounterPosition(),
   }
-  state.counters.push(counter)
-  return counter
+  // Same id and same spot on every frame, so a new player stands still until
+  // the coach moves them somewhere.
+  for (const frame of allFrames()) frame.counters.push(clone(counter))
+  // Looked back up rather than returning `counter` itself: the caller gets
+  // the live counter on the current frame, which keeps tracking it the way
+  // every other lookup does, rather than a detached copy left stale by the
+  // next move.
+  return counterById(counter.id)!
 }
 
 /**
@@ -407,7 +483,7 @@ function addLabel(at: Vec, text: string): Label | null {
   if (clean === '') return null
   commit()
   const label: Label = { id: newId(), pos: clampToPitch(at), text: clean }
-  state.labels.push(label)
+  for (const frame of allFrames()) frame.labels.push(clone(label))
   return label
 }
 
@@ -417,11 +493,14 @@ function setLabelText(id: string, text: string): void {
   if (!label) return
   const clean = cleanLabelText(text)
   commit()
-  if (clean === '') {
-    state.labels = rawFilter(state.labels, (l) => l.id !== id)
-    return
+  for (const frame of allFrames()) {
+    if (clean === '') {
+      frame.labels = rawFilter(frame.labels, (l) => l.id !== id)
+      continue
+    }
+    const target = frame.labels.find((l) => l.id === id)
+    if (target) target.text = clean
   }
-  label.text = clean
 }
 
 /** Called on every pointer-move of a drag, so it deliberately does not commit. */
@@ -432,10 +511,11 @@ function moveLabel(id: string, pos: Vec): void {
 }
 
 function deleteLabel(id: string): void {
-  const index = state.labels.findIndex((l) => l.id === id)
-  if (index === -1) return
+  if (!labelById(id)) return
   commit()
-  state.labels.splice(index, 1)
+  for (const frame of allFrames()) {
+    frame.labels = rawFilter(frame.labels, (l) => l.id !== id)
+  }
 }
 
 function toggleLabelsVisible(): void {
@@ -457,7 +537,7 @@ function markerById(id: string): Marker | undefined {
 function addMarker(at: Vec): Marker {
   commit()
   const marker: Marker = { id: newId(), pos: clampToPitch(at) }
-  state.markers.push(marker)
+  for (const frame of allFrames()) frame.markers.push(clone(marker))
   return marker
 }
 
@@ -469,10 +549,11 @@ function moveMarker(id: string, pos: Vec): void {
 }
 
 function deleteMarker(id: string): void {
-  const index = state.markers.findIndex((m) => m.id === id)
-  if (index === -1) return
+  if (!markerById(id)) return
   commit()
-  state.markers.splice(index, 1)
+  for (const frame of allFrames()) {
+    frame.markers = rawFilter(frame.markers, (m) => m.id !== id)
+  }
 }
 
 /** Called on every pointer-move of a drag, so it deliberately does not commit. */
@@ -486,18 +567,25 @@ function setCounterLabel(id: string, label: string): void {
   const counter = counterById(id)
   if (!counter) return
   commit()
-  counter.label = label.trim().slice(0, 4)
+  const clean = label.trim().slice(0, 4)
+  for (const frame of allFrames()) {
+    const target = frame.counters.find((c) => c.id === id)
+    if (target) target.label = clean
+  }
 }
 
 function deleteCounter(id: string): void {
   const index = state.counters.findIndex((c) => c.id === id)
   if (index === -1) return
   commit()
-  if (state.ball.attachedTo === id) {
-    state.ball.pos = { ...state.counters[index].pos }
-    state.ball.attachedTo = null
+  for (const frame of allFrames()) {
+    const victim = frame.counters.find((c) => c.id === id)
+    if (victim && frame.ball.attachedTo === id) {
+      frame.ball.pos = { ...victim.pos }
+      frame.ball.attachedTo = null
+    }
+    frame.counters = rawFilter(frame.counters, (c) => c.id !== id)
   }
-  state.counters.splice(index, 1)
 }
 
 /** Drag-time move. Detaches from any holder; does not commit. */
@@ -712,26 +800,20 @@ function pointsOfRef(ref: SelectionRef): Vec[] | null {
 }
 
 /**
- * Slide a whole group across the pitch. Called on every pointer-move of a
- * drag, so it deliberately does not commit.
+ * Slide a set of points, trimming the move so the shape stays on the pitch.
  *
- * The delta is trimmed once against the group's own bounding box, exactly as
- * a single drawing's is: clamping each member on its own would collapse a
- * shape against the touchline instead of stopping it there, which is the one
- * thing a coach moving a shape would never want. Members that have since
- * gone are skipped rather than treated as being at the origin, which would
- * drag the whole group towards the corner.
+ * The delta is trimmed rather than each point clamped: clamping collapses a
+ * shape against the touchline, and trimming lets a shape already on an edge
+ * keep sliding along it. Something wider than the pitch cannot be brought
+ * inside and squeezing it would distort it, so the room it has is allowed to
+ * go negative and the min/max simply cancel the move on that axis.
  */
-function translateGroup(refs: SelectionRef[], delta: Vec): void {
-  const points = refs.flatMap((ref) => pointsOfRef(ref) ?? [])
+function translatePoints(points: Vec[], delta: Vec): void {
   if (points.length === 0) return
 
   const xs = points.map((p) => p.x)
   const ys = points.map((p) => p.y)
 
-  // Something wider than the pitch cannot be brought inside, and squeezing it
-  // would distort it, so the room it has is allowed to go negative and the
-  // min/max below simply cancel the move on that axis.
   const dx = Math.min(PITCH_W - Math.max(...xs), Math.max(-Math.min(...xs), delta.x))
   const dy = Math.min(PITCH_H - Math.max(...ys), Math.max(-Math.min(...ys), delta.y))
 
@@ -742,8 +824,40 @@ function translateGroup(refs: SelectionRef[], delta: Vec): void {
 }
 
 /**
+ * Slide a whole group across the pitch. Called on every pointer-move of a
+ * drag, so it deliberately does not commit.
+ *
+ * Members that have since gone are skipped rather than treated as being at
+ * the origin, which would drag the whole group towards the corner.
+ */
+function translateGroup(refs: SelectionRef[], delta: Vec): void {
+  translatePoints(refs.flatMap((ref) => pointsOfRef(ref) ?? []), delta)
+}
+
+/** The live position points of a reference, within one frame. */
+function pointsOfRefIn(frame: Frame, ref: SelectionRef): Vec[] | null {
+  if (ref.kind === 'counter') {
+    const counter = frame.counters.find((c) => c.id === ref.id)
+    return counter ? [counter.pos] : null
+  }
+  if (ref.kind === 'marker') {
+    const marker = frame.markers.find((m) => m.id === ref.id)
+    return marker ? [marker.pos] : null
+  }
+  if (ref.kind === 'label') {
+    const label = frame.labels.find((l) => l.id === ref.id)
+    return label ? [label.pos] : null
+  }
+  const drawing = frame.drawings.find((d) => d.id === ref.id)
+  return drawing ? pointsOf(drawing) : null
+}
+
+/**
  * Take a whole group off the board in one undo entry, rather than one per
  * member — a coach who boxed a shape and pressed Delete meant one action.
+ *
+ * The cast comes off every frame; a drawing belongs to the moment it
+ * describes, so it comes off only this one.
  *
  * A ball being carried by a deleted player is set down where it was riding,
  * matching what deleting a single player already does: the drill still has a
@@ -761,14 +875,17 @@ function deleteGroup(refs: SelectionRef[]): void {
 
   commit()
 
-  if (state.ball.attachedTo && ids.counter.has(state.ball.attachedTo)) {
-    state.ball.pos = ballPosition()
-    state.ball.attachedTo = null
+  for (const frame of allFrames()) {
+    if (frame.ball.attachedTo && ids.counter.has(frame.ball.attachedTo)) {
+      frame.ball.pos = ballPositionIn(frame)
+      frame.ball.attachedTo = null
+    }
+    frame.counters = rawFilter(frame.counters, (c) => !ids.counter.has(c.id))
+    frame.markers = rawFilter(frame.markers, (m) => !ids.marker.has(m.id))
+    frame.labels = rawFilter(frame.labels, (l) => !ids.label.has(l.id))
   }
 
-  state.counters = rawFilter(state.counters, (c) => !ids.counter.has(c.id))
-  state.markers = rawFilter(state.markers, (m) => !ids.marker.has(m.id))
-  state.labels = rawFilter(state.labels, (l) => !ids.label.has(l.id))
+  // Drawings belong to the moment, so only this one loses them.
   state.drawings = rawFilter(state.drawings, (d) => !ids.drawing.has(d.id))
 }
 
@@ -776,13 +893,15 @@ function deleteGroup(refs: SelectionRef[]): void {
  * Copy a whole group, offset a little so the copy is plainly a copy rather
  * than something that quietly landed on top of the original.
  *
- * Returns the copies, so the caller can leave the coach holding them: the
- * next thing anyone does after duplicating a shape is drag it into place.
+ * The copy joins the cast on every frame, offset from wherever the original
+ * stands on that frame, so a duplicated player repeats the original's run
+ * rather than standing still through it. A drawing belongs to the moment it
+ * describes, so only the current frame gets a copy of one.
  *
- * The offset goes through `translateGroup`, so a shape duplicated against
- * the touchline stays on the pitch and keeps its formation. A copied player
- * never inherits the ball — a drill has one ball, and duplicating a shape is
- * not a reason to grow another.
+ * Returns the copies, so the caller can leave the coach holding them: the
+ * next thing anyone does after duplicating a shape is drag it into place. A
+ * copied player never inherits the ball — a drill has one ball, and
+ * duplicating a shape is not a reason to grow another.
  */
 function duplicateGroup(refs: SelectionRef[], offset: Vec): SelectionRef[] {
   const live = refs.filter((ref) => pointsOfRef(ref) !== null)
@@ -790,39 +909,55 @@ function duplicateGroup(refs: SelectionRef[], offset: Vec): SelectionRef[] {
 
   commit()
 
-  const copies: SelectionRef[] = []
-  for (const ref of live) {
-    if (ref.kind === 'counter') {
-      const original = counterById(ref.id)!
-      const copy: Counter = {
-        id: newId(),
-        color: original.color,
-        label: original.label,
-        pos: { ...original.pos },
-      }
-      state.counters.push(copy)
-      copies.push({ kind: 'counter', id: copy.id })
-    } else if (ref.kind === 'marker') {
-      const original = markerById(ref.id)!
-      const copy: Marker = { id: newId(), pos: { ...original.pos } }
-      state.markers.push(copy)
-      copies.push({ kind: 'marker', id: copy.id })
-    } else if (ref.kind === 'label') {
-      const original = labelById(ref.id)!
-      const copy: Label = { id: newId(), pos: { ...original.pos }, text: original.text }
-      state.labels.push(copy)
-      copies.push({ kind: 'label', id: copy.id })
-    } else {
-      // Cloned whole rather than field by field, so a bend, a dash style or
-      // anything a drawing grows later comes along without being listed here.
-      const copy = clone(drawingById(ref.id)!)
-      copy.id = newId()
-      state.drawings.push(copy)
-      copies.push({ kind: 'drawing', id: copy.id })
-    }
-  }
+  // One new id per original, shared by that original's copy on every frame,
+  // so the copies are one player rather than one per moment.
+  const copies: SelectionRef[] = live.map((ref) => ({ kind: ref.kind, id: newId() }))
 
-  translateGroup(copies, offset)
+  allFrames().forEach((frame, index) => {
+    const isCurrent = index === state.currentFrame
+    const made: SelectionRef[] = []
+
+    live.forEach((ref, i) => {
+      const copyId = copies[i].id
+      if (ref.kind === 'counter') {
+        const original = frame.counters.find((c) => c.id === ref.id)
+        if (!original) return
+        // Cloned whole rather than field by field, so anything a counter
+        // grows later comes along without being listed here. A copy never
+        // inherits the ball: a drill has one ball, and duplicating a shape is
+        // not a reason to grow another.
+        const copy = clone(toRaw(original))
+        copy.id = copyId
+        frame.counters.push(copy)
+      } else if (ref.kind === 'marker') {
+        const original = frame.markers.find((m) => m.id === ref.id)
+        if (!original) return
+        const copy = clone(toRaw(original))
+        copy.id = copyId
+        frame.markers.push(copy)
+      } else if (ref.kind === 'label') {
+        const original = frame.labels.find((l) => l.id === ref.id)
+        if (!original) return
+        const copy = clone(toRaw(original))
+        copy.id = copyId
+        frame.labels.push(copy)
+      } else {
+        // Drawings belong to the moment, so only this one gets a copy.
+        if (!isCurrent) return
+        const original = frame.drawings.find((d) => d.id === ref.id)
+        if (!original) return
+        const copy = clone(toRaw(original))
+        copy.id = copyId
+        frame.drawings.push(copy)
+      }
+      made.push(copies[i])
+    })
+
+    // Each frame is trimmed against the pitch on its own, so a copy made
+    // beside a touchline in one moment is not pushed off in another.
+    translatePoints(made.flatMap((ref) => pointsOfRefIn(frame, ref) ?? []), offset)
+  })
+
   return copies
 }
 
@@ -880,9 +1015,9 @@ function deleteDrawing(id: string): void {
 }
 
 function clearDrawings(): void {
-  if (state.drawings.length === 0) return
+  if (state.frames.every((frame) => frame.drawings.length === 0)) return
   commit()
-  state.drawings = []
+  for (const frame of allFrames()) frame.drawings = []
 }
 
 const canUndo = computed(() => undoStack.value.length > 0)
@@ -900,6 +1035,11 @@ const board = {
   restoreSnapshot,
   resetBoard,
   clearCounters,
+  addFrame,
+  deleteFrame,
+  moveFrame,
+  setFrameDuration,
+  goToFrame,
   setPitchType,
   setRotated,
   toggleRotated,
@@ -933,6 +1073,7 @@ const board = {
   moveSegmentEnd,
   translateDrawing,
   translateGroup,
+  translatePoints,
   duplicateGroup,
   deleteGroup,
   setArrowBend,
