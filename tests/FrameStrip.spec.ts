@@ -11,12 +11,27 @@ beforeEach(() => {
 })
 
 describe('a drill with one frame', () => {
-  it('offers only a way to add another', () => {
+  it('offers a way to add another, and none of the machinery for playing one', () => {
     const wrapper = mount(FrameStrip)
     expect(wrapper.find('[data-add-frame]').exists()).toBe(true)
     expect(wrapper.find('[data-play]').exists()).toBe(false)
     expect(wrapper.find('[data-scrub]').exists()).toBe(false)
-    expect(wrapper.find('[data-frame="0"]').exists()).toBe(false)
+    expect(wrapper.find('[data-delete-frame]').exists()).toBe(false)
+    expect(wrapper.find('[data-frame-earlier]').exists()).toBe(false)
+  })
+
+  /**
+   * The numbering shows from the very first phase. Without it the strip named
+   * no phase at all, so pressing Add a phase took a coach from nowhere to
+   * "phase 2" and read as being sent somewhere rather than moving on by one.
+   * Seeing "1" first is what makes the second one obviously the next.
+   */
+  it('shows the phase you are on, even when it is the only one', () => {
+    const wrapper = mount(FrameStrip)
+    const only = wrapper.find('[data-frame="0"]')
+    expect(only.exists()).toBe(true)
+    expect(only.text()).toBe('1')
+    expect(only.classes()).toContain('is-active')
   })
 
   it('adding one opens the strip', async () => {

@@ -75,6 +75,29 @@ function togglePlay(): void {
     <span v-if="!hasSequence" data-strip-hint class="hint">
       Show it phase by phase, then play it back.
     </span>
+    <!--
+      Shown from the very first phase, unlike everything below it. Without the
+      numbering the strip named no phase at all, so pressing Add a phase took a
+      coach from nowhere to "phase 2" — which reads as being sent somewhere
+      rather than moving on by one. Seeing "1" first is what makes the second
+      one obviously the next.
+
+      They sit before the button that adds one — the tabs-and-a-plus shape
+      everyone already knows from browser tabs and spreadsheet sheets: here is
+      what you have, and here is how to add to it. The other way round read as
+      an action with an unexplained number after it.
+    -->
+    <div class="frames">
+      <button
+        v-for="(_, index) in board.state.frames"
+        :key="index"
+        :data-frame="index"
+        :class="['chip', 'frame', { 'is-active': index === current }]"
+        :title="`Go to phase ${index + 1}`"
+        @click="board.goToFrame(index)"
+      >{{ index + 1 }}</button>
+    </div>
+
     <button
       data-add-frame
       class="chip chip--primary"
@@ -83,18 +106,8 @@ function togglePlay(): void {
       @click="board.addFrame()"
     >+ Add a phase</button>
 
-    <template v-if="hasSequence">
-      <div class="frames">
-        <button
-          v-for="(_, index) in board.state.frames"
-          :key="index"
-          :data-frame="index"
-          :class="['chip', 'frame', { 'is-active': index === current }]"
-          :title="`Go to phase ${index + 1}`"
-          @click="board.goToFrame(index)"
-        >{{ index + 1 }}</button>
-      </div>
 
+    <template v-if="hasSequence">
       <div class="group">
         <button
           data-frame-earlier
