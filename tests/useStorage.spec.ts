@@ -878,7 +878,13 @@ describe('restoring a draft saved before playback existed', () => {
     expect(useStorage().loadDraft()).toBeNull()
   })
 
-  it('still throws away a flat draft with no pitch', () => {
+  /**
+   * This one is rejected by `isValidPitch`, a guard that sits ABOVE the
+   * flat/framed branch and applies to both shapes equally. It pins that
+   * shared guard, not the flat branch itself — see the two cases below for
+   * coverage of `isValidFrame` on the flat shape.
+   */
+  it('still throws away a draft with no pitch, flat or not', () => {
     localStorage.setItem(
       DRAFT_KEY,
       JSON.stringify({
@@ -887,6 +893,44 @@ describe('restoring a draft saved before playback existed', () => {
         labels: [],
         ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
         drawings: [],
+      }),
+    )
+    expect(useStorage().loadDraft()).toBeNull()
+  })
+
+  /**
+   * Ball and drawings are the two fields whose flat-versus-framed position
+   * differs most, so they are the likeliest to be got wrong by a future
+   * edit. Unlike the no-pitch case above, both of these are only caught by
+   * `isValidFrame(value)` inside the flat branch itself: replacing that
+   * branch with `return true` makes each of these load successfully instead
+   * of returning null.
+   */
+  it('still throws away a flat draft with a damaged ball', () => {
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({
+        counters: [],
+        markers: [],
+        labels: [],
+        ball: { attachedTo: null, visible: true },
+        drawings: [],
+        pitch: { type: 'blank', rotated: false },
+      }),
+    )
+    expect(useStorage().loadDraft()).toBeNull()
+  })
+
+  it('still throws away a flat draft whose drawings are not an array', () => {
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({
+        counters: [],
+        markers: [],
+        labels: [],
+        ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+        drawings: 'nope',
+        pitch: { type: 'blank', rotated: false },
       }),
     )
     expect(useStorage().loadDraft()).toBeNull()
