@@ -856,6 +856,41 @@ describe('restoring a draft saved before playback existed', () => {
     )
     expect(useStorage().loadDraft()).toBeNull()
   })
+
+  /**
+   * The framed case above is already rejected by the pre-frames validator, so
+   * it cannot tell a real check from a rubber stamp. A flat draft is the
+   * shape this task actually taught the validator to read, so it needs its
+   * own damaged case to prove that path still checks anything at all.
+   */
+  it('still throws away a flat draft with a damaged frame field', () => {
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({
+        counters: 'not an array',
+        markers: [],
+        labels: [],
+        ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+        drawings: [],
+        pitch: { type: 'blank', rotated: false },
+      }),
+    )
+    expect(useStorage().loadDraft()).toBeNull()
+  })
+
+  it('still throws away a flat draft with no pitch', () => {
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({
+        counters: [],
+        markers: [],
+        labels: [],
+        ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+        drawings: [],
+      }),
+    )
+    expect(useStorage().loadDraft()).toBeNull()
+  })
 })
 
 describe('drill notes', () => {

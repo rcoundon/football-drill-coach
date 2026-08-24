@@ -116,7 +116,9 @@ export function parsePattern(value: unknown): Pattern {
   if (!isObject(value)) throw new Error('That is not a saved pattern.')
 
   if (typeof value.version !== 'number' || !READABLE_VERSIONS.has(value.version)) {
-    throw new Error('That pattern was saved by a different version of this app.')
+    throw new Error(
+      `That pattern was saved by a different version of this app (version ${String(value.version)}). Update the app to open it.`,
+    )
   }
 
   if (typeof value.id !== 'string' || typeof value.name !== 'string') {
@@ -168,6 +170,11 @@ export function parsePattern(value: unknown): Pattern {
     if (frame.drawings !== undefined) {
       if (!Array.isArray(frame.drawings) || !frame.drawings.every(isValidDrawing)) {
         throw new Error('That pattern has a damaged drawing.')
+      }
+    }
+    if (frame.duration !== undefined) {
+      if (typeof frame.duration !== 'number' || !Number.isFinite(frame.duration) || frame.duration <= 0) {
+        throw new Error('That pattern has a damaged frame duration.')
       }
     }
   }
@@ -398,7 +405,7 @@ function renamePattern(id: string, name: string): void {
 function patternToSnapshot(pattern: Pattern): BoardSnapshot {
   const copy = structuredClone(pattern) as unknown as Record<string, unknown>
   const legacy = (copy.drawings ?? []) as Drawing[]
-  const rawFrames = copy.frames as Record<string, unknown>[]
+  const rawFrames = Array.isArray(copy.frames) ? (copy.frames as Record<string, unknown>[]) : []
   const frames = rawFrames.map((frame, index) =>
     // Only the first frame inherits the legacy drawings. A v1 pattern has no
     // others, and a v2 one has no legacy drawings to inherit.
