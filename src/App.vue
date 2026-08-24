@@ -241,20 +241,9 @@ const isDialogOpen = computed(
 
 function onKeydown(event: KeyboardEvent) {
   const target = event.target as HTMLElement | null
-  /*
-   * Not just "is the coach typing": a focused button, link or select acts
-   * on its own key presses too — Space activates a button — so shortcuts
-   * must leave those alone as well, or a focused chip stops responding to
-   * its own key and starts driving the board behind it instead.
-   */
   if (
     target &&
-    (target.tagName === 'INPUT' ||
-      target.tagName === 'TEXTAREA' ||
-      target.tagName === 'BUTTON' ||
-      target.tagName === 'A' ||
-      target.tagName === 'SELECT' ||
-      target.isContentEditable)
+    (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
   )
     return
 
@@ -305,11 +294,26 @@ function onKeydown(event: KeyboardEvent) {
   }
 
   if (event.key === ' ') {
+    /*
+     * Space alone carries this exemption because Space alone needs it: a
+     * focused BUTTON, A or SELECT already activates itself on Space, so
+     * stealing the key here would both toggle playback AND suppress the
+     * chip's own press (preventDefault silences the platform's default
+     * action too). Escape, Delete, Backspace and the tool letters do none
+     * of that on a focused button — there is nothing native to protect —
+     * so they must NOT be given this same exemption. Do not move this
+     * check into the shared guard above: doing so once already broke
+     * Escape/Delete/tool-switching for a coach who had just clicked a chip,
+     * which is most of the time a chip has focus.
+     */
+    if (
+      target &&
+      (target.tagName === 'BUTTON' || target.tagName === 'A' || target.tagName === 'SELECT')
+    )
+      return
     // Space is the universal play/pause, but it is also a character typed
-    // into a field and the platform's own way to press a focused button,
-    // link or select. The guard above is what keeps a space in the drill
-    // notes — or on a focused chip — from starting the animation instead
-    // of doing what the coach's focus expects.
+    // into a field — the shared guard above is what keeps a space in the
+    // drill notes from starting the animation.
     event.preventDefault()
     if (board.playback.playing) board.pause()
     else board.play()

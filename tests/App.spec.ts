@@ -62,8 +62,9 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function fire(init: KeyboardEventInit, target: EventTarget = window) {
-  target.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }))
+/** Returns what `dispatchEvent` returns: false once something calls `preventDefault`. */
+function fire(init: KeyboardEventInit, target: EventTarget = window): boolean {
+  return target.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }))
 }
 
 describe('resetting the board', () => {
@@ -984,9 +985,74 @@ describe('space plays and pauses', () => {
     // who just clicked a chip still has that chip focused.
     const chip = wrapper.find('[data-add-frame]').element as HTMLButtonElement
     chip.focus()
-    fire({ key: ' ' }, chip)
+    const notPrevented = fire({ key: ' ' }, chip)
     await nextTick()
     expect(board.playback.playing).toBe(false)
+    // Not prevented: the chip's own native activation must survive, or
+    // clicking a chip and then pressing Space would appear to do nothing.
+    expect(notPrevented).toBe(true)
+  })
+})
+
+/**
+ * Round 1 of this feature exempted a focused button/link/select from the
+ * *shared* typing guard, on the reasoning that "one guard, one place this
+ * decision lives". That fixed Space stealing a chip's own press, but the
+ * same guard sits in front of every other shortcut too: Escape, Delete,
+ * Backspace and the tool letters do nothing on a focused button natively,
+ * so exempting BUTTON there was never protecting anything — it was only
+ * silencing them. A coach who clicks Move, boxes a group, and presses
+ * Delete does this constantly, since the button they just clicked keeps
+ * focus. These three pin that the fix belongs on Space alone.
+ */
+describe('other shortcuts still work with a chip focused', () => {
+  /** Draw an arrow and select it by pressing it, as a coach would. */
+  async function selectAnArrow(app: VueWrapper) {
+    const board = useBoard()
+    const id = board.startArrow({ x: 20, y: 30 }, '#ffffff', 'pass')
+    board.updateSegment(id, { x: 60, y: 30 })
+    board.finishDrawing(id)
+    await app.vm.$nextTick()
+    const path = app.find('[data-drawing]').element
+    await firePointer(path, 'pointerdown', clientFor(40, 30))
+    await firePointer(app.find('svg').element, 'pointerup', clientFor(40, 30))
+  }
+
+  it('still clears the selection on Escape', async () => {
+    wrapper = mountApp()
+    await selectAnArrow(wrapper)
+    expect(wrapper.find('[data-selected]').exists()).toBe(true)
+
+    const chip = wrapper.find('[data-add-frame]').element as HTMLButtonElement
+    chip.focus()
+    fire({ key: 'Escape' }, chip)
+    await nextTick()
+
+    expect(wrapper.find('[data-selected]').exists()).toBe(false)
+  })
+
+  it('still deletes the selection on Delete', async () => {
+    const board = useBoard()
+    wrapper = mountApp()
+    await selectAnArrow(wrapper)
+
+    const chip = wrapper.find('[data-add-frame]').element as HTMLButtonElement
+    chip.focus()
+    fire({ key: 'Delete' }, chip)
+    await nextTick()
+
+    expect(board.state.drawings).toEqual([])
+  })
+
+  it('still switches tool on a tool letter', async () => {
+    wrapper = mountApp()
+
+    const chip = wrapper.find('[data-add-frame]').element as HTMLButtonElement
+    chip.focus()
+    fire({ key: 'p' }, chip)
+    await nextTick()
+
+    expect(wrapper.find('[data-tool="pen"]').classes()).toContain('is-active')
   })
 })
 
