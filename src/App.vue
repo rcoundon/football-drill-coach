@@ -564,7 +564,14 @@ body { font-family: system-ui, sans-serif; background: #102010; }
 <style scoped>
 .app { display: flex; flex-direction: column; height: 100%; }
 .workspace { flex: 1; min-height: 0; display: flex; gap: 0.75rem; padding: 0.75rem; }
-.stage { flex: 1; min-height: 0; min-width: 0; }
+/*
+ * A column, so the frame strip is always on screen and the board gives up the
+ * room for it. The board used to take the whole height and push the strip off
+ * the bottom of the page, which made the way into frames something a coach had
+ * to scroll to find.
+ */
+.stage { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.stage > :first-child { flex: 1; min-height: 0; }
 
 /*
  * Beside the board on a wide screen, beneath it on a narrow one — a coach

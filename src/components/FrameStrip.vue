@@ -9,7 +9,7 @@ withDefaults(defineProps<{ /** True while a GIF export is sampling the board. */
 
 const board = useBoard()
 
-/** Why + Frame, Delete frame, ◀, ▶ and the duration field refuse mid-move. */
+/** Why adding, deleting, reordering and retiming a moment refuse mid-move. */
 const lockedTitle = 'Nothing can change while the drill is playing or mid-move'
 
 /** Why Play, Rewind and the scrubber are locked — only true during an export. */
@@ -17,8 +17,8 @@ const exportingTitle = 'The drill is being exported as an animation'
 
 /**
  * A drill that has never used frames looks exactly as it did before frames
- * existed: one chip offering another moment, and nothing else. The strip
- * opens only once there is a sequence to show.
+ * existed: the heading and one button offering another moment, and nothing
+ * else. The strip opens only once there is a sequence to show.
  */
 const hasSequence = computed(() => board.state.frames.length > 1)
 
@@ -59,13 +59,20 @@ function togglePlay(): void {
 
 <template>
   <div class="strip" :class="{ 'is-open': hasSequence }">
+    <!--
+      Named like every other group of controls on the page. Without it this
+      was the one region with no heading, which is most of why the way into
+      frames read as stray furniture below the pitch rather than a thing the
+      board offers.
+    -->
+    <span data-strip-label class="group-label">Moments</span>
     <button
       data-add-frame
-      class="chip"
+      class="chip chip--primary"
       :disabled="board.isDerived.value"
       :title="board.isDerived.value ? lockedTitle : 'Add a moment, copied from the one you are on'"
       @click="board.addFrame()"
-    >+ Frame</button>
+    >+ Add a moment</button>
 
     <template v-if="hasSequence">
       <div class="frames">
@@ -102,7 +109,7 @@ function togglePlay(): void {
           :disabled="board.isDerived.value"
           :title="board.isDerived.value ? lockedTitle : 'Remove this moment'"
           @click="board.deleteFrame(current)"
-        >Delete frame</button>
+        >Delete moment</button>
       </div>
 
       <!--
@@ -176,18 +183,51 @@ function togglePlay(): void {
   gap: 0.5rem;
   align-items: center;
   padding: 0.4rem 0.6rem;
+  /*
+   * The strip sits on the dark page whether or not it has opened, so it
+   * carries the light text colour either way. Setting this only on `.is-open`
+   * left the heading and the button inheriting the page default, which
+   * rendered dark on dark and dark on green respectively.
+   */
+  color: #eceff1;
 }
 .strip.is-open {
   background: #263238;
-  color: #eceff1;
   border-radius: 0.4rem;
 }
+.group-label { font-size: 0.7rem; text-transform: uppercase; opacity: 0.65; margin-right: 0.2rem; }
 .frames { display: flex; flex-wrap: wrap; gap: 0.3rem; }
 .group { display: flex; gap: 0.3rem; align-items: center; }
 .transport { flex: 1 1 12rem; min-width: 0; }
 .chip {
   border: 1px solid #ffffff40; background: #37474f; color: inherit;
   border-radius: 0.4rem; padding: 0.4rem 0.7rem; cursor: pointer; font-size: 0.85rem;
+}
+/*
+ * The way in, and the only green control on a page of blue-greys — which is
+ * what makes it findable at a glance. Nothing else takes this class: a second
+ * green button would cost the first one the distinction it exists for. Once
+ * the strip opens it sits beside the numbered chips rather than competing
+ * with them, because they are what the coach is reaching for by then.
+ */
+.chip--primary {
+  /*
+   * Lighter and bluer than the pitch it sits beneath, which is the one thing
+   * it must not be mistaken for. The colour is stated outright rather than
+   * inherited, so the label reads white whatever the strip is doing.
+   */
+  background: #43a047;
+  border-color: #43a047;
+  color: #ffffff;
+  padding-inline: 0.95rem;
+  font-weight: 600;
+}
+.chip--primary:hover:not(:disabled) { background: #4caf50; border-color: #4caf50; }
+.chip--primary:disabled {
+  background: #37474f;
+  border-color: #ffffff40;
+  color: #eceff1;
+  font-weight: 400;
 }
 .chip:disabled { opacity: 0.4; cursor: default; }
 .chip.is-active { background: #546e7a; border-color: #ffffff; }

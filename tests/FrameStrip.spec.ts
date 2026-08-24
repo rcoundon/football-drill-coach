@@ -28,6 +28,44 @@ describe('a drill with one frame', () => {
   })
 })
 
+describe('finding your way in', () => {
+  /**
+   * The way into frames was a grey chip below the pitch, identical to every
+   * other chip and the only control region on the page with no heading. A
+   * coach who did not already know frames existed had no reason to press it.
+   */
+  it('names the region, as every other group of controls does', () => {
+    const wrapper = mount(FrameStrip)
+    expect(wrapper.find('[data-strip-label]').text()).toBe('Moments')
+  })
+
+  it('keeps the heading once the strip opens, so the row is not unexplained', () => {
+    board.addFrame()
+    const wrapper = mount(FrameStrip)
+    expect(wrapper.find('[data-strip-label]').exists()).toBe(true)
+  })
+
+  it('makes the way in the one control that does not look like the others', () => {
+    const wrapper = mount(FrameStrip)
+    const add = wrapper.find('[data-add-frame]')
+    expect(add.classes()).toContain('chip--primary')
+    // Nothing else may claim it, or it stops standing out.
+    const others = wrapper.findAll('.chip--primary')
+    expect(others).toHaveLength(1)
+  })
+
+  it('says what it does rather than naming the data structure', () => {
+    const wrapper = mount(FrameStrip)
+    expect(wrapper.find('[data-add-frame]').text()).toBe('+ Add a moment')
+  })
+
+  it('calls a moment a moment throughout, so two controls cannot disagree', () => {
+    board.addFrame()
+    const wrapper = mount(FrameStrip)
+    expect(wrapper.find('[data-delete-frame]').text()).toBe('Delete moment')
+  })
+})
+
 describe('a drill with several frames', () => {
   beforeEach(() => {
     board.addFrame()
