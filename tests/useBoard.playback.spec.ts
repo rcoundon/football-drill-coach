@@ -377,3 +377,64 @@ describe('the ball in the view', () => {
     expect(board.viewBallPosition.value.x).toBeLessThan(50)
   })
 })
+
+/**
+ * `goToFrame` moves the playhead with the coach. For a long time the three
+ * operations that ALSO change which phase you are on — adding, deleting and
+ * reordering — did not, so `currentFrame` and `playback.at` fell out of step.
+ *
+ * That is worse than it sounds. The board renders whichever phase the
+ * PLAYHEAD is on, while edits go to `currentFrame`, so after adding a phase a
+ * coach was editing one phase and looking at another: dragging a player did
+ * nothing visible, because the drag landed on a phase that was not on screen.
+ */
+describe('the playhead keeps up with the phase you are on', () => {
+  function drillOf(n: number): string {
+    board.addCounter('red')
+    const id = board.state.counters[0].id
+    board.moveCounter(id, { x: 10, y: 30 })
+    for (let i = 1; i < n; i++) board.addFrame()
+    return id
+  }
+
+  /** The invariant: parked on a phase, the playhead sits at that phase's start. */
+  function playheadAgrees(): boolean {
+    return board.playback.at === board.timeline.value.startOf(board.state.currentFrame)
+  }
+
+  it('follows a newly added phase', () => {
+    drillOf(2)
+    expect(board.state.currentFrame).toBe(1)
+    expect(playheadAgrees()).toBe(true)
+  })
+
+  it('shows the phase being edited, so a drag is visible', () => {
+    const id = drillOf(3)
+    board.moveCounter(id, { x: 80, y: 30 })
+    // What the coach is looking at must be what they just changed.
+    expect(board.view.value.counters.find((c) => c.id === id)!.pos.x).toBe(80)
+  })
+
+  it('follows a deletion', () => {
+    drillOf(3)
+    board.goToFrame(2)
+    board.deleteFrame(0)
+    expect(playheadAgrees()).toBe(true)
+  })
+
+  it('follows a reorder', () => {
+    drillOf(3)
+    board.setFrameDuration(1, 400)
+    board.setFrameDuration(2, 900)
+    board.goToFrame(2)
+    board.moveFrame(0, 2)
+    expect(playheadAgrees()).toBe(true)
+  })
+
+  it('never leaves the board looking at a blend it cannot edit', () => {
+    drillOf(3)
+    expect(board.isDerived.value).toBe(false)
+    board.deleteFrame(0)
+    expect(board.isDerived.value).toBe(false)
+  })
+})

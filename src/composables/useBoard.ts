@@ -503,6 +503,7 @@ function addFrame(): number {
   const index = state.currentFrame + 1
   state.frames.splice(index, 0, clone(toRaw(state).frames[state.currentFrame]))
   state.currentFrame = index
+  parkPlayhead()
   return index
 }
 
@@ -518,6 +519,7 @@ function deleteFrame(index: number): void {
   // frame 1 and finds themselves looking at a different moment.
   if (index < state.currentFrame) state.currentFrame -= 1
   else state.currentFrame = Math.min(state.currentFrame, state.frames.length - 1)
+  parkPlayhead()
 }
 
 /** Reorder, keeping the coach on the frame they were looking at. */
@@ -534,6 +536,7 @@ function moveFrame(from: number, to: number): void {
   const found = state.frames.indexOf(watched)
   if (found === -1) throw new Error('moveFrame lost track of the watched frame')
   state.currentFrame = found
+  parkPlayhead()
 }
 
 function setFrameDuration(index: number, ms: number): void {
@@ -542,6 +545,9 @@ function setFrameDuration(index: number, ms: number): void {
   if (!frame) return
   commit()
   frame.duration = Math.round(Math.max(MIN_FRAME_MS, Math.min(MAX_FRAME_MS, ms)))
+  // Retiming a phase moves where every phase after it begins, this one
+  // included, so where the playhead is parked has just changed meaning.
+  parkPlayhead()
 }
 
 /**
@@ -549,6 +555,20 @@ function setFrameDuration(index: number, ms: number): void {
  * nothing about the drill, and stepping through five frames to read them
  * should not bury real work under five entries that changed nothing.
  */
+/**
+ * Park the playhead at the start of whichever phase the coach is now on.
+ *
+ * The board renders whatever phase the PLAYHEAD is on, while edits go to
+ * `currentFrame`. Any operation that moves the coach to a different phase must
+ * therefore move the playhead too — otherwise they edit one phase while
+ * looking at another, and a drag appears to do nothing because it landed on a
+ * phase that is not on screen. Adding, deleting and reordering a phase each
+ * did exactly that before this existed.
+ */
+function parkPlayhead(): void {
+  playback.at = timeline.value.startOf(state.currentFrame)
+}
+
 function goToFrame(index: number): void {
   // Jumping the playhead mid-export would desync it from the export's own
   // seek loop, the same way play() would.
@@ -556,7 +576,7 @@ function goToFrame(index: number): void {
   if (index < 0 || index >= state.frames.length) return
   pause()
   state.currentFrame = index
-  playback.at = timeline.value.startOf(index)
+  parkPlayhead()
 }
 
 function counterById(id: string): Counter | undefined {
