@@ -191,17 +191,20 @@ describe('deleting a frame', () => {
     board.addFrame() // index 1
     board.addFrame() // index 2
     board.addFrame() // index 3
+    board.addFrame() // index 4
     board.setFrameDuration(3, 250)
     board.goToFrame(3)
 
+    // Five frames, watching index 3, deleting index 0 — strictly interior,
+    // so `Math.min(currentFrame, length - 1)` alone (the old, buggy code)
+    // computes Math.min(3, 3) = 3 and would leave the coach on the wrong
+    // frame. The frame tagged 250 is the one being watched; it lands at
+    // index 2 once frame 0 is gone.
     board.deleteFrame(0)
 
-    // The frame that was at index 3 has shifted down to index 2, and the
-    // coach should still be looking at it rather than at whatever now
-    // happens to sit at index 3 (nothing — there are only three frames left).
-    expect(board.state.frames).toHaveLength(3)
+    expect(board.state.frames).toHaveLength(4)
     expect(board.state.currentFrame).toBe(2)
-    expect(board.state.frames[2].duration).toBe(250)
+    expect(board.state.frames[board.state.currentFrame].duration).toBe(250)
   })
 })
 
