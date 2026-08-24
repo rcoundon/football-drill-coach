@@ -1,5 +1,15 @@
 import { computed, reactive, ref, toRaw } from 'vue'
-import type { Ball, Counter, CounterColor, Drawing, Label, Marker, PitchType, Vec } from '../types'
+import type {
+  Ball,
+  Counter,
+  CounterColor,
+  Drawing,
+  Label,
+  Marker,
+  PitchType,
+  SelectionRef,
+  Vec,
+} from '../types'
 import { PITCH_H, PITCH_W, clampToPitch, distance, snapToAxis } from '../geometry'
 
 export const UNDO_LIMIT = 50
@@ -644,16 +654,49 @@ function pointsOf(drawing: Drawing): Vec[] {
  * the chord, so the bow travels with its ends.
  */
 function translateDrawing(id: string, delta: Vec): void {
-  const drawing = drawingById(id)
-  if (!drawing) return
+  translateGroup([{ kind: 'drawing', id }], delta)
+}
 
-  const points = pointsOf(drawing)
+/**
+ * The points a selected thing is made of, or null when it is no longer on
+ * the board. Tokens have one; a drawing has all of its own.
+ *
+ * The arrays are the live objects, not copies, so moving a group is a matter
+ * of adding to what comes back.
+ */
+function pointsOfRef(ref: SelectionRef): Vec[] | null {
+  if (ref.kind === 'drawing') {
+    const drawing = drawingById(ref.id)
+    return drawing ? pointsOf(drawing) : null
+  }
+  const token =
+    ref.kind === 'counter'
+      ? counterById(ref.id)
+      : ref.kind === 'marker'
+        ? markerById(ref.id)
+        : labelById(ref.id)
+  return token ? [token.pos] : null
+}
+
+/**
+ * Slide a whole group across the pitch. Called on every pointer-move of a
+ * drag, so it deliberately does not commit.
+ *
+ * The delta is trimmed once against the group's own bounding box, exactly as
+ * a single drawing's is: clamping each member on its own would collapse a
+ * shape against the touchline instead of stopping it there, which is the one
+ * thing a coach moving a shape would never want. Members that have since
+ * gone are skipped rather than treated as being at the origin, which would
+ * drag the whole group towards the corner.
+ */
+function translateGroup(refs: SelectionRef[], delta: Vec): void {
+  const points = refs.flatMap((ref) => pointsOfRef(ref) ?? [])
   if (points.length === 0) return
 
   const xs = points.map((p) => p.x)
   const ys = points.map((p) => p.y)
 
-  // A drawing wider than the pitch cannot be brought inside, and squeezing it
+  // Something wider than the pitch cannot be brought inside, and squeezing it
   // would distort it, so the room it has is allowed to go negative and the
   // min/max below simply cancel the move on that axis.
   const dx = Math.min(PITCH_W - Math.max(...xs), Math.max(-Math.min(...xs), delta.x))
@@ -663,6 +706,91 @@ function translateDrawing(id: string, delta: Vec): void {
     point.x += dx
     point.y += dy
   }
+}
+
+/**
+ * Take a whole group off the board in one undo entry, rather than one per
+ * member — a coach who boxed a shape and pressed Delete meant one action.
+ *
+ * A ball being carried by a deleted player is set down where it was riding,
+ * matching what deleting a single player already does: the drill still has a
+ * ball in it, it just no longer belongs to anyone.
+ */
+function deleteGroup(refs: SelectionRef[]): void {
+  if (refs.length === 0) return
+  const ids = {
+    counter: new Set<string>(),
+    marker: new Set<string>(),
+    label: new Set<string>(),
+    drawing: new Set<string>(),
+  }
+  for (const ref of refs) ids[ref.kind].add(ref.id)
+
+  commit()
+
+  if (state.ball.attachedTo && ids.counter.has(state.ball.attachedTo)) {
+    state.ball.pos = ballPosition()
+    state.ball.attachedTo = null
+  }
+
+  state.counters = rawFilter(state.counters, (c) => !ids.counter.has(c.id))
+  state.markers = rawFilter(state.markers, (m) => !ids.marker.has(m.id))
+  state.labels = rawFilter(state.labels, (l) => !ids.label.has(l.id))
+  state.drawings = rawFilter(state.drawings, (d) => !ids.drawing.has(d.id))
+}
+
+/**
+ * Copy a whole group, offset a little so the copy is plainly a copy rather
+ * than something that quietly landed on top of the original.
+ *
+ * Returns the copies, so the caller can leave the coach holding them: the
+ * next thing anyone does after duplicating a shape is drag it into place.
+ *
+ * The offset goes through `translateGroup`, so a shape duplicated against
+ * the touchline stays on the pitch and keeps its formation. A copied player
+ * never inherits the ball — a drill has one ball, and duplicating a shape is
+ * not a reason to grow another.
+ */
+function duplicateGroup(refs: SelectionRef[], offset: Vec): SelectionRef[] {
+  const live = refs.filter((ref) => pointsOfRef(ref) !== null)
+  if (live.length === 0) return []
+
+  commit()
+
+  const copies: SelectionRef[] = []
+  for (const ref of live) {
+    if (ref.kind === 'counter') {
+      const original = counterById(ref.id)!
+      const copy: Counter = {
+        id: newId(),
+        color: original.color,
+        label: original.label,
+        pos: { ...original.pos },
+      }
+      state.counters.push(copy)
+      copies.push({ kind: 'counter', id: copy.id })
+    } else if (ref.kind === 'marker') {
+      const original = markerById(ref.id)!
+      const copy: Marker = { id: newId(), pos: { ...original.pos } }
+      state.markers.push(copy)
+      copies.push({ kind: 'marker', id: copy.id })
+    } else if (ref.kind === 'label') {
+      const original = labelById(ref.id)!
+      const copy: Label = { id: newId(), pos: { ...original.pos }, text: original.text }
+      state.labels.push(copy)
+      copies.push({ kind: 'label', id: copy.id })
+    } else {
+      // Cloned whole rather than field by field, so a bend, a dash style or
+      // anything a drawing grows later comes along without being listed here.
+      const copy = clone(drawingById(ref.id)!)
+      copy.id = newId()
+      state.drawings.push(copy)
+      copies.push({ kind: 'drawing', id: copy.id })
+    }
+  }
+
+  translateGroup(copies, offset)
+  return copies
 }
 
 /** Erase every trace of a drawing from the undo and redo history. */
@@ -769,6 +897,9 @@ const board = {
   updateSegment,
   moveSegmentEnd,
   translateDrawing,
+  translateGroup,
+  duplicateGroup,
+  deleteGroup,
   setArrowBend,
   finishDrawing,
   deleteDrawing,

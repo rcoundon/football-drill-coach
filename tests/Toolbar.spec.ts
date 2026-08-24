@@ -51,6 +51,50 @@ describe('tool selection', () => {
   })
 })
 
+/**
+ * A tablet has no Cmd key and no Delete key, so the only way to copy or
+ * remove a gathered group there is a button. They sit with Undo and Redo,
+ * which is the one group that is never folded away behind the More menu.
+ */
+describe('acting on what is held', () => {
+  it('offers nothing to press when nothing is held', () => {
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-duplicate]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-delete-selection]').attributes('disabled')).toBeDefined()
+  })
+
+  it('comes alive once something is', () => {
+    const wrapper = mount(Toolbar, {
+      props: { tool: 'select' as ToolMode, drawColor: '#ffffff', selectionSize: 3 },
+    })
+    expect(wrapper.find('[data-duplicate]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-delete-selection]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('emits duplicate', async () => {
+    const wrapper = mount(Toolbar, {
+      props: { tool: 'select' as ToolMode, drawColor: '#ffffff', selectionSize: 2 },
+    })
+    await wrapper.find('[data-duplicate]').trigger('click')
+    expect(wrapper.emitted('duplicate')).toBeTruthy()
+  })
+
+  it('emits deleteSelection', async () => {
+    const wrapper = mount(Toolbar, {
+      props: { tool: 'select' as ToolMode, drawColor: '#ffffff', selectionSize: 2 },
+    })
+    await wrapper.find('[data-delete-selection]').trigger('click')
+    expect(wrapper.emitted('deleteSelection')).toBeTruthy()
+  })
+
+  it('says how many things the buttons would act on', () => {
+    const wrapper = mount(Toolbar, {
+      props: { tool: 'select' as ToolMode, drawColor: '#ffffff', selectionSize: 3 },
+    })
+    expect(wrapper.find('[data-duplicate]').attributes('title')).toContain('3')
+  })
+})
+
 describe('pitch controls', () => {
   it('changes the pitch type', async () => {
     const board = useBoard()
@@ -280,6 +324,36 @@ describe('on a narrow screen', () => {
     expect(wrapper.find('[data-tool="pen"]').exists()).toBe(true)
     expect(wrapper.findAll('[data-add-counter]')).toHaveLength(COUNTER_COLORS.length)
     expect(wrapper.find('[data-undo]').exists()).toBe(true)
+  })
+
+  /**
+   * These are not conveniences on a touch screen, they are the only way in:
+   * there is no Cmd+D and no Delete key under a finger. Behind the More menu
+   * they would be unreachable in practice, so they sit with Undo, which is
+   * the one group never folded away.
+   */
+  it('keeps Copy and Delete out in the open, where a finger can reach them', () => {
+    stubNarrow(true)
+    const wrapper = mount(Toolbar, {
+      props: { tool: 'select' as ToolMode, drawColor: '#ffffff', selectionSize: 2 },
+    })
+    expect(wrapper.find('[data-duplicate]').exists()).toBe(true)
+    expect(wrapper.find('[data-delete-selection]').exists()).toBe(true)
+    expect(wrapper.find('[data-more]').exists()).toBe(true)
+  })
+
+  it('keeps them in the open on a tablet rail layout too', () => {
+    stubNarrow(false)
+    const wrapper = mount(Toolbar, {
+      props: {
+        tool: 'select' as ToolMode,
+        drawColor: '#ffffff',
+        selectionSize: 2,
+        railed: true,
+      },
+    })
+    expect(wrapper.find('[data-duplicate]').exists()).toBe(true)
+    expect(wrapper.find('[data-delete-selection]').exists()).toBe(true)
   })
 
   /**

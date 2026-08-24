@@ -89,6 +89,18 @@ export type Drawing = PenDrawing | ArrowDrawing | LineDrawing
 /** Any drawing dragged out as a straight segment between two points. */
 export type SegmentDrawing = ArrowDrawing | LineDrawing
 
+/**
+ * The things a coach can gather into a group and move together.
+ *
+ * The ball is deliberately not one of them. It is a single object that is
+ * already easy to drag, and it carries possession — a group move would have
+ * to decide what happens to that, for no gain.
+ */
+export type SelectableKind = 'counter' | 'marker' | 'label' | 'drawing'
+
+/** One member of a selection, named by what it is and which one it is. */
+export type SelectionRef = { kind: SelectableKind; id: string }
+
 export type Ball = {
   pos: Vec
   /** Counter id when a player has the ball, null when it is free on the grass. */

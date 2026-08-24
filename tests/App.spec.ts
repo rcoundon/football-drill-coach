@@ -257,6 +257,75 @@ describe('the chosen drawing and the keyboard', () => {
     expect(board.state.drawings).toHaveLength(1)
   })
 
+  it('copies the chosen drawing on Cmd+D', async () => {
+    const board = useBoard()
+    wrapper = mount(App)
+    await chooseAnArrow(wrapper)
+
+    fire({ key: 'd', metaKey: true })
+    await wrapper.vm.$nextTick()
+
+    expect(board.state.drawings).toHaveLength(2)
+  })
+
+  it('copies on Ctrl+D too, for a keyboard without a Cmd key', async () => {
+    const board = useBoard()
+    wrapper = mount(App)
+    await chooseAnArrow(wrapper)
+
+    fire({ key: 'd', ctrlKey: true })
+    await wrapper.vm.$nextTick()
+
+    expect(board.state.drawings).toHaveLength(2)
+  })
+
+  it('leaves Cmd+D alone when nothing is held, so bookmarking still works', async () => {
+    const board = useBoard()
+    const id = board.startArrow({ x: 20, y: 30 }, '#ffffff', 'pass')
+    board.updateSegment(id, { x: 60, y: 30 })
+    board.finishDrawing(id)
+    wrapper = mount(App)
+
+    fire({ key: 'd', metaKey: true })
+    await wrapper.vm.$nextTick()
+
+    expect(board.state.drawings).toHaveLength(1)
+  })
+
+  it('copies from the toolbar button, which is the only way in on a tablet', async () => {
+    const board = useBoard()
+    wrapper = mount(App)
+    await chooseAnArrow(wrapper)
+
+    await wrapper.find('[data-duplicate]').trigger('click')
+
+    expect(board.state.drawings).toHaveLength(2)
+  })
+
+  it('removes from the toolbar button as well', async () => {
+    const board = useBoard()
+    wrapper = mount(App)
+    await chooseAnArrow(wrapper)
+
+    await wrapper.find('[data-delete-selection]').trigger('click')
+
+    expect(board.state.drawings).toEqual([])
+  })
+
+  it('greys both buttons out until something is held', async () => {
+    const board = useBoard()
+    const id = board.startArrow({ x: 20, y: 30 }, '#ffffff', 'pass')
+    board.updateSegment(id, { x: 60, y: 30 })
+    board.finishDrawing(id)
+    wrapper = mount(App)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-duplicate]').attributes('disabled')).toBeDefined()
+
+    await chooseAnArrow(wrapper)
+
+    expect(wrapper.find('[data-duplicate]').attributes('disabled')).toBeUndefined()
+  })
+
   it('leaves Delete to the field while a dialog is up', async () => {
     const board = useBoard()
     wrapper = mount(App)

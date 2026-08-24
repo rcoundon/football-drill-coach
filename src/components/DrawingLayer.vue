@@ -2,7 +2,7 @@
 import type { Drawing, PenDrawing, SegmentDrawing } from '../types'
 import { curveControlPoint } from '../geometry'
 
-defineProps<{ drawings: Drawing[]; selectedId: string | null }>()
+defineProps<{ drawings: Drawing[]; selectedIds: string[] }>()
 defineEmits<{ hit: [id: string, event: PointerEvent] }>()
 
 /**
@@ -76,7 +76,7 @@ function pathOf(drawing: Drawing): string {
       another drawing that happens to cross it.
     -->
     <path
-      v-for="d in drawings.filter((x) => x.id === selectedId)"
+      v-for="d in drawings.filter((x) => selectedIds.includes(x.id))"
       :key="`sel-${d.id}`"
       data-selected
       :d="pathOf(d)"

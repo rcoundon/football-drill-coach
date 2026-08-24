@@ -24,14 +24,26 @@ Because `bend` and `bendAlong` are held relative to the chord, a curve keeps
 its shape while its ends move or the whole arrow slides — that fell out of the
 model rather than needing code.
 
+Multi-select has since landed too. Dragging from bare grass under **Move**
+draws a box, and everything inside — players, cones, labels and drawings —
+joins a group that slides and deletes as one. Both questions this section
+used to pose are answered: a box rather than shift-clicking, because there is
+no shift key on a tablet; and counters do join, because sliding a shape is
+mostly about players, which is what multi-select was wanted for. Pressing a
+single player still drags that player alone.
+
+Duplication has landed with it: **Copy** and **Delete** buttons beside Undo,
+plus `Cmd/Ctrl+D`. The buttons are not conveniences — a tablet has no Cmd key
+and no Delete key, so on the device this board is mostly used on they are the
+only way in. Anything reachable only by keyboard is, in practice, unreachable
+here; worth remembering for whatever comes next.
+
 Still to do:
 
-- **Multi-select.** Shifting a group of counters and drawings together, so a
-  shape can be slid ten metres up the pitch in one gesture. Selection is the
-  foundation; the open questions are how a group is gathered (a lasso? shift
-  to add?) and whether counters join in, which they currently do not.
-- **Duplicating a drawing.** Cheap once something is selected, and a mirrored
-  pass on the other flank is a common thing to want.
+- **Nudging with the arrow keys.** Once something is held, the keyboard is the
+  obvious way to move it a metre rather than a handful.
+- **Rotating or flipping a group.** Harder, and worth waiting to see whether
+  anyone reaches for it.
 
 ### What selection settled
 
