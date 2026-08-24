@@ -385,3 +385,30 @@ describe('groups across frames', () => {
     expect(on0.pos).not.toEqual(on1.pos)
   })
 })
+
+describe('resetting the board', () => {
+  it('collapses the drill back to a single moment', () => {
+    board.addCounter('red')
+    board.addFrame()
+    board.addFrame()
+    expect(board.state.frames).toHaveLength(3)
+
+    board.resetBoard()
+
+    // Reset starts the next drill, and the next drill is one moment until the
+    // coach says otherwise. Leaving the old drill's frames behind would mean a
+    // fresh board that still plays back three empty moments.
+    expect(board.state.frames).toHaveLength(1)
+    expect(board.state.currentFrame).toBe(0)
+    expect(board.state.counters).toEqual([])
+  })
+
+  it('is undoable, frames and all', () => {
+    board.addCounter('red')
+    board.addFrame()
+    board.resetBoard()
+    board.undo()
+    expect(board.state.frames).toHaveLength(2)
+    expect(board.state.counters).toHaveLength(1)
+  })
+})
