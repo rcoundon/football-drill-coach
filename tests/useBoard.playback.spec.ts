@@ -85,6 +85,24 @@ describe('editing while the view is derived', () => {
     expect(board.state.pitch.rotated).toBe(true)
   })
 
+  it('a note jotted mid-blend still gets its own undo entry, not a silent write', () => {
+    twoFrameDrill()
+    board.scrubTo(500)
+    board.setNotes('two touch')
+    expect(board.state.notes).toBe('two touch')
+    board.endScrub()
+
+    // Undoing must reverse exactly the note, not swallow an earlier entry
+    // from setting up the drill — the frame duration the setup committed
+    // must survive a single undo of the note.
+    board.undo()
+    expect(board.state.notes).toBe('')
+    expect(board.state.frames[1].duration).toBe(1000)
+
+    board.redo()
+    expect(board.state.notes).toBe('two touch')
+  })
+
   it('is allowed again once the scrub ends', () => {
     const id = twoFrameDrill()
     board.scrubTo(500)

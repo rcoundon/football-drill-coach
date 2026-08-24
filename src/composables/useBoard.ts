@@ -156,7 +156,6 @@ const redoStack = ref<BoardSnapshot[]>([])
  * `at === timeline.startOf(state.currentFrame)`.
  */
 const playback = reactive({ playing: false, at: 0 })
-let scrubbing = false
 
 const timeline = computed(() => timelineOf(state.frames))
 
@@ -240,7 +239,6 @@ function apply(snap: BoardSnapshot): void {
   state.pitch = copy.pitch
   playback.playing = false
   stopClock()
-  scrubbing = false
   playback.at = timeline.value.startOf(state.currentFrame)
 }
 
@@ -277,7 +275,6 @@ function play(): void {
   // At the very end, play means play again — a button that appears to do
   // nothing is worse than one that starts over.
   if (playback.at >= timeline.value.total) playback.at = 0
-  scrubbing = false
   playback.playing = true
   lastTick = 0
   state.currentFrame = position.value.index
@@ -299,7 +296,6 @@ function rewind(): void {
 /** Drag-time. Leaves the view derived, so editing stays blocked. */
 function scrubTo(ms: number): void {
   pause()
-  scrubbing = true
   playback.at = Math.max(0, Math.min(ms, timeline.value.total))
   state.currentFrame = position.value.index
 }
@@ -309,8 +305,6 @@ function scrubTo(ms: number): void {
  * mid-move refusing every drag with nothing on screen saying why.
  */
 function endScrub(): void {
-  if (!scrubbing) return
-  scrubbing = false
   const { index, t } = position.value
   const target = t > 0.5 ? Math.min(index + 1, state.frames.length - 1) : index
   goToFrame(target)
@@ -330,6 +324,15 @@ function endScrub(): void {
  * of them is reached only through `PitchBoard`'s pointer handlers or the
  * toolbar's player swatches, both of which are blocked elsewhere. Do not add
  * a guard to them later — it breaks that return type and the tests with it.
+ *
+ * `commit()` is deliberately NOT guarded with this either, even though every
+ * moment-writer above already refuses at its own first line and so never
+ * reaches it while derived. `setNotes`, the visibility toggles, `setPitchType`
+ * and `setRotated` are drill-wide and stay callable while derived on purpose —
+ * and they still call `commit()`. Guarding it there would silently drop their
+ * undo entry while letting the mutation through, which is worse than doing
+ * nothing: an edit that cannot be undone. Do not add a guard to `commit()`
+ * later for the same reason.
  */
 function locked(): boolean {
   return isDerived.value
@@ -346,7 +349,6 @@ function locked(): boolean {
  */
 function commit(): BoardSnapshot {
   const entry = snapshot()
-  if (locked()) return entry
   undoStack.value.push(entry)
   if (undoStack.value.length > UNDO_LIMIT) undoStack.value.shift()
   redoStack.value = []
@@ -1288,6 +1290,5 @@ export function __resetBoardForTests(): void {
   idCounter = 0
   playback.playing = false
   playback.at = 0
-  scrubbing = false
   stopClock()
 }
