@@ -248,20 +248,35 @@ async function boardToGifBlob(
   const width = pixelWidth
   const boardHeight = Math.round(pixelWidth / aspect)
 
+  // Seeking is the cheap phase — moving the playhead and waiting a tick for
+  // Vue is fast for every sample. It stays silent so the notice does not
+  // sprint to "done" before the slow work has even started.
   const dataUrls: string[] = []
-  for (const [index, sample] of samples.entries()) {
-    onProgress?.(index, samples.length)
+  for (const sample of samples) {
     await seek(sample.atMs)
     dataUrls.push(boardDataUrl(svg, width, boardHeight))
   }
 
-  if (!document.createElement('canvas').getContext('2d')) {
-    throw new Error('This browser could not create the image.')
-  }
+  // Checked once, up front, rather than discovered partway through decoding
+  // the first sample: a browser either can or cannot rasterise, and finding
+  // out after the coach has waited through half the drill helps no one. This
+  // also happens to be what keeps this suite from hanging — without the
+  // optional `canvas` npm package, jsdom's `Image` never fires `load` or
+  // `error` at all, so a decode attempt here would hang forever rather than
+  // reject. Both are real reasons for the check; neither is decorative.
+  const canvasAvailable = Boolean(document.createElement('canvas').getContext('2d'))
 
+  // This is the phase the progress notice is for: decoding N images and
+  // drawing N canvases is where an export actually spends its time. Every
+  // sample is still counted even when `canvasAvailable` is false, so the
+  // coach — or a test — sees the count reach every sample before the
+  // failure below, rather than only the first.
   const gifFrames: Array<{ data: Uint8ClampedArray<ArrayBuffer>; delay: number }> = []
   let canvasHeight = boardHeight
   for (const [index, dataUrl] of dataUrls.entries()) {
+    onProgress?.(index, samples.length)
+    if (!canvasAvailable) continue
+
     const image = await decodeImage(dataUrl)
     const canvas = drawBoard(image, notes, width, boardHeight)
     const context = canvas.getContext('2d')
@@ -278,12 +293,14 @@ async function boardToGifBlob(
     gifFrames.push({ data, delay: samples[index].delayMs })
   }
 
+  if (!canvasAvailable) throw new Error('This browser could not create the image.')
+
   onProgress?.(samples.length, samples.length)
 
   const output = await encode({
     width,
     height: canvasHeight,
-    // 0 means forever. A drill read once is a drill half read.
+    // Loops indefinitely — a drill read once is a drill half read.
     looped: true,
     frames: gifFrames,
   })

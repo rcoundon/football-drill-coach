@@ -202,7 +202,14 @@ describe('boardToGifBlob', () => {
     expect(seen).toEqual([0, 80, 160])
   })
 
-  it('reports progress as it goes', async () => {
+  /**
+   * Pinned as a full sequence, not just the first entry: the slow phase is
+   * decoding and drawing every sample, not seeking to it, so an
+   * implementation that reports once and then goes quiet — which is what an
+   * earlier draft of this function actually did — must fail this test even
+   * though it still reports *something*.
+   */
+  it('reports progress for every sample, not just the first', async () => {
     const progress: Array<[number, number]> = []
     const { boardToGifBlob } = useExport()
 
@@ -215,6 +222,9 @@ describe('boardToGifBlob', () => {
       (done, total) => progress.push([done, total]),
     ).catch(() => {})
 
-    expect(progress[0]).toEqual([0, 2])
+    expect(progress).toEqual([
+      [0, 2],
+      [1, 2],
+    ])
   })
 })
