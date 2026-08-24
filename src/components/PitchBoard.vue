@@ -208,12 +208,22 @@ const boardTransform = computed(() =>
   board.state.pitch.rotated ? `translate(${PITCH_H} 0) rotate(90)` : '',
 )
 
-const ballPos = computed(() => board.ballPosition())
+/*
+ * Rendering reads `board.view`; editing reads and writes `board.state`.
+ *
+ * Parked on a frame the two are the same arrays, so nothing changes. Between
+ * two frames the view is a blend and the state is the moment the coach was
+ * last on — which is exactly what hit-testing should still be about, except
+ * that presses are refused while the view is a blend anyway.
+ */
+const view = computed(() => board.view.value)
+
+const ballPos = computed(() => board.viewBallPosition.value)
 
 /** True only when the ball is actually riding on a counter that still exists. */
 const ballAttached = computed(() => {
-  const holder = board.state.ball.attachedTo
-  return holder !== null && board.counterById(holder) !== undefined
+  const holder = view.value.ball.attachedTo
+  return holder !== null && view.value.counters.some((c) => c.id === holder)
 })
 
 function toPitch(event: PointerEvent) {
@@ -231,6 +241,7 @@ function capture(event: PointerEvent) {
 }
 
 function onCounterGrab(id: string, event: PointerEvent) {
+  if (board.isDerived.value) return
   const counter = board.counterById(id)
   if (!counter) return
   if (props.tool === 'erase') {
@@ -301,6 +312,7 @@ function onCounterGrab(id: string, event: PointerEvent) {
  * the ball only moves once the pointer does.
  */
 function onLabelGrab(id: string, event: PointerEvent) {
+  if (board.isDerived.value) return
   const label = board.labelById(id)
   if (!label) return
   if (props.tool === 'erase') {
@@ -352,6 +364,7 @@ function onLabelGrab(id: string, event: PointerEvent) {
 }
 
 function onMarkerGrab(id: string, event: PointerEvent) {
+  if (board.isDerived.value) return
   const marker = board.markerById(id)
   if (!marker) return
   if (props.tool === 'erase') {
@@ -382,6 +395,7 @@ function onMarkerGrab(id: string, event: PointerEvent) {
 }
 
 function onBallGrab(event: PointerEvent) {
+  if (board.isDerived.value) return
   if (props.tool !== 'select') return
   if (dragIsLive()) return
   event.stopPropagation()
@@ -408,6 +422,7 @@ function onBallGrab(event: PointerEvent) {
  * go of what was just chosen.
  */
 function onDrawingHit(id: string, event: PointerEvent) {
+  if (board.isDerived.value) return
   if (props.tool === 'erase') {
     board.deleteDrawing(id)
     return
@@ -614,6 +629,15 @@ watch(
   { immediate: true },
 )
 
+// Playing is for watching. Handles and halos belong to editing, and a
+// selection surviving into playback would put them over the animation.
+watch(
+  () => board.playback.playing,
+  (playing) => {
+    if (playing) clearSelection()
+  },
+)
+
 /** The tools that draw a segment, and so keep one live afterwards. */
 function isSegmentTool(tool: ToolMode): boolean {
   return tool === 'arrow-run' || tool === 'arrow-pass' || tool === 'line'
@@ -716,6 +740,7 @@ const selectedTokens = computed(() => {
 })
 
 function onEndGrab(id: string, end: 'from' | 'to', event: PointerEvent) {
+  if (board.isDerived.value) return
   if (dragIsLive()) return
   const segment = board.drawingById(id)
   if (!segment || segment.kind === 'pen') return
@@ -741,6 +766,7 @@ function onEndGrab(id: string, end: 'from' | 'to', event: PointerEvent) {
 }
 
 function onBendGrab(id: string, event: PointerEvent) {
+  if (board.isDerived.value) return
   if (dragIsLive()) return
   event.stopPropagation()
   capture(event)
@@ -775,6 +801,7 @@ function bendTo(id: string, at: Vec): void {
 }
 
 function onPointerDown(event: PointerEvent) {
+  if (board.isDerived.value) return
   if (dragIsLive()) return
   const at = toPitch(event)
   // A stroke is drawn straight from the pointer, so there is nothing to
@@ -957,7 +984,7 @@ function onPointerUp(event: PointerEvent) {
       <rect :x="0" :y="0" :width="PITCH_W" :height="PITCH_H" fill="#2e7d32" />
       <PitchMarkings :type="board.state.pitch.type" />
       <DrawingLayer
-        :drawings="board.state.drawings"
+        :drawings="view.drawings"
         :selected-ids="selectedDrawingIds"
         @hit="onDrawingHit"
       />
@@ -977,29 +1004,29 @@ function onPointerUp(event: PointerEvent) {
         fill-opacity="0.28"
       />
       <ConeMarker
-        v-for="marker in board.state.markers"
+        v-for="marker in view.markers"
         :key="marker.id"
         :marker="marker"
         :rotated="board.state.pitch.rotated"
         @grab="onMarkerGrab(marker.id, $event)"
       />
       <PlayerCounter
-        v-for="counter in board.state.counters"
+        v-for="counter in view.counters"
         :key="counter.id"
         :counter="counter"
         :rotated="board.state.pitch.rotated"
-        :has-ball="board.state.ball.visible && board.state.ball.attachedTo === counter.id"
+        :has-ball="view.ball.visible && view.ball.attachedTo === counter.id"
         @grab="onCounterGrab(counter.id, $event)"
       />
       <PitchLabel
-        v-for="label in board.state.labelsVisible ? board.state.labels : []"
+        v-for="label in board.state.labelsVisible ? view.labels : []"
         :key="label.id"
         :label="label"
         :rotated="board.state.pitch.rotated"
         @grab="onLabelGrab(label.id, $event)"
       />
       <BallToken
-        v-if="board.state.ball.visible"
+        v-if="view.ball.visible"
         :pos="ballPos"
         :attached="ballAttached"
         @grab="onBallGrab"
