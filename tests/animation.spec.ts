@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Ball, Counter, Frame, Marker } from '../src/types'
+import type { Ball, Counter, Frame, Marker, Vec } from '../src/types'
 import { BALL_OFFSET } from '../src/geometry'
 import {
   DEFAULT_FRAME_MS,
@@ -218,5 +218,56 @@ describe('gifSchedule', () => {
     const samples = gifSchedule([frame(), frame({ duration: 160 }), frame({ duration: 800 })], GIF_FPS)
     expect(samples.at(-1)!.atMs).toBe(960)
     expect(samples).toHaveLength(Math.floor(960 / 80) + 1)
+  })
+})
+
+/**
+ * A struck ball travels at a constant speed and a running player does not, so
+ * the two are deliberately given different curves. That is right while the
+ * ball is in flight and wrong the moment a player is carrying it: a carried
+ * ball has to move exactly as its carrier does, or it drifts off the boot
+ * mid-stride and catches up again.
+ */
+describe('a ball being carried', () => {
+  const carried = (from: Vec, to: Vec) => ({
+    a: frame({ counters: [counter('c1', from.x, from.y)], ball: ball(0, 0, 'c1') }),
+    b: frame({ counters: [counter('c1', to.x, to.y)], ball: ball(0, 0, 'c1') }),
+  })
+
+  it('stays on the carrier’s boot the whole way', () => {
+    const { a, b } = carried({ x: 0, y: 0 }, { x: 40, y: 0 })
+    // A quarter of the way through, where the eased and linear curves differ
+    // most obviously. At the halfway point they agree, so a test there would
+    // pass against a ball that drifts.
+    const view = interpolateFrames(a, b, 0.25)
+    const holder = view.counters[0]
+    expect(view.ball.pos.x).toBeCloseTo(holder.pos.x + BALL_OFFSET.x, 10)
+    expect(view.ball.pos.y).toBeCloseTo(holder.pos.y + BALL_OFFSET.y, 10)
+  })
+
+  it('is still in that player’s possession while they run', () => {
+    const { a, b } = carried({ x: 0, y: 0 }, { x: 40, y: 0 })
+    expect(interpolateFrames(a, b, 0.25).ball.attachedTo).toBe('c1')
+  })
+
+  it('is let go the moment the ball changes hands', () => {
+    const a = frame({
+      counters: [counter('c1', 0, 0), counter('c2', 40, 0)],
+      ball: ball(0, 0, 'c1'),
+    })
+    const b = frame({
+      counters: [counter('c1', 0, 0), counter('c2', 40, 0)],
+      ball: ball(0, 0, 'c2'),
+    })
+    const view = interpolateFrames(a, b, 0.25)
+    expect(view.ball.attachedTo).toBeNull()
+    // And travels at its own constant speed, not the players'.
+    expect(view.ball.pos.x).toBeCloseTo(BALL_OFFSET.x + 10, 10)
+  })
+
+  it('is let go when it is played into space', () => {
+    const a = frame({ counters: [counter('c1', 0, 0)], ball: ball(0, 0, 'c1') })
+    const b = frame({ counters: [counter('c1', 0, 0)], ball: ball(60, 20) })
+    expect(interpolateFrames(a, b, 0.25).ball.attachedTo).toBeNull()
   })
 })

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useBoard, __resetBoardForTests } from '../src/composables/useBoard'
+import { BALL_OFFSET } from '../src/geometry'
 
 const board = useBoard()
 
@@ -361,7 +362,13 @@ describe('exporting', () => {
 })
 
 describe('the ball in the view', () => {
-  it('is drawn where the view says, not where the board says', () => {
+  /*
+   * This used to assert the ball was let go of here, which was the bug: the
+   * same player carries it through both phases, so it is being run with, not
+   * struck. It kept its own constant speed while its carrier eased away, and
+   * drifted several yards off the boot mid-stride.
+   */
+  it('rides with the player carrying it, rather than drifting off the boot', () => {
     board.addCounter('red')
     const id = board.state.counters[0].id
     board.moveCounter(id, { x: 10, y: 30 })
@@ -371,8 +378,13 @@ describe('the ball in the view', () => {
     board.setFrameDuration(1, 1000)
     board.goToFrame(0)
 
-    board.scrubTo(500)
-    expect(board.view.value.ball.attachedTo).toBeNull()
+    // A quarter of the way through: where the eased and constant curves are
+    // furthest apart. At the halfway point they agree, so the old behaviour
+    // would have passed a check taken there.
+    board.scrubTo(250)
+    const shown = board.view.value.counters.find((c) => c.id === id)!
+    expect(board.view.value.ball.attachedTo).toBe(id)
+    expect(board.viewBallPosition.value.x).toBeCloseTo(shown.pos.x + BALL_OFFSET.x, 10)
     expect(board.viewBallPosition.value.x).toBeGreaterThan(10)
     expect(board.viewBallPosition.value.x).toBeLessThan(50)
   })

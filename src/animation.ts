@@ -157,15 +157,38 @@ export function gifSchedule(frames: Frame[], fps = GIF_FPS): GifSample[] {
  */
 export function interpolateFrames(a: Frame, b: Frame, t: number): FrameView {
   const e = easeInOut(t)
+  const counters = tweenAll(a.counters, b.counters, e)
+
+  /*
+   * The same player holding the ball at both ends of the move is carrying it,
+   * not striking it. A carried ball has to move exactly as its carrier does —
+   * so it keeps its possession and takes its position from the player, who has
+   * already been eased. Giving it its own curve drifted it off the boot
+   * mid-stride and let it catch up again by the end.
+   *
+   * Anything else is a ball in flight: played to someone else, or into space,
+   * or picked up out of it. Then it is let go of and travels at the one
+   * constant speed a struck ball has.
+   */
+  const carrier = a.ball.attachedTo
+  const carried = carrier !== null && carrier === b.ball.attachedTo
+  const holder = carried ? counters.find((c) => c.id === carrier) : undefined
+
   return {
-    counters: tweenAll(a.counters, b.counters, e),
+    counters,
     markers: tweenAll(a.markers, b.markers, e),
     labels: tweenAll(a.labels, b.labels, e),
-    ball: {
-      pos: lerpVec(ballPositionIn(a), ballPositionIn(b), t),
-      attachedTo: null,
-      visible: a.ball.visible,
-    },
+    ball: holder
+      ? {
+          pos: { x: holder.pos.x + BALL_OFFSET.x, y: holder.pos.y + BALL_OFFSET.y },
+          attachedTo: holder.id,
+          visible: a.ball.visible,
+        }
+      : {
+          pos: lerpVec(ballPositionIn(a), ballPositionIn(b), t),
+          attachedTo: null,
+          visible: a.ball.visible,
+        },
     drawings: a.drawings,
   }
 }
