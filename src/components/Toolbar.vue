@@ -34,6 +34,7 @@ const emit = defineEmits<{
   saveAs: []
   open: []
   exportPng: []
+  exportGif: []
   exportJson: []
   importJson: []
   reset: []
@@ -245,6 +246,13 @@ const heldLabel = computed(() =>
       >Save as…</button>
       <button data-open class="chip" @click="emit('open')">Open</button>
       <button data-export-png class="chip" @click="emit('exportPng')">PNG</button>
+      <button
+        v-if="board.state.frames.length > 1"
+        data-export-gif
+        class="chip"
+        title="Save the drill as an animation"
+        @click="emit('exportGif')"
+      >GIF</button>
       <button data-export-json class="chip" @click="emit('exportJson')">Export</button>
       <button data-import-json class="chip" @click="emit('importJson')">Import</button>
     </div>

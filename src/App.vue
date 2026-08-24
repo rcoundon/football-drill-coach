@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import type { Pattern, ToolMode, Vec } from './types'
+import { gifSchedule } from './animation'
 import Toolbar from './components/Toolbar.vue'
 import ToolRail from './components/ToolRail.vue'
 import PitchBoard from './components/PitchBoard.vue'
@@ -185,6 +186,50 @@ async function exportPng() {
     exporter.downloadBlob(blob, `${exporter.slugify(currentName.value || 'tactics-board')}.png`)
   } catch (error) {
     notice.value = error instanceof Error ? error.message : 'The image could not be created.'
+  }
+}
+
+const exporting = ref(false)
+
+/**
+ * Export the drill as an animation.
+ *
+ * The playhead is driven by hand and restored in a `finally`, so a failure
+ * halfway through leaves the board where the coach left it rather than
+ * parked mid-move. `nextTick` between samples is what makes the SVG show
+ * the moment being captured; without it every sample would be the same
+ * picture.
+ */
+async function exportGif() {
+  const svg = boardRef.value?.svgEl
+  if (!svg || exporting.value) return
+
+  const samples = gifSchedule(board.state.frames)
+  const wasAt = board.playback.at
+  exporting.value = true
+
+  try {
+    const blob = await exporter.boardToGifBlob(
+      svg,
+      samples,
+      async (atMs) => {
+        board.scrubTo(atMs)
+        await nextTick()
+      },
+      board.state.notesVisible ? board.state.notes : '',
+      800,
+      (done, total) => {
+        notice.value = `Building the animation… ${done} of ${total}`
+      },
+    )
+    exporter.downloadBlob(blob, `${exporter.slugify(currentName.value || 'tactics-board')}.gif`)
+    notice.value = 'Animation saved.'
+  } catch (error) {
+    notice.value = error instanceof Error ? error.message : 'The animation could not be created.'
+  } finally {
+    exporting.value = false
+    board.scrubTo(wasAt)
+    board.endScrub()
   }
 }
 
@@ -382,6 +427,7 @@ watch(
       @saveAs="openSaveAsPrompt"
       @open="libraryOpen = true"
       @exportPng="exportPng"
+      @exportGif="exportGif"
       @exportJson="exportJson"
       @importJson="importJson"
       @reset="onBoardReset"

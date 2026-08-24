@@ -167,3 +167,54 @@ describe('exportableClone', () => {
     expect(svg.querySelectorAll('[data-transient]')).toHaveLength(1)
   })
 })
+
+/** A minimal board SVG, just enough to carry a viewBox for the aspect ratio maths. */
+function svgStub(): SVGSVGElement {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  svg.setAttribute('viewBox', '0 0 100 64.76')
+  return svg
+}
+
+/**
+ * jsdom has no canvas, so `boardToGifBlob` cannot actually rasterise or
+ * encode anything here — every call in this suite is expected to reject.
+ * What is tested is the orchestration around that: the order samples are
+ * seeked to, and the progress reported along the way. That is exactly why
+ * `seek` is injected rather than reached for on a real board.
+ */
+describe('boardToGifBlob', () => {
+  it('seeks to every sample, in order', async () => {
+    const seen: number[] = []
+    const seek = async (atMs: number) => {
+      seen.push(atMs)
+    }
+    const { boardToGifBlob } = useExport()
+
+    await boardToGifBlob(svgStub(), [
+      { atMs: 0, delayMs: 80 },
+      { atMs: 80, delayMs: 80 },
+      { atMs: 160, delayMs: 500 },
+    ], seek).catch(() => {
+      // jsdom cannot rasterise, so this rejects. What is being asserted is
+      // that it seeked first, in order.
+    })
+
+    expect(seen).toEqual([0, 80, 160])
+  })
+
+  it('reports progress as it goes', async () => {
+    const progress: Array<[number, number]> = []
+    const { boardToGifBlob } = useExport()
+
+    await boardToGifBlob(
+      svgStub(),
+      [{ atMs: 0, delayMs: 80 }, { atMs: 80, delayMs: 500 }],
+      async () => {},
+      '',
+      800,
+      (done, total) => progress.push([done, total]),
+    ).catch(() => {})
+
+    expect(progress[0]).toEqual([0, 2])
+  })
+})

@@ -406,6 +406,33 @@ describe('on a narrow screen', () => {
   })
 })
 
+/**
+ * A GIF of a single still is a worse PNG, so the button only appears once
+ * there is a second frame for it to actually animate between.
+ */
+describe('the GIF button', () => {
+  it('is hidden while the drill is a single moment, because PNG covers that', () => {
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-export-gif]').exists()).toBe(false)
+  })
+
+  it('appears once there is something to animate', async () => {
+    const board = useBoard()
+    board.addFrame()
+    const wrapper = mountToolbar()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-export-gif]').exists()).toBe(true)
+  })
+
+  it('asks the app to export', async () => {
+    const board = useBoard()
+    board.addFrame()
+    const wrapper = mountToolbar()
+    await wrapper.find('[data-export-gif]').trigger('click')
+    expect(wrapper.emitted('exportGif')).toHaveLength(1)
+  })
+})
+
 describe('when a rail is carrying the tools', () => {
   function mountRailed() {
     return mount(Toolbar, {
