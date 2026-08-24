@@ -36,6 +36,18 @@ describe('colour palette', () => {
     await wrapper.find('[data-add-counter="blue"]').trigger('click')
     expect(wrapper.emitted('update:tool')).toBeUndefined()
   })
+
+  it('will not add a player while the drill is playing', async () => {
+    const board = useBoard()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+    board.scrubTo(500)
+
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-add-counter="red"]').attributes('disabled')).toBeDefined()
+    board.endScrub()
+  })
 })
 
 describe('tool selection', () => {

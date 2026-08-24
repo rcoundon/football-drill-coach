@@ -43,7 +43,12 @@ function addPlayer(color: CounterColor): void {
         :data-add-counter="color"
         class="swatch"
         :style="{ background: SWATCHES[color] }"
-        :title="`Add a ${color} player`"
+        :disabled="board.isDerived.value"
+        :title="
+          board.isDerived.value
+            ? 'A player appearing mid-drill is never what anyone meant'
+            : `Add a ${color} player`
+        "
         :aria-label="`Add a ${color} player`"
         @click="addPlayer(color)"
       />

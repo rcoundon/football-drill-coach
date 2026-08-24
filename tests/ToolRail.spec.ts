@@ -41,6 +41,18 @@ describe('the tool rail', () => {
     expect(wrapper.emitted('update:tool')).toBeUndefined()
   })
 
+  it('will not add a player while the drill is playing', async () => {
+    const board = useBoard()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+    board.scrubTo(500)
+
+    const wrapper = mountRail()
+    expect(wrapper.find('[data-add-counter="red"]').attributes('disabled')).toBeDefined()
+    board.endScrub()
+  })
+
   it('emits the chosen tool', async () => {
     const wrapper = mountRail()
     await wrapper.find('[data-tool="cone"]').trigger('click')
