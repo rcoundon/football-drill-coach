@@ -160,14 +160,19 @@ describe('loadSnapshot', () => {
   it('replaces the whole board', () => {
     const board = useBoard()
     board.loadSnapshot({
-      counters: [{ id: 'a', color: 'red', label: '1', pos: { x: 10, y: 10 } }],
-      markers: [],
-      labels: [],
+      frames: [
+        {
+          counters: [{ id: 'a', color: 'red', label: '1', pos: { x: 10, y: 10 } }],
+          markers: [],
+          labels: [],
+          ball: { pos: { x: 5, y: 5 }, attachedTo: null, visible: true },
+          drawings: [],
+        },
+      ],
+      currentFrame: 0,
       labelsVisible: true,
       notes: '',
       notesVisible: true,
-      ball: { pos: { x: 5, y: 5 }, attachedTo: null, visible: true },
-      drawings: [],
       pitch: { type: 'full', rotated: true },
     })
     expect(board.state.counters).toHaveLength(1)
@@ -177,19 +182,24 @@ describe('loadSnapshot', () => {
   it('does not share references with the snapshot it was given', () => {
     const board = useBoard()
     const snap = {
-      counters: [{ id: 'a', color: 'red' as const, label: '1', pos: { x: 10, y: 10 } }],
-      markers: [],
-      labels: [],
+      frames: [
+        {
+          counters: [{ id: 'a', color: 'red' as const, label: '1', pos: { x: 10, y: 10 } }],
+          markers: [],
+          labels: [],
+          ball: { pos: { x: 5, y: 5 }, attachedTo: null, visible: true },
+          drawings: [],
+        },
+      ],
+      currentFrame: 0,
       labelsVisible: true,
       notes: '',
       notesVisible: true,
-      ball: { pos: { x: 5, y: 5 }, attachedTo: null, visible: true },
-      drawings: [],
       pitch: { type: 'full' as const, rotated: false },
     }
     board.loadSnapshot(snap)
     board.state.counters[0].pos.x = 99
-    expect(snap.counters[0].pos.x).toBe(10)
+    expect(snap.frames[0].counters[0].pos.x).toBe(10)
   })
 })
 

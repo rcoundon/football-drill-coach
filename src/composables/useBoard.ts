@@ -1,9 +1,9 @@
 import { computed, reactive, ref, toRaw } from 'vue'
 import type {
-  Ball,
   Counter,
   CounterColor,
   Drawing,
+  Frame,
   Label,
   Marker,
   PitchType,
@@ -11,6 +11,7 @@ import type {
   Vec,
 } from '../types'
 import { BALL_OFFSET, PITCH_H, PITCH_W, clampToPitch, distance, snapToAxis } from '../geometry'
+import type { FrameView } from '../animation'
 
 export { BALL_OFFSET } from '../geometry'
 
@@ -49,29 +50,35 @@ export const MIN_PEN_STEP = 0.6
 /** Arrows shorter than this are treated as an accidental tap. */
 export const MIN_SEGMENT_LENGTH = 2
 
-export type BoardState = {
-  counters: Counter[]
-  markers: Marker[]
-  labels: Label[]
+/**
+ * The board as data: a list of moments, plus the settings that belong to the
+ * drill rather than to any one of them.
+ */
+export type BoardSnapshot = {
+  frames: Frame[]
+  currentFrame: number
   labelsVisible: boolean
   notes: string
   notesVisible: boolean
-  ball: Ball
-  drawings: Drawing[]
   pitch: { type: PitchType; rotated: boolean }
 }
 
-/** A plain, disconnected copy of the board. */
-export type BoardSnapshot = BoardState
+/**
+ * The board as everything else sees it: the data above, plus five accessors
+ * onto whichever frame is current.
+ *
+ * The accessors are the reason roughly three hundred existing references to
+ * `state.counters` and `state.ball` did not have to be rewritten when frames
+ * arrived. Reading one through Vue's proxy tracks `frames` and
+ * `currentFrame`, so switching frame re-renders without anything extra.
+ */
+export type BoardState = BoardSnapshot & FrameView
 
-function emptyState(): BoardState {
+function emptyFrame(): Frame {
   return {
     counters: [],
     markers: [],
     labels: [],
-    labelsVisible: true,
-    notes: '',
-    notesVisible: true,
     // Not the pitch centre: that is where the first counter lands, and the
     // ball's hit circle would sit right on top of the counter's body, so the
     // coach's first drag would grab the ball instead of the player. Just
@@ -79,8 +86,44 @@ function emptyState(): BoardState {
     // type and well inside the half pitch's 25..75 band.
     ball: { pos: { x: PITCH_W / 2, y: PITCH_H / 2 + 10 }, attachedTo: null, visible: true },
     drawings: [],
+  }
+}
+
+function emptySnapshot(): BoardSnapshot {
+  return {
+    frames: [emptyFrame()],
+    currentFrame: 0,
+    labelsVisible: true,
+    notes: '',
+    notesVisible: true,
     pitch: { type: 'blank', rotated: false },
   }
+}
+
+const FRAME_FIELDS = ['counters', 'markers', 'labels', 'ball', 'drawings'] as const
+
+/**
+ * Add the five accessors onto the current frame.
+ *
+ * Non-enumerable on purpose: a spread or a `structuredClone` of the state
+ * must not materialise a second copy of the current frame's arrays alongside
+ * the frame that owns them.
+ */
+function withFrameAccessors(base: BoardSnapshot): BoardState {
+  const target = base as BoardState
+  for (const field of FRAME_FIELDS) {
+    Object.defineProperty(target, field, {
+      enumerable: false,
+      configurable: true,
+      get(this: BoardState) {
+        return this.frames[this.currentFrame][field]
+      },
+      set(this: BoardState, value: unknown) {
+        ;(this.frames[this.currentFrame] as unknown as Record<string, unknown>)[field] = value
+      },
+    })
+  }
+  return target
 }
 
 /**
@@ -91,7 +134,7 @@ function clone<T>(value: T): T {
   return structuredClone(toRaw(value))
 }
 
-const state = reactive<BoardState>(emptyState())
+const state = reactive<BoardState>(withFrameAccessors(emptySnapshot()))
 const undoStack = ref<BoardSnapshot[]>([])
 const redoStack = ref<BoardSnapshot[]>([])
 
@@ -117,28 +160,27 @@ function rawFilter<T>(array: T[], keep: (item: T) => boolean): T[] {
 function snapshot(): BoardSnapshot {
   const raw = toRaw(state)
   return structuredClone({
-    counters: raw.counters,
-    markers: raw.markers,
-    labels: raw.labels,
+    frames: raw.frames,
+    currentFrame: raw.currentFrame,
     labelsVisible: raw.labelsVisible,
     notes: raw.notes,
     notesVisible: raw.notesVisible,
-    ball: raw.ball,
-    drawings: raw.drawings,
     pitch: raw.pitch,
   })
 }
 
 function apply(snap: BoardSnapshot): void {
   const copy = clone(snap)
-  state.counters = copy.counters
-  state.markers = copy.markers ?? []
-  state.labels = copy.labels ?? []
+  // A snapshot from a damaged draft, or a pattern whose frames were trimmed,
+  // must not leave `currentFrame` pointing past the end: every accessor would
+  // then read through `undefined` and the board would render as an exception
+  // with no way back from inside the app.
+  const frames = copy.frames?.length ? copy.frames : [emptyFrame()]
+  state.frames = frames
+  state.currentFrame = Math.max(0, Math.min(copy.currentFrame ?? 0, frames.length - 1))
   state.labelsVisible = copy.labelsVisible ?? true
   state.notes = copy.notes ?? ''
   state.notesVisible = copy.notesVisible ?? true
-  state.ball = copy.ball
-  state.drawings = copy.drawings
   state.pitch = copy.pitch
 }
 
@@ -220,7 +262,7 @@ function toggleRotated(): void {
  */
 function resetBoard(): void {
   commit()
-  apply({ ...emptyState(), pitch: { ...toRaw(state).pitch } })
+  apply({ ...emptySnapshot(), pitch: { ...toRaw(state).pitch } })
 }
 
 /**
@@ -788,7 +830,9 @@ function duplicateGroup(refs: SelectionRef[], offset: Vec): SelectionRef[] {
 function forgetDrawingInHistory(id: string): void {
   for (const stack of [undoStack, redoStack]) {
     for (const entry of stack.value) {
-      entry.drawings = rawFilter(entry.drawings, (d) => d.id !== id)
+      for (const frame of entry.frames) {
+        frame.drawings = rawFilter(frame.drawings, (d) => d.id !== id)
+      }
     }
   }
 }
@@ -905,7 +949,7 @@ export function useBoard() {
 /** Test-only: put the singleton back to its just-loaded condition. */
 export function __resetBoardForTests(): void {
   notesUndoEntry = null
-  apply(emptyState())
+  apply(emptySnapshot())
   undoStack.value = []
   redoStack.value = []
   strokeUndoEntries.clear()

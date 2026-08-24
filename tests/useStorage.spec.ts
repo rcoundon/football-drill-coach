@@ -9,14 +9,19 @@ import type { BoardSnapshot } from '../src/composables/useBoard'
 
 function snap(): BoardSnapshot {
   return {
-    counters: [{ id: 'a', color: 'red', label: '1', pos: { x: 10, y: 10 } }],
-    markers: [],
-    labels: [],
+    frames: [
+      {
+        counters: [{ id: 'a', color: 'red', label: '1', pos: { x: 10, y: 10 } }],
+        markers: [],
+        labels: [],
+        ball: { pos: { x: 5, y: 5 }, attachedTo: null, visible: true },
+        drawings: [],
+      },
+    ],
+    currentFrame: 0,
     labelsVisible: true,
     notes: '',
     notesVisible: true,
-    ball: { pos: { x: 5, y: 5 }, attachedTo: null, visible: true },
-    drawings: [],
     pitch: { type: 'full', rotated: false },
   }
 }
@@ -52,7 +57,12 @@ describe('savePattern and listPatterns', () => {
     const store = useStorage()
     const withDrawing: BoardSnapshot = {
       ...snap(),
-      drawings: [{ id: 'd1', kind: 'arrow', color: '#fff', style: 'run', from: { x: 0, y: 0 }, to: { x: 9, y: 9 } }],
+      frames: [
+        {
+          ...snap().frames[0],
+          drawings: [{ id: 'd1', kind: 'arrow', color: '#fff', style: 'run', from: { x: 0, y: 0 }, to: { x: 9, y: 9 } }],
+        },
+      ],
     }
     const saved = store.savePattern('Drill', withDrawing)
     expect(saved.drawings).toHaveLength(1)
@@ -81,7 +91,7 @@ describe('patternToSnapshot', () => {
     const store = useStorage()
     const saved = store.savePattern('Drill', snap())
     const restored = store.patternToSnapshot(saved)
-    expect(restored.counters[0].pos).toEqual({ x: 10, y: 10 })
+    expect(restored.frames[0].counters[0].pos).toEqual({ x: 10, y: 10 })
     expect(restored.pitch.type).toBe('full')
   })
 })
@@ -325,7 +335,7 @@ describe('draft autosave', () => {
   it('round-trips the working board', () => {
     const store = useStorage()
     store.saveDraft(snap())
-    expect(store.loadDraft()!.counters[0].id).toBe('a')
+    expect(store.loadDraft()!.frames[0].counters[0].id).toBe('a')
   })
 
   it('returns null when there is no draft', () => {
@@ -337,6 +347,11 @@ describe('draft autosave', () => {
     expect(useStorage().loadDraft()).toBeNull()
   })
 
+  /** A draft with its one frame's fields overridden, for the malformed-frame cases below. */
+  function withFrame(overrides: Record<string, unknown>): unknown {
+    return { ...snap(), frames: [{ ...snap().frames[0], ...overrides }] }
+  }
+
   /**
    * A draft is restored on every load, so an accepted-but-invalid draft
    * bricks the app on every load with no in-app way out. It is transient
@@ -345,12 +360,12 @@ describe('draft autosave', () => {
    */
   describe('rejects a draft that would break the board', () => {
     const cases: [string, unknown][] = [
-      ['no ball', { ...snap(), ball: undefined }],
-      ['a ball with no position', { ...snap(), ball: { attachedTo: null } }],
-      ['a ball attached to a number', { ...snap(), ball: { pos: { x: 1, y: 1 }, attachedTo: 7 } }],
-      ['no drawings', { ...snap(), drawings: undefined }],
-      ['a damaged drawing', { ...snap(), drawings: ['oops'] }],
-      ['a damaged counter', { ...snap(), counters: [42] }],
+      ['no ball', withFrame({ ball: undefined })],
+      ['a ball with no position', withFrame({ ball: { attachedTo: null } })],
+      ['a ball attached to a number', withFrame({ ball: { pos: { x: 1, y: 1 }, attachedTo: 7 } })],
+      ['no drawings', withFrame({ drawings: undefined })],
+      ['a damaged drawing', withFrame({ drawings: ['oops'] })],
+      ['a damaged counter', withFrame({ counters: [42] })],
       ['no pitch type', { ...snap(), pitch: { rotated: false } }],
       ['a non-boolean rotation', { ...snap(), pitch: { type: 'full', rotated: 'yes' } }],
     ]
@@ -463,20 +478,20 @@ describe('straight-line drawings', () => {
 
   it('round-trips a line through save and load', () => {
     const store = useStorage()
-    const saved = store.savePattern('Zones', { ...snap(), drawings: [line] })
+    const saved = store.savePattern('Zones', { ...snap(), frames: [{ ...snap().frames[0], drawings: [line] }] })
     const restored = store.patternToSnapshot(saved)
-    expect(restored.drawings).toEqual([line])
+    expect(restored.frames[0].drawings).toEqual([line])
   })
 
   it('accepts a line in an imported file', () => {
     const store = useStorage()
-    const saved = store.savePattern('Zones', { ...snap(), drawings: [line] })
+    const saved = store.savePattern('Zones', { ...snap(), frames: [{ ...snap().frames[0], drawings: [line] }] })
     expect(() => parsePattern(saved)).not.toThrow()
   })
 
   it('rejects a line with a malformed endpoint', () => {
     const store = useStorage()
-    const saved = store.savePattern('Zones', { ...snap(), drawings: [line] })
+    const saved = store.savePattern('Zones', { ...snap(), frames: [{ ...snap().frames[0], drawings: [line] }] })
     const broken = structuredClone(saved)
     ;(broken.drawings[0] as { to: unknown }).to = 'over there'
     expect(() => parsePattern(broken)).toThrow(/damaged drawing/i)
@@ -496,28 +511,28 @@ describe('curved arrows', () => {
 
   it('round-trips a bend through save and load', () => {
     const store = useStorage()
-    const saved = store.savePattern('Switch', { ...snap(), drawings: [curved] })
-    expect(store.patternToSnapshot(saved).drawings).toEqual([curved])
+    const saved = store.savePattern('Switch', { ...snap(), frames: [{ ...snap().frames[0], drawings: [curved] }] })
+    expect(store.patternToSnapshot(saved).frames[0].drawings).toEqual([curved])
   })
 
   it('accepts a curved arrow in an imported file', () => {
     const store = useStorage()
-    const saved = store.savePattern('Switch', { ...snap(), drawings: [curved] })
+    const saved = store.savePattern('Switch', { ...snap(), frames: [{ ...snap().frames[0], drawings: [curved] }] })
     expect(() => parsePattern(saved)).not.toThrow()
   })
 
   it('loads an arrow saved before curves existed as the straight one it was', () => {
     const store = useStorage()
-    const saved = store.savePattern('Switch', { ...snap(), drawings: [curved] })
+    const saved = store.savePattern('Switch', { ...snap(), frames: [{ ...snap().frames[0], drawings: [curved] }] })
     const old = structuredClone(saved)
     delete (old.drawings[0] as { bend?: number }).bend
     expect(() => parsePattern(old)).not.toThrow()
-    expect(store.patternToSnapshot(old).drawings[0]).not.toHaveProperty('bend')
+    expect(store.patternToSnapshot(old).frames[0].drawings[0]).not.toHaveProperty('bend')
   })
 
   it('rejects a bend that is not a number, which would draw an unreadable path', () => {
     const store = useStorage()
-    const saved = store.savePattern('Switch', { ...snap(), drawings: [curved] })
+    const saved = store.savePattern('Switch', { ...snap(), frames: [{ ...snap().frames[0], drawings: [curved] }] })
     const broken = structuredClone(saved)
     ;(broken.drawings[0] as { bend: unknown }).bend = 'a lot'
     expect(() => parsePattern(broken)).toThrow(/damaged drawing/i)
@@ -526,13 +541,13 @@ describe('curved arrows', () => {
   it('round-trips a skewed bow through save and load', () => {
     const store = useStorage()
     const skewed = { ...curved, bendAlong: 0.2 }
-    const saved = store.savePattern('Switch', { ...snap(), drawings: [skewed] })
-    expect(store.patternToSnapshot(saved).drawings).toEqual([skewed])
+    const saved = store.savePattern('Switch', { ...snap(), frames: [{ ...snap().frames[0], drawings: [skewed] }] })
+    expect(store.patternToSnapshot(saved).frames[0].drawings).toEqual([skewed])
   })
 
   it('rejects an offset along the arrow that is not a number', () => {
     const store = useStorage()
-    const saved = store.savePattern('Switch', { ...snap(), drawings: [curved] })
+    const saved = store.savePattern('Switch', { ...snap(), frames: [{ ...snap().frames[0], drawings: [curved] }] })
     const broken = structuredClone(saved)
     ;(broken.drawings[0] as { bendAlong?: unknown }).bendAlong = 'near the end'
     expect(() => parsePattern(broken)).toThrow(/damaged drawing/i)
@@ -540,7 +555,7 @@ describe('curved arrows', () => {
 
   it('rejects a bend of Infinity, which has no place on a pitch', () => {
     const store = useStorage()
-    const saved = store.savePattern('Switch', { ...snap(), drawings: [curved] })
+    const saved = store.savePattern('Switch', { ...snap(), frames: [{ ...snap().frames[0], drawings: [curved] }] })
     const broken = structuredClone(saved)
     ;(broken.drawings[0] as { bend: unknown }).bend = Infinity
     expect(() => parsePattern(broken)).toThrow(/damaged drawing/i)
@@ -550,16 +565,16 @@ describe('curved arrows', () => {
 describe('cones', () => {
   it('round-trips cones through save and load', () => {
     const store = useStorage()
-    const withCones = { ...snap(), markers: [{ id: 'm1', pos: { x: 20, y: 20 } }] }
+    const withCones = { ...snap(), frames: [{ ...snap().frames[0], markers: [{ id: 'm1', pos: { x: 20, y: 20 } }] }] }
     const saved = store.savePattern('Grid', withCones)
-    expect(store.patternToSnapshot(saved).markers).toEqual(withCones.markers)
+    expect(store.patternToSnapshot(saved).frames[0].markers).toEqual(withCones.frames[0].markers)
   })
 
   it('keeps cones in the frame, alongside the players', () => {
     const store = useStorage()
     const saved = store.savePattern('Grid', {
       ...snap(),
-      markers: [{ id: 'm1', pos: { x: 20, y: 20 } }],
+      frames: [{ ...snap().frames[0], markers: [{ id: 'm1', pos: { x: 20, y: 20 } }] }],
     })
     expect(saved.frames[0].markers).toHaveLength(1)
   })
@@ -575,14 +590,14 @@ describe('cones', () => {
     delete (legacy.frames as Record<string, unknown>[])[0].markers
 
     expect(() => parsePattern(legacy)).not.toThrow()
-    expect(store.patternToSnapshot(parsePattern(legacy)).markers).toEqual([])
+    expect(store.patternToSnapshot(parsePattern(legacy)).frames[0].markers).toEqual([])
   })
 
   it('rejects a cone with a malformed position', () => {
     const store = useStorage()
     const saved = store.savePattern('Grid', {
       ...snap(),
-      markers: [{ id: 'm1', pos: { x: 20, y: 20 } }],
+      frames: [{ ...snap().frames[0], markers: [{ id: 'm1', pos: { x: 20, y: 20 } }] }],
     })
     const broken = structuredClone(saved)
     ;(broken.frames[0].markers[0] as { pos: unknown }).pos = 'somewhere'
@@ -593,9 +608,9 @@ describe('cones', () => {
     const store = useStorage()
     store.saveDraft(snap())
     const raw = JSON.parse(localStorage.getItem(DRAFT_KEY)!)
-    delete raw.markers
+    delete raw.frames[0].markers
     localStorage.setItem(DRAFT_KEY, JSON.stringify(raw))
-    expect(store.loadDraft()?.markers).toEqual([])
+    expect(store.loadDraft()?.frames[0].markers).toEqual([])
   })
 })
 
@@ -603,9 +618,9 @@ describe('cones', () => {
 describe('ball visibility', () => {
   it('round-trips a hidden ball', () => {
     const store = useStorage()
-    const hidden = { ...snap(), ball: { ...snap().ball, visible: false } }
+    const hidden = { ...snap(), frames: [{ ...snap().frames[0], ball: { ...snap().frames[0].ball, visible: false } }] }
     const saved = store.savePattern('Shape drill', hidden)
-    expect(store.patternToSnapshot(saved).ball.visible).toBe(false)
+    expect(store.patternToSnapshot(saved).frames[0].ball.visible).toBe(false)
   })
 
   /**
@@ -619,16 +634,16 @@ describe('ball visibility', () => {
     delete ((legacy.frames as Record<string, unknown>[])[0].ball as Record<string, unknown>).visible
 
     expect(() => parsePattern(legacy)).not.toThrow()
-    expect(store.patternToSnapshot(parsePattern(legacy)).ball.visible).toBe(true)
+    expect(store.patternToSnapshot(parsePattern(legacy)).frames[0].ball.visible).toBe(true)
   })
 
   it('treats a draft saved without the flag the same way', () => {
     const store = useStorage()
     store.saveDraft(snap())
     const raw = JSON.parse(localStorage.getItem(DRAFT_KEY)!)
-    delete raw.ball.visible
+    delete raw.frames[0].ball.visible
     localStorage.setItem(DRAFT_KEY, JSON.stringify(raw))
-    expect(store.loadDraft()?.ball.visible).toBe(true)
+    expect(store.loadDraft()?.frames[0].ball.visible).toBe(true)
   })
 })
 
@@ -637,9 +652,13 @@ describe('pitch labels', () => {
 
   it('round-trips labels and their visibility', () => {
     const store = useStorage()
-    const saved = store.savePattern('Drill', { ...snap(), labels: [label], labelsVisible: false })
+    const saved = store.savePattern('Drill', {
+      ...snap(),
+      frames: [{ ...snap().frames[0], labels: [label] }],
+      labelsVisible: false,
+    })
     const restored = store.patternToSnapshot(saved)
-    expect(restored.labels).toEqual([label])
+    expect(restored.frames[0].labels).toEqual([label])
     expect(restored.labelsVisible).toBe(false)
   })
 
@@ -651,13 +670,13 @@ describe('pitch labels', () => {
 
     expect(() => parsePattern(legacy)).not.toThrow()
     const restored = store.patternToSnapshot(parsePattern(legacy))
-    expect(restored.labels).toEqual([])
+    expect(restored.frames[0].labels).toEqual([])
     expect(restored.labelsVisible).toBe(true)
   })
 
   it('rejects a label with a malformed position', () => {
     const store = useStorage()
-    const saved = store.savePattern('Drill', { ...snap(), labels: [label] })
+    const saved = store.savePattern('Drill', { ...snap(), frames: [{ ...snap().frames[0], labels: [label] }] })
     const broken = structuredClone(saved)
     ;(broken.frames[0].labels[0] as { pos: unknown }).pos = 'over there'
     expect(() => parsePattern(broken)).toThrow()
@@ -665,7 +684,7 @@ describe('pitch labels', () => {
 
   it('rejects a label whose text is not text', () => {
     const store = useStorage()
-    const saved = store.savePattern('Drill', { ...snap(), labels: [label] })
+    const saved = store.savePattern('Drill', { ...snap(), frames: [{ ...snap().frames[0], labels: [label] }] })
     const broken = structuredClone(saved)
     ;(broken.frames[0].labels[0] as { text: unknown }).text = 42
     expect(() => parsePattern(broken)).toThrow()

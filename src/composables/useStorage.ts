@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import type { Pattern } from '../types'
+import type { Frame, Pattern } from '../types'
 import type { BoardSnapshot } from './useBoard'
 
 export const PATTERNS_KEY = 'fct.patterns.v1'
@@ -281,21 +281,22 @@ function makeId(): string {
 
 function toPattern(name: string, snap: BoardSnapshot, id: string, createdAt: string): Pattern {
   const copy = structuredClone(snap)
+  // Stopgap: the pattern format still has exactly one frame, whose drawings
+  // live on the pattern rather than the frame. Task 4 rewrites this function
+  // to carry every frame once the library has somewhere to show them.
+  const frame = copy.frames[copy.currentFrame] ?? copy.frames[0]
   return {
     id,
     name,
     version: SCHEMA_VERSION,
     pitch: copy.pitch,
-    drawings: copy.drawings,
+    drawings: frame.drawings,
     frames: [
       {
-        counters: copy.counters,
-        markers: copy.markers ?? [],
-        labels: copy.labels ?? [],
-        ball: copy.ball,
-        // Stopgap: v1 has exactly one frame and its drawings live on the
-        // pattern. Task 4 rewrites this function to build real per-frame
-        // drawings once multiple frames exist.
+        counters: frame.counters,
+        markers: frame.markers ?? [],
+        labels: frame.labels ?? [],
+        ball: frame.ball,
         drawings: [],
       },
     ],
@@ -364,14 +365,21 @@ function patternToSnapshot(pattern: Pattern): BoardSnapshot {
   const copy = structuredClone(pattern)
   const frame = copy.frames[0]
   return {
-    counters: frame.counters,
-    markers: markersOf(frame as unknown as Record<string, unknown>) as BoardSnapshot['markers'],
-    labels: labelsOf(frame as unknown as Record<string, unknown>) as BoardSnapshot['labels'],
+    frames: [
+      {
+        counters: frame.counters,
+        markers: markersOf(frame as unknown as Record<string, unknown>) as Frame['markers'],
+        labels: labelsOf(frame as unknown as Record<string, unknown>) as Frame['labels'],
+        ball: withBallDefaults(frame.ball) as Frame['ball'],
+        // Pattern-level drawings, not the frame's own (currently always
+        // empty) field — see the stopgap note on toPattern.
+        drawings: copy.drawings,
+      },
+    ],
+    currentFrame: 0,
     labelsVisible: (copy as { labelsVisible?: boolean }).labelsVisible ?? true,
     notes: (copy as { notes?: string }).notes ?? '',
     notesVisible: (copy as { notesVisible?: boolean }).notesVisible ?? true,
-    ball: withBallDefaults(frame.ball) as BoardSnapshot['ball'],
-    drawings: copy.drawings,
     pitch: copy.pitch,
   }
 }
@@ -383,6 +391,20 @@ function saveDraft(snap: BoardSnapshot): void {
 
 function isValidPitch(value: unknown): boolean {
   return isObject(value) && typeof value.type === 'string' && typeof value.rotated === 'boolean'
+}
+
+/** Validate a single frame within a snapshot, to the same standard as the library path. */
+function isValidFrame(value: unknown): boolean {
+  return (
+    isObject(value) &&
+    Array.isArray(value.counters) &&
+    value.counters.every(isValidCounter) &&
+    markersOf(value).every(isValidMarker) &&
+    labelsOf(value).every(isValidLabel) &&
+    isValidBall(value.ball) &&
+    Array.isArray(value.drawings) &&
+    value.drawings.every(isValidDrawing)
+  )
 }
 
 /**
@@ -397,13 +419,9 @@ function isValidPitch(value: unknown): boolean {
 function isValidSnapshot(value: unknown): boolean {
   return (
     isObject(value) &&
-    Array.isArray(value.counters) &&
-    value.counters.every(isValidCounter) &&
-    markersOf(value).every(isValidMarker) &&
-    labelsOf(value).every(isValidLabel) &&
-    isValidBall(value.ball) &&
-    Array.isArray(value.drawings) &&
-    value.drawings.every(isValidDrawing) &&
+    Array.isArray(value.frames) &&
+    value.frames.length > 0 &&
+    value.frames.every(isValidFrame) &&
     isValidPitch(value.pitch)
   )
 }
@@ -418,13 +436,20 @@ function loadDraft(): BoardSnapshot | null {
   try {
     const raw = readRaw(DRAFT_KEY)
     if (!isValidSnapshot(raw)) return null
-    // A draft written before cones existed has no markers array.
+    // A draft written before cones or labels existed has frames with no
+    // markers/labels array.
     const draft = raw as Record<string, unknown>
+    const frames = (draft.frames as Record<string, unknown>[]).map((frame) => ({
+      ...frame,
+      ball: withBallDefaults(frame.ball),
+      markers: markersOf(frame),
+      labels: labelsOf(frame),
+    }))
+    const currentFrame = typeof draft.currentFrame === 'number' ? draft.currentFrame : 0
     return {
       ...draft,
-      ball: withBallDefaults(draft.ball),
-      markers: markersOf(draft),
-      labels: labelsOf(draft),
+      frames,
+      currentFrame: Math.max(0, Math.min(currentFrame, frames.length - 1)),
       labelsVisible: draft.labelsVisible !== false,
       notes: typeof draft.notes === 'string' ? draft.notes : '',
       notesVisible: draft.notesVisible !== false,
