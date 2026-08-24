@@ -5,6 +5,7 @@ import Toolbar from './components/Toolbar.vue'
 import ToolRail from './components/ToolRail.vue'
 import PitchBoard from './components/PitchBoard.vue'
 import PatternLibrary from './components/PatternLibrary.vue'
+import FrameStrip from './components/FrameStrip.vue'
 import { MAX_LABEL_LENGTH, MAX_NOTES_LENGTH, useBoard } from './composables/useBoard'
 import { useStorage } from './composables/useStorage'
 import { useExport } from './composables/useExport'
@@ -288,6 +289,16 @@ function onKeydown(event: KeyboardEvent) {
     return
   }
 
+  if (event.key === ' ') {
+    // Space is the universal play/pause, but it is also a character. The
+    // typing guard above is what keeps a space in the drill notes from
+    // starting the animation.
+    event.preventDefault()
+    if (board.playback.playing) board.pause()
+    else board.play()
+    return
+  }
+
   if (event.key.toLowerCase() === 'b') {
     board.toggleBallVisible()
     return
@@ -325,6 +336,10 @@ let saveTimer: ReturnType<typeof setTimeout> | undefined
 watch(
   () => board.state,
   () => {
+    // Playing moves the playhead, not the drill. Writing a draft several
+    // times a second during a play-through risks restoring a half-tweened
+    // board on the next start, and none of it is a change worth saving.
+    if (board.isDerived.value) return
     clearTimeout(saveTimer)
     saveTimer = setTimeout(() => storage.saveDraft(board.snapshot()), 400)
   },
@@ -367,6 +382,7 @@ watch(
           @edit-label="promptEditLabel"
           @selection-size="selectionSize = $event"
         />
+        <FrameStrip />
       </div>
 
       <aside v-if="board.state.notesVisible" class="notes">

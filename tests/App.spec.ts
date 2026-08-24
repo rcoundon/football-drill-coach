@@ -926,3 +926,82 @@ describe('the tablet rail layout', () => {
     ).toContain('is-active')
   })
 })
+
+describe('the frame strip', () => {
+  it('is on the page', () => {
+    wrapper = mountApp()
+    expect(wrapper.find('[data-add-frame]').exists()).toBe(true)
+  })
+})
+
+describe('space plays and pauses', () => {
+  it('toggles playback', async () => {
+    const board = useBoard()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+    wrapper = mountApp()
+
+    fire({ key: ' ' })
+    await nextTick()
+    expect(board.playback.playing).toBe(true)
+
+    fire({ key: ' ' })
+    await nextTick()
+    expect(board.playback.playing).toBe(false)
+  })
+
+  it('is left alone while the coach is typing in the notes', async () => {
+    const board = useBoard()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    wrapper = mountApp()
+
+    const notes = wrapper.find('[data-notes]').element as HTMLTextAreaElement
+    notes.focus()
+    fire({ key: ' ' }, notes)
+    await nextTick()
+    expect(board.playback.playing).toBe(false)
+
+    // A control, not an afterthought: without it this test cannot fail,
+    // because Space typed nowhere at all would also leave playback alone.
+    // Firing the same key on the window proves the shortcut really exists
+    // and that the notes field is the reason it did not fire above.
+    fire({ key: ' ' })
+    await nextTick()
+    expect(board.playback.playing).toBe(true)
+  })
+})
+
+describe('autosave during playback', () => {
+  it('does not write a half-tweened board to the draft', async () => {
+    const board = useBoard()
+    const storage = useStorage()
+    wrapper = mountApp()
+
+    // Three frames, two moves, so scrubbing into the second move changes
+    // `currentFrame` (0 -> 1) while still leaving the view a blend. With
+    // only two frames the index cannot change without also landing exactly
+    // on a frame (t === 0), which would not exercise the guard at all.
+    board.addCounter('red')
+    board.addFrame()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.setFrameDuration(2, 1000)
+    board.goToFrame(0)
+
+    // Let that settle into a real saved draft, so what follows is checked
+    // against an actual baseline rather than "nothing was ever written".
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    const before = localStorage.getItem('fct.draft.v1')
+    expect(before).toBeTruthy()
+
+    board.play()
+    board.scrubTo(1500)
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    expect(localStorage.getItem('fct.draft.v1')).toBe(before)
+
+    board.pause()
+    void storage
+  })
+})
