@@ -338,7 +338,11 @@ function deleteFrame(index: number): void {
   if (index < 0 || index >= state.frames.length) return
   commit()
   state.frames.splice(index, 1)
-  state.currentFrame = Math.min(state.currentFrame, state.frames.length - 1)
+  // A frame removed from earlier in the drill shifts everything after it
+  // down, the one being watched included. Without this the coach deletes
+  // frame 1 and finds themselves looking at a different moment.
+  if (index < state.currentFrame) state.currentFrame -= 1
+  else state.currentFrame = Math.min(state.currentFrame, state.frames.length - 1)
 }
 
 /** Reorder, keeping the coach on the frame they were looking at. */
@@ -346,11 +350,14 @@ function moveFrame(from: number, to: number): void {
   const last = state.frames.length - 1
   if (from < 0 || from > last || to < 0 || to > last || from === to) return
   commit()
-  const moving = state.currentFrame === from
+  // Follow the frame the coach is watching wherever the reorder puts it,
+  // including when it is some other frame that moved across it.
+  const watched = state.frames[state.currentFrame]
   const [frame] = state.frames.splice(from, 1)
   state.frames.splice(to, 0, frame)
-  if (moving) state.currentFrame = to
-  else state.currentFrame = Math.max(0, Math.min(state.currentFrame, state.frames.length - 1))
+  const found = state.frames.indexOf(watched)
+  if (found === -1) throw new Error('moveFrame lost track of the watched frame')
+  state.currentFrame = found
 }
 
 function setFrameDuration(index: number, ms: number): void {
@@ -484,7 +491,10 @@ function addLabel(at: Vec, text: string): Label | null {
   commit()
   const label: Label = { id: newId(), pos: clampToPitch(at), text: clean }
   for (const frame of allFrames()) frame.labels.push(clone(label))
-  return label
+  // Read back out of state rather than returning the local `label` that was
+  // cloned in: the clone pushed into every frame's array is a copy, so the
+  // local is an orphan that would never again reflect a later move.
+  return labelById(label.id)!
 }
 
 /** Clearing the text removes the label: an empty one has nothing to say. */
@@ -538,7 +548,7 @@ function addMarker(at: Vec): Marker {
   commit()
   const marker: Marker = { id: newId(), pos: clampToPitch(at) }
   for (const frame of allFrames()) frame.markers.push(clone(marker))
-  return marker
+  return markerById(marker.id)!
 }
 
 /** Called on every pointer-move of a drag, so it deliberately does not commit. */

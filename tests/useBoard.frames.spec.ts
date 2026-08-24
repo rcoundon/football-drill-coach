@@ -186,6 +186,23 @@ describe('deleting a frame', () => {
     expect(board.state.frames).toHaveLength(1)
     expect(board.canUndo.value).toBe(false)
   })
+
+  it('keeps watching the same frame when an earlier one is removed', () => {
+    board.addFrame() // index 1
+    board.addFrame() // index 2
+    board.addFrame() // index 3
+    board.setFrameDuration(3, 250)
+    board.goToFrame(3)
+
+    board.deleteFrame(0)
+
+    // The frame that was at index 3 has shifted down to index 2, and the
+    // coach should still be looking at it rather than at whatever now
+    // happens to sit at index 3 (nothing — there are only three frames left).
+    expect(board.state.frames).toHaveLength(3)
+    expect(board.state.currentFrame).toBe(2)
+    expect(board.state.frames[2].duration).toBe(250)
+  })
 })
 
 describe('reordering frames', () => {
@@ -205,6 +222,22 @@ describe('reordering frames', () => {
     expect(board.canUndo.value).toBe(true) // only the addFrame
     board.undo()
     expect(board.canUndo.value).toBe(false)
+  })
+
+  it('follows the frame it was watching when a reorder moves past it', () => {
+    board.addFrame() // index 1
+    board.addFrame() // index 2
+    board.addFrame() // index 3
+    board.setFrameDuration(2, 777)
+    board.goToFrame(2)
+
+    // The frame the coach is watching sits still while everything before it
+    // shuffles down a slot to make room at the far end.
+    board.moveFrame(0, 3)
+
+    expect(board.state.frames).toHaveLength(4)
+    expect(board.state.currentFrame).toBe(1)
+    expect(board.state.frames[board.state.currentFrame].duration).toBe(777)
   })
 })
 
