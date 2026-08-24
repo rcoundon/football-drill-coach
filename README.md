@@ -64,9 +64,24 @@ keeps its shape and its lean while its ends move, and a line still snaps back
 onto the horizontal or vertical. Lines get rings too, though they have no bend
 dot: a line marks out ground rather than describing a movement.
 
+**Gathering a group.** Under **Move**, drag from bare grass to draw a box:
+every player, cone, label and drawing inside joins the group and gets a
+highlight. Drag any member and the whole shape slides together, formation
+intact. `Delete` takes the lot off in one go. A plain press on grass, `Escape`,
+or changing tool puts everything down.
+
+Pressing a single player still drags that player and nothing else, exactly as
+it always has — the box is the only way into a group. A drawing joins the box
+only if one of the points it is made of falls inside, so a long arrow clipping
+the corner is left where it is.
+
+The ball stays out of groups. It is one object, already easy to drag, and it
+carries possession.
+
 **Going back to a drawing.** Under **Move**, press any drawing to pick it up.
 It gets a pale halo and its handles appear — nothing else on the board does,
-so a busy drill stays readable. Drag its body to slide the whole thing without
+so a busy drill stays readable. Handles are for one drawing at a time: a group
+of five arrows has no single bend to offer, so it shows none. Drag its body to slide the whole thing without
 changing its shape, drag a ring to move one end, drag the dot to bend it.
 `Delete` or `Backspace` rubs it out. Press bare grass, press `Escape`, or
 change tool to put it down again. Everything is undoable.

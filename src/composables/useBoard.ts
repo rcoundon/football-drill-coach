@@ -1,5 +1,15 @@
 import { computed, reactive, ref, toRaw } from 'vue'
-import type { Ball, Counter, CounterColor, Drawing, Label, Marker, PitchType, Vec } from '../types'
+import type {
+  Ball,
+  Counter,
+  CounterColor,
+  Drawing,
+  Label,
+  Marker,
+  PitchType,
+  SelectionRef,
+  Vec,
+} from '../types'
 import { PITCH_H, PITCH_W, clampToPitch, distance, snapToAxis } from '../geometry'
 
 export const UNDO_LIMIT = 50
@@ -665,6 +675,84 @@ function translateDrawing(id: string, delta: Vec): void {
   }
 }
 
+/**
+ * The points a selected thing is made of, or null when it is no longer on
+ * the board. Tokens have one; a drawing has all of its own.
+ *
+ * The arrays are the live objects, not copies, so moving a group is a matter
+ * of adding to what comes back.
+ */
+function pointsOfRef(ref: SelectionRef): Vec[] | null {
+  if (ref.kind === 'drawing') {
+    const drawing = drawingById(ref.id)
+    return drawing ? pointsOf(drawing) : null
+  }
+  const token =
+    ref.kind === 'counter'
+      ? counterById(ref.id)
+      : ref.kind === 'marker'
+        ? markerById(ref.id)
+        : labelById(ref.id)
+  return token ? [token.pos] : null
+}
+
+/**
+ * Slide a whole group across the pitch. Called on every pointer-move of a
+ * drag, so it deliberately does not commit.
+ *
+ * The delta is trimmed once against the group's own bounding box, exactly as
+ * a single drawing's is: clamping each member on its own would collapse a
+ * shape against the touchline instead of stopping it there, which is the one
+ * thing a coach moving a shape would never want. Members that have since
+ * gone are skipped rather than treated as being at the origin, which would
+ * drag the whole group towards the corner.
+ */
+function translateGroup(refs: SelectionRef[], delta: Vec): void {
+  const points = refs.flatMap((ref) => pointsOfRef(ref) ?? [])
+  if (points.length === 0) return
+
+  const xs = points.map((p) => p.x)
+  const ys = points.map((p) => p.y)
+  const dx = Math.min(PITCH_W - Math.max(...xs), Math.max(-Math.min(...xs), delta.x))
+  const dy = Math.min(PITCH_H - Math.max(...ys), Math.max(-Math.min(...ys), delta.y))
+
+  for (const point of points) {
+    point.x += dx
+    point.y += dy
+  }
+}
+
+/**
+ * Take a whole group off the board in one undo entry, rather than one per
+ * member — a coach who boxed a shape and pressed Delete meant one action.
+ *
+ * A ball being carried by a deleted player is set down where it was riding,
+ * matching what deleting a single player already does: the drill still has a
+ * ball in it, it just no longer belongs to anyone.
+ */
+function deleteGroup(refs: SelectionRef[]): void {
+  if (refs.length === 0) return
+  const ids = {
+    counter: new Set<string>(),
+    marker: new Set<string>(),
+    label: new Set<string>(),
+    drawing: new Set<string>(),
+  }
+  for (const ref of refs) ids[ref.kind].add(ref.id)
+
+  commit()
+
+  if (state.ball.attachedTo && ids.counter.has(state.ball.attachedTo)) {
+    state.ball.pos = ballPosition()
+    state.ball.attachedTo = null
+  }
+
+  state.counters = rawFilter(state.counters, (c) => !ids.counter.has(c.id))
+  state.markers = rawFilter(state.markers, (m) => !ids.marker.has(m.id))
+  state.labels = rawFilter(state.labels, (l) => !ids.label.has(l.id))
+  state.drawings = rawFilter(state.drawings, (d) => !ids.drawing.has(d.id))
+}
+
 /** Erase every trace of a drawing from the undo and redo history. */
 function forgetDrawingInHistory(id: string): void {
   for (const stack of [undoStack, redoStack]) {
@@ -769,6 +857,8 @@ const board = {
   updateSegment,
   moveSegmentEnd,
   translateDrawing,
+  translateGroup,
+  deleteGroup,
   setArrowBend,
   finishDrawing,
   deleteDrawing,

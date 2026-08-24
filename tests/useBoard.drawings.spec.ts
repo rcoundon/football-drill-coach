@@ -547,3 +547,147 @@ describe('translateDrawing', () => {
     expect(() => board.translateDrawing('nope', { x: 5, y: 5 })).not.toThrow()
   })
 })
+
+describe('moving a group', () => {
+  /** A shape: two players, a cone, a label and an arrow across the middle. */
+  function layOutAShape() {
+    const board = useBoard()
+    const red = board.addCounter('red')
+    board.moveCounter(red.id, { x: 20, y: 20 })
+    const blue = board.addCounter('blue')
+    board.moveCounter(blue.id, { x: 40, y: 20 })
+    const cone = board.addMarker({ x: 30, y: 40 })
+    const label = board.addLabel({ x: 50, y: 50 }, 'press')!
+    const arrow = board.startArrow({ x: 20, y: 20 }, '#fff', 'pass')
+    board.updateSegment(arrow, { x: 40, y: 20 })
+    board.finishDrawing(arrow)
+    return {
+      red,
+      blue,
+      cone,
+      label,
+      arrow,
+      refs: [
+        { kind: 'counter' as const, id: red.id },
+        { kind: 'counter' as const, id: blue.id },
+        { kind: 'marker' as const, id: cone.id },
+        { kind: 'label' as const, id: label.id },
+        { kind: 'drawing' as const, id: arrow },
+      ],
+    }
+  }
+
+  it('slides every member by the same amount', () => {
+    const board = useBoard()
+    const shape = layOutAShape()
+    board.translateGroup(shape.refs, { x: 10, y: 5 })
+    expect(board.counterById(shape.red.id)!.pos).toEqual({ x: 30, y: 25 })
+    expect(board.counterById(shape.blue.id)!.pos).toEqual({ x: 50, y: 25 })
+    expect(board.markerById(shape.cone.id)!.pos).toEqual({ x: 40, y: 45 })
+    expect(board.labelById(shape.label.id)!.pos).toEqual({ x: 60, y: 55 })
+    expect((board.drawingById(shape.arrow) as ArrowDrawing).from).toEqual({ x: 30, y: 25 })
+  })
+
+  it('holds the shape together at the touchline instead of squashing it', () => {
+    const board = useBoard()
+    const shape = layOutAShape()
+    board.translateGroup(shape.refs, { x: 1000, y: 0 })
+    const red = board.counterById(shape.red.id)!.pos
+    const blue = board.counterById(shape.blue.id)!.pos
+    // The 20-unit gap between the two players survived the trip to the edge.
+    expect(blue.x - red.x).toBe(20)
+    expect(blue.x).toBeLessThanOrEqual(PITCH_W)
+  })
+
+  it('keeps sliding along an edge the group already rests on', () => {
+    const board = useBoard()
+    const counter = board.addCounter('red')
+    board.moveCounter(counter.id, { x: 30, y: 0 })
+    board.translateGroup([{ kind: 'counter', id: counter.id }], { x: 10, y: -5 })
+    expect(board.counterById(counter.id)!.pos).toEqual({ x: 40, y: 0 })
+  })
+
+  it('ignores members that have since gone', () => {
+    const board = useBoard()
+    const counter = board.addCounter('red')
+    board.moveCounter(counter.id, { x: 30, y: 30 })
+    const refs = [
+      { kind: 'counter' as const, id: counter.id },
+      { kind: 'drawing' as const, id: 'gone' },
+    ]
+    expect(() => board.translateGroup(refs, { x: 5, y: 5 })).not.toThrow()
+    expect(board.counterById(counter.id)!.pos).toEqual({ x: 35, y: 35 })
+  })
+
+  it('does nothing at all for an empty group', () => {
+    const board = useBoard()
+    expect(() => board.translateGroup([], { x: 5, y: 5 })).not.toThrow()
+  })
+
+  it('does not commit, because it is called on every pointer move of a drag', () => {
+    const board = useBoard()
+    const counter = board.addCounter('red')
+    board.translateGroup([{ kind: 'counter', id: counter.id }], { x: 5, y: 5 })
+    board.undo()
+    expect(board.state.counters).toEqual([])
+    expect(board.canUndo.value).toBe(false)
+  })
+})
+
+describe('deleting a group', () => {
+  it('takes every member off in one go', () => {
+    const board = useBoard()
+    const counter = board.addCounter('red')
+    const cone = board.addMarker({ x: 20, y: 20 })
+    const label = board.addLabel({ x: 30, y: 30 }, 'press')!
+    const arrow = board.startArrow({ x: 40, y: 40 }, '#fff', 'pass')
+    board.updateSegment(arrow, { x: 60, y: 40 })
+    board.finishDrawing(arrow)
+
+    board.deleteGroup([
+      { kind: 'counter', id: counter.id },
+      { kind: 'marker', id: cone.id },
+      { kind: 'label', id: label.id },
+      { kind: 'drawing', id: arrow },
+    ])
+
+    expect(board.state.counters).toEqual([])
+    expect(board.state.markers).toEqual([])
+    expect(board.state.labels).toEqual([])
+    expect(board.state.drawings).toEqual([])
+  })
+
+  it('is one undo entry, not one per member', () => {
+    const board = useBoard()
+    const first = board.addCounter('red')
+    const second = board.addCounter('blue')
+    board.deleteGroup([
+      { kind: 'counter', id: first.id },
+      { kind: 'counter', id: second.id },
+    ])
+    board.undo()
+    expect(board.state.counters).toHaveLength(2)
+  })
+
+  it('sets a carried ball down rather than taking it off with its holder', () => {
+    const board = useBoard()
+    const counter = board.addCounter('red')
+    board.moveCounter(counter.id, { x: 30, y: 30 })
+    board.dropBall({ x: 30, y: 30 })
+    expect(board.state.ball.attachedTo).toBe(counter.id)
+
+    board.deleteGroup([{ kind: 'counter', id: counter.id }])
+
+    expect(board.state.ball.attachedTo).toBeNull()
+    expect(board.state.ball.visible).toBe(true)
+  })
+
+  it('does nothing, and costs no history, for an empty group', () => {
+    const board = useBoard()
+    board.addCounter('red')
+    board.deleteGroup([])
+    board.undo()
+    expect(board.state.counters).toEqual([])
+    expect(board.canUndo.value).toBe(false)
+  })
+})

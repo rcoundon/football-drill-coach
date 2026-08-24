@@ -2028,3 +2028,241 @@ describe('deleting the chosen drawing', () => {
     expect(board.state.drawings).toHaveLength(1)
   })
 })
+
+describe('gathering a group with a box', () => {
+  /** Two players, a cone and an arrow, all in the top-left of the pitch. */
+  function layOutAShape() {
+    const board = useBoard()
+    const red = board.addCounter('red')
+    board.moveCounter(red.id, { x: 15, y: 15 })
+    const blue = board.addCounter('blue')
+    board.moveCounter(blue.id, { x: 30, y: 15 })
+    const cone = board.addMarker({ x: 22, y: 25 })
+    const arrow = board.startArrow({ x: 15, y: 15 }, '#ffffff', 'pass')
+    board.updateSegment(arrow, { x: 30, y: 15 })
+    board.finishDrawing(arrow)
+    // Well clear of the box the tests draw.
+    const far = board.addCounter('yellow')
+    board.moveCounter(far.id, { x: 90, y: 55 })
+    return { red, blue, cone, arrow, far }
+  }
+
+  /** Drag a box from one pitch position to another on bare grass. */
+  async function dragBox(
+    wrapper: ReturnType<typeof mountBoard>,
+    from: { x: number; y: number },
+    to: { x: number; y: number },
+  ) {
+    const svg = wrapper.find('svg')
+    await firePointer(svg, 'pointerdown', clientFor(from.x, from.y))
+    await firePointer(svg, 'pointermove', clientFor(to.x, to.y))
+    await firePointer(svg, 'pointerup', clientFor(to.x, to.y))
+  }
+
+  it('shows the box while it is being dragged', async () => {
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+    const svg = wrapper.find('svg')
+
+    await firePointer(svg, 'pointerdown', clientFor(5, 5))
+    await firePointer(svg, 'pointermove', clientFor(40, 30))
+    expect(wrapper.find('[data-marquee]').exists()).toBe(true)
+
+    await firePointer(svg, 'pointerup', clientFor(40, 30))
+    expect(wrapper.find('[data-marquee]').exists()).toBe(false)
+  })
+
+  it('gathers everything the box covers', async () => {
+    layOutAShape()
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    await dragBox(wrapper, { x: 5, y: 5 }, { x: 40, y: 35 })
+
+    // Two players, a cone and an arrow — but not the player out on his own.
+    expect(wrapper.findAll('[data-selected-token]')).toHaveLength(3)
+    expect(wrapper.findAll('[data-selected]')).toHaveLength(1)
+  })
+
+  it('leaves out what the box does not reach', async () => {
+    const shape = layOutAShape()
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    await dragBox(wrapper, { x: 5, y: 5 }, { x: 20, y: 20 })
+
+    // Only the red player and the arrow end that sits under him.
+    expect(wrapper.findAll('[data-selected-token]')).toHaveLength(1)
+    expect(shape.blue.pos).toEqual({ x: 30, y: 15 })
+  })
+
+  it('gathers nothing when the box is empty, and puts down what was held', async () => {
+    layOutAShape()
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    await dragBox(wrapper, { x: 5, y: 5 }, { x: 40, y: 35 })
+    await dragBox(wrapper, { x: 60, y: 40 }, { x: 75, y: 50 })
+
+    expect(wrapper.find('[data-selected-token]').exists()).toBe(false)
+    expect(wrapper.find('[data-selected]').exists()).toBe(false)
+  })
+
+  it('is a plain press, not a box, when the pointer never travels', async () => {
+    layOutAShape()
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    const svg = wrapper.find('svg')
+    await firePointer(svg, 'pointerdown', clientFor(60, 45))
+    await firePointer(svg, 'pointerup', clientFor(60, 45))
+
+    expect(wrapper.find('[data-marquee]').exists()).toBe(false)
+    expect(wrapper.find('[data-selected-token]').exists()).toBe(false)
+  })
+
+  it('draws no box under a tool that is for drawing', async () => {
+    const wrapper = mountBoard('arrow-pass')
+    await wrapper.vm.$nextTick()
+    const svg = wrapper.find('svg')
+
+    await firePointer(svg, 'pointerdown', clientFor(5, 5))
+    await firePointer(svg, 'pointermove', clientFor(40, 30))
+
+    expect(wrapper.find('[data-marquee]').exists()).toBe(false)
+    await firePointer(svg, 'pointerup', clientFor(40, 30))
+  })
+
+  it('offers no handles for a group, since five arrows cannot share a bend', async () => {
+    const board = useBoard()
+    const first = board.startArrow({ x: 10, y: 10 }, '#ffffff', 'pass')
+    board.updateSegment(first, { x: 30, y: 10 })
+    board.finishDrawing(first)
+    const second = board.startArrow({ x: 10, y: 20 }, '#ffffff', 'pass')
+    board.updateSegment(second, { x: 30, y: 20 })
+    board.finishDrawing(second)
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    await dragBox(wrapper, { x: 5, y: 5 }, { x: 40, y: 30 })
+
+    expect(wrapper.findAll('[data-selected]')).toHaveLength(2)
+    expect(wrapper.find('[data-bend]').exists()).toBe(false)
+    expect(wrapper.find('[data-end]').exists()).toBe(false)
+  })
+
+  it('still offers handles when the box happens to gather one drawing alone', async () => {
+    const board = useBoard()
+    const only = board.startArrow({ x: 10, y: 10 }, '#ffffff', 'pass')
+    board.updateSegment(only, { x: 30, y: 10 })
+    board.finishDrawing(only)
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    await dragBox(wrapper, { x: 5, y: 5 }, { x: 40, y: 30 })
+
+    expect(wrapper.findAll('[data-bend]')).toHaveLength(1)
+    expect(wrapper.findAll('[data-end]')).toHaveLength(2)
+  })
+})
+
+describe('moving a group', () => {
+  function layOutAShape() {
+    const board = useBoard()
+    const red = board.addCounter('red')
+    board.moveCounter(red.id, { x: 15, y: 15 })
+    const blue = board.addCounter('blue')
+    board.moveCounter(blue.id, { x: 30, y: 15 })
+    return { red, blue }
+  }
+
+  async function boxTheShape(wrapper: ReturnType<typeof mountBoard>) {
+    const svg = wrapper.find('svg')
+    await firePointer(svg, 'pointerdown', clientFor(5, 5))
+    await firePointer(svg, 'pointermove', clientFor(40, 30))
+    await firePointer(svg, 'pointerup', clientFor(40, 30))
+  }
+
+  /** A press on a counter lands on its hit circle, as a browser delivers it. */
+  function counterAt(wrapper: ReturnType<typeof mountBoard>, index: number) {
+    return wrapper.findAll('[data-counter]')[index]
+  }
+
+  it('slides the whole shape when one member is dragged', async () => {
+    const board = useBoard()
+    const shape = layOutAShape()
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+    await boxTheShape(wrapper)
+
+    await firePointer(counterAt(wrapper, 0), 'pointerdown', clientFor(15, 15))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(25, 35))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(25, 35))
+
+    expect(board.counterById(shape.red.id)!.pos.x).toBeCloseTo(25, 6)
+    expect(board.counterById(shape.blue.id)!.pos.x).toBeCloseTo(40, 6)
+    expect(board.counterById(shape.blue.id)!.pos.y).toBeCloseTo(35, 6)
+  })
+
+  it('undoes the whole slide in one step', async () => {
+    const board = useBoard()
+    const shape = layOutAShape()
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+    await boxTheShape(wrapper)
+
+    await firePointer(counterAt(wrapper, 0), 'pointerdown', clientFor(15, 15))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(20, 25))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(25, 35))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(25, 35))
+    board.undo()
+
+    expect(board.counterById(shape.red.id)!.pos).toEqual({ x: 15, y: 15 })
+    expect(board.counterById(shape.blue.id)!.pos).toEqual({ x: 30, y: 15 })
+  })
+
+  it('drags a lone player on its own, exactly as it always did', async () => {
+    const board = useBoard()
+    const shape = layOutAShape()
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+
+    await firePointer(counterAt(wrapper, 0), 'pointerdown', clientFor(15, 15))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(25, 35))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(25, 35))
+
+    expect(board.counterById(shape.red.id)!.pos.x).toBeCloseTo(25, 6)
+    expect(board.counterById(shape.blue.id)!.pos).toEqual({ x: 30, y: 15 })
+  })
+
+  it('drags a player that is not in the group on its own', async () => {
+    const board = useBoard()
+    const shape = layOutAShape()
+    const outsider = board.addCounter('yellow')
+    board.moveCounter(outsider.id, { x: 80, y: 50 })
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+    await boxTheShape(wrapper)
+
+    const outsiderEl = wrapper.findAll('[data-counter]')[2]
+    await firePointer(outsiderEl, 'pointerdown', clientFor(80, 50))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(85, 55))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(85, 55))
+
+    expect(board.counterById(outsider.id)!.pos.x).toBeCloseTo(85, 6)
+    expect(board.counterById(shape.red.id)!.pos).toEqual({ x: 15, y: 15 })
+  })
+
+  it('takes the whole group off on Delete', async () => {
+    const board = useBoard()
+    layOutAShape()
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+    await boxTheShape(wrapper)
+
+    wrapper.vm.deleteSelected()
+    await wrapper.vm.$nextTick()
+
+    expect(board.state.counters).toEqual([])
+  })
+})

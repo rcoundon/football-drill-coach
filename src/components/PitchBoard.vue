@@ -30,7 +30,7 @@ export const STALE_DRAG_MS = 10_000
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { ArrowDrawing, SegmentDrawing, ToolMode, Vec } from '../types'
+import type { ArrowDrawing, SegmentDrawing, SelectionRef, ToolMode, Vec } from '../types'
 import { PITCH_H, PITCH_W, bendFor, clampToPitch, clientToPitch, distance, viewBoxOf } from '../geometry'
 import { useBoard } from '../composables/useBoard'
 import PitchMarkings from './PitchMarkings.vue'
@@ -60,6 +60,8 @@ type DragTarget =
   | { kind: 'bend'; id: string }
   | { kind: 'end'; id: string; end: 'from' | 'to' }
   | { kind: 'body'; id: string }
+  | { kind: 'group' }
+  | { kind: 'marquee'; to: Vec }
 
 /**
  * There is one drag at a time, and it belongs to one pointer.
@@ -231,6 +233,14 @@ function onCounterGrab(id: string, event: PointerEvent) {
   event.stopPropagation()
 
   /*
+   * A player in a gathered group carries the whole group. That takes
+   * precedence over the double-press rename below: a coach who has just
+   * boxed a shape is moving it, and renaming one of its players is a press
+   * on bare grass away.
+   */
+  if (grabsGroup('counter', id, event)) return
+
+  /*
    * Rename is detected here rather than from a `dblclick` handler on the
    * counter. `setPointerCapture` below retargets the compatibility mouse
    * events at the capturing <svg>, so `click` and `dblclick` never reach the
@@ -300,6 +310,8 @@ function onLabelGrab(id: string, event: PointerEvent) {
   // second label on top of the one being dragged.
   event.stopPropagation()
 
+  if (props.tool === 'select' && grabsGroup('label', id, event)) return
+
   // Same double-press detection as a counter, and for the same reason:
   // pointer capture stops dblclick ever reaching this element.
   const now = Date.now()
@@ -344,6 +356,7 @@ function onMarkerGrab(id: string, event: PointerEvent) {
    */
   if ((props.tool !== 'select' && props.tool !== 'cone') || dragIsLive()) return
   event.stopPropagation()
+  if (props.tool === 'select' && grabsGroup('marker', id, event)) return
   capture(event)
   board.commit() // one entry for the whole drag
   const at = toPitch(event)
@@ -392,7 +405,14 @@ function onDrawingHit(id: string, event: PointerEvent) {
   if (props.tool !== 'select') return
   if (dragIsLive()) return
   event.stopPropagation()
-  activeDrawingId.value = id
+
+  // A member of a gathered group carries the whole group with it.
+  if (hasGroup.value && isSelected('drawing', id)) {
+    startGroupDrag(event)
+    return
+  }
+
+  selection.value = [{ kind: 'drawing', id }]
   capture(event)
   drag.value = {
     kind: 'body',
@@ -435,32 +455,132 @@ function dragBody(active: Drag & { kind: 'body' }, at: Vec): void {
   bodyDragFrom = at
 }
 
-/** Put down whatever drawing is being worked on. */
-function clearSelection(): void {
-  activeDrawingId.value = null
-}
-
-/** Rub out the chosen drawing. Undoable, like every other deletion. */
-function deleteSelected(): void {
-  const id = activeDrawingId.value
-  if (id === null) return
-  activeDrawingId.value = null
-  board.deleteDrawing(id)
+/**
+ * Begin sliding a gathered group. Shares the body drag's bookkeeping — the
+ * step-by-step delta and the commit that waits for real movement — because
+ * it is the same gesture with more things on the end of it.
+ */
+function startGroupDrag(event: PointerEvent): void {
+  capture(event)
+  drag.value = {
+    kind: 'group',
+    pointerId: event.pointerId,
+    origin: toPitch(event),
+    grabOffset: { x: 0, y: 0 },
+    moved: false,
+    startedAt: Date.now(),
+  }
 }
 
 /**
- * The one drawing the handles belong to.
+ * True when a press on this token should carry the group. A token outside
+ * the group is dragged on its own, and picking it up puts the group down —
+ * the coach has plainly moved on to something else.
+ */
+function grabsGroup(kind: SelectionRef['kind'], id: string, event: PointerEvent): boolean {
+  if (hasGroup.value && isSelected(kind, id)) {
+    startGroupDrag(event)
+    return true
+  }
+  selection.value = []
+  return false
+}
+
+/** Slide every member of the group, on the same terms as a single body. */
+function dragGroup(active: Drag & { kind: 'group' }, at: Vec): void {
+  if (!active.moved) return
+  if (!bodyDragCommitted) {
+    board.commit()
+    bodyDragCommitted = true
+  }
+  const previous = bodyDragFrom ?? active.origin
+  board.translateGroup(selection.value, { x: at.x - previous.x, y: at.y - previous.y })
+  bodyDragFrom = at
+}
+
+/** Put down whatever is being held. */
+function clearSelection(): void {
+  selection.value = []
+}
+
+/** Rub out everything being held, in one undo entry. */
+function deleteSelected(): void {
+  if (selection.value.length === 0) return
+  const refs = selection.value
+  selection.value = []
+  board.deleteGroup(refs)
+}
+
+/** The box as a rectangle, whichever corner the coach started from. */
+const marqueeRect = computed(() => {
+  const active = drag.value
+  if (!active || active.kind !== 'marquee' || !active.moved) return null
+  return {
+    x: Math.min(active.origin.x, active.to.x),
+    y: Math.min(active.origin.y, active.to.y),
+    width: Math.abs(active.to.x - active.origin.x),
+    height: Math.abs(active.to.y - active.origin.y),
+  }
+})
+
+function isInside(box: { x: number; y: number; width: number; height: number }, p: Vec): boolean {
+  return (
+    p.x >= box.x && p.x <= box.x + box.width && p.y >= box.y && p.y <= box.y + box.height
+  )
+}
+
+/**
+ * Gather everything the box covers.
  *
- * Under Move it is the drawing the coach chose by pressing it. Under a
- * drawing tool it is the one they just drew, so a segment can be adjusted
- * without a trip through Move first. Two readings of the same idea — this is
- * the drawing being worked on — so they share a field rather than racing
- * each other.
+ * A drawing joins if any of the points it is made of falls inside. That is a
+ * stricter rule than testing its bounding box, and a more predictable one: a
+ * long arrow crossing the corner of the box is left alone, which is what a
+ * coach boxing a shape means. Both ends of it would have to be in the box for
+ * it to come along.
+ */
+function gatherInto(box: { x: number; y: number; width: number; height: number }): void {
+  const found: SelectionRef[] = []
+  for (const counter of board.state.counters) {
+    if (isInside(box, counter.pos)) found.push({ kind: 'counter', id: counter.id })
+  }
+  for (const marker of board.state.markers) {
+    if (isInside(box, marker.pos)) found.push({ kind: 'marker', id: marker.id })
+  }
+  if (board.state.labelsVisible) {
+    for (const label of board.state.labels) {
+      if (isInside(box, label.pos)) found.push({ kind: 'label', id: label.id })
+    }
+  }
+  for (const drawing of board.state.drawings) {
+    const points = drawing.kind === 'pen' ? drawing.points : [drawing.from, drawing.to]
+    if (points.some((p) => isInside(box, p))) found.push({ kind: 'drawing', id: drawing.id })
+  }
+  selection.value = found
+}
+
+/**
+ * What the coach has hold of under Move: nothing, one thing, or a group
+ * gathered with a box.
  *
- * Never board state: choosing a drawing changes nothing about the drill, so
+ * Never board state. Picking things up changes nothing about the drill, so
  * it has no business in undo, in the autosaved draft, or in a saved pattern.
  */
-const activeDrawingId = ref<string | null>(null)
+const selection = ref<SelectionRef[]>([])
+
+/**
+ * The segment drawn most recently under a drawing tool, so it can be adjusted
+ * without a trip through Move first. Separate from the selection because it
+ * is a different idea in a different mode — the coach has not chosen it, they
+ * have only just finished drawing it.
+ */
+const liveDrawingId = ref<string | null>(null)
+
+function isSelected(kind: SelectionRef['kind'], id: string): boolean {
+  return selection.value.some((ref) => ref.kind === kind && ref.id === id)
+}
+
+/** True when a drag on any member should carry the whole group with it. */
+const hasGroup = computed(() => selection.value.length > 1)
 
 /** The tools that draw a segment, and so keep one live afterwards. */
 function isSegmentTool(tool: ToolMode): boolean {
@@ -472,13 +592,29 @@ function isArrowTool(tool: ToolMode): boolean {
   return tool === 'arrow-run' || tool === 'arrow-pass'
 }
 
-/** Changing tool puts the current drawing down; nothing carries across. */
+/** Changing tool puts everything down; nothing carries across. */
 watch(
   () => props.tool,
   () => {
-    activeDrawingId.value = null
+    selection.value = []
+    liveDrawingId.value = null
   },
 )
+
+/**
+ * The one drawing the handles belong to, if there is one.
+ *
+ * Under Move that means a selection of exactly one drawing: a group has no
+ * single bend to offer, and five arrows cannot share an end. Under a drawing
+ * tool it is the segment just drawn.
+ */
+const activeDrawingId = computed<string | null>(() => {
+  if (props.tool === 'select') {
+    const [only] = selection.value
+    return selection.value.length === 1 && only.kind === 'drawing' ? only.id : null
+  }
+  return liveDrawingId.value
+})
 
 /** The drawing the handles belong to, or undefined once it is gone. */
 const activeDrawing = computed(() =>
@@ -514,8 +650,38 @@ const endHandles = computed<SegmentDrawing[]>(() => {
   return [drawing]
 })
 
-/** The drawing to draw a halo behind: the chosen one, and only under Move. */
-const selectedId = computed(() => (props.tool === 'select' ? activeDrawingId.value : null))
+/** Every drawing to draw a halo behind. Only under Move, where picking up happens. */
+const selectedDrawingIds = computed(() =>
+  props.tool === 'select'
+    ? selection.value.filter((ref) => ref.kind === 'drawing').map((ref) => ref.id)
+    : [],
+)
+
+/**
+ * How wide a ring to draw round each kind of token, in pitch units. Each is
+ * a little more than the thing it surrounds, so the ring reads as a halo
+ * rather than as part of the piece.
+ */
+const RING_RADIUS: Record<'counter' | 'marker' | 'label', number> = {
+  counter: 3.2,
+  marker: 2.6,
+  label: 2.6,
+}
+
+/** Where to draw a ring, for every selected thing that is not a drawing. */
+const selectedTokens = computed(() => {
+  if (props.tool !== 'select') return []
+  return selection.value.flatMap((ref) => {
+    if (ref.kind === 'drawing') return []
+    const token =
+      ref.kind === 'counter'
+        ? board.counterById(ref.id)
+        : ref.kind === 'marker'
+          ? board.markerById(ref.id)
+          : board.labelById(ref.id)
+    return token ? [{ key: `${ref.kind}-${ref.id}`, pos: token.pos, r: RING_RADIUS[ref.kind] }] : []
+  })
+})
 
 function onEndGrab(id: string, end: 'from' | 'to', event: PointerEvent) {
   if (dragIsLive()) return
@@ -613,9 +779,17 @@ function onPointerDown(event: PointerEvent) {
     capture(event)
     drag.value = { kind: 'segment', id: board.startLine(at, props.drawColor), ...shared }
   } else if (props.tool === 'select') {
-    // Bare grass: a press on a drawing, a handle or a token stops before it
-    // reaches here, so getting this far means the coach pressed nothing.
-    clearSelection()
+    /*
+     * Bare grass: a press on a drawing, a handle or a token stops before it
+     * reaches here, so getting this far means the coach pressed nothing.
+     *
+     * The selection is NOT cleared yet. A press that travels is a box being
+     * drawn, and clearing here would make the group flicker away and back on
+     * every gather. The release decides: a box that travelled gathers, a
+     * press that did not puts everything down.
+     */
+    capture(event)
+    drag.value = { kind: 'marquee', to: at, ...shared }
   }
 }
 
@@ -634,6 +808,8 @@ function onPointerMove(event: PointerEvent) {
   else if (active.kind === 'bend') bendTo(active.id, at)
   else if (active.kind === 'end') board.moveSegmentEnd(active.id, active.end, carried)
   else if (active.kind === 'body') dragBody(active, at)
+  else if (active.kind === 'group') dragGroup(active, at)
+  else if (active.kind === 'marquee') active.to = at
   else board.updateSegment(active.id, at)
 }
 
@@ -710,6 +886,16 @@ function onPointerUp(event: PointerEvent) {
     dragBody(active, at)
     bodyDragFrom = null
     bodyDragCommitted = false
+  } else if (active.kind === 'group') {
+    dragGroup(active, at)
+    bodyDragFrom = null
+    bodyDragCommitted = false
+  } else if (active.kind === 'marquee') {
+    active.to = at
+    const box = marqueeRect.value
+    // A press that never travelled is not a box; it means "put it all down".
+    if (box) gatherInto(box)
+    else clearSelection()
   } else {
     board.updateSegment(active.id, at)
     board.finishDrawing(active.id)
@@ -717,7 +903,7 @@ function onPointerUp(event: PointerEvent) {
     // stray tap, and handles on nothing would leave hit targets sitting
     // exactly where the coach is about to press again.
     if (isSegmentTool(props.tool)) {
-      activeDrawingId.value = board.drawingById(active.id) ? active.id : null
+      liveDrawingId.value = board.drawingById(active.id) ? active.id : null
     }
   }
   clearDrag()
@@ -740,8 +926,23 @@ function onPointerUp(event: PointerEvent) {
       <PitchMarkings :type="board.state.pitch.type" />
       <DrawingLayer
         :drawings="board.state.drawings"
-        :selected-id="selectedId"
+        :selected-ids="selectedDrawingIds"
         @hit="onDrawingHit"
+      />
+      <!--
+        Rings for everything held that is not a drawing, painted under the
+        pieces themselves so a ring reads as a halo rather than as part of
+        the player. Drawings get their halo inside the drawing layer.
+      -->
+      <circle
+        v-for="token in selectedTokens"
+        :key="token.key"
+        data-selected-token
+        :cx="token.pos.x"
+        :cy="token.pos.y"
+        :r="token.r"
+        fill="#ffffff"
+        fill-opacity="0.28"
       />
       <ConeMarker
         v-for="marker in board.state.markers"
@@ -794,6 +995,24 @@ function onPointerUp(event: PointerEvent) {
           @grab="onEndGrab(segment.id, end, $event)"
         />
       </template>
+      <!--
+        The box, drawn last so it is never hidden by what it is gathering.
+        Dashed and unfilled: it is a gesture in progress, not a thing on the
+        pitch, and it disappears the moment the pointer comes up.
+      -->
+      <rect
+        v-if="marqueeRect"
+        data-marquee
+        :x="marqueeRect.x"
+        :y="marqueeRect.y"
+        :width="marqueeRect.width"
+        :height="marqueeRect.height"
+        fill="#ffffff"
+        fill-opacity="0.12"
+        stroke="#ffffff"
+        stroke-width="0.3"
+        stroke-dasharray="1.5 1.2"
+      />
     </g>
   </svg>
 </template>
