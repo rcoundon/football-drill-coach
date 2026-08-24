@@ -137,6 +137,30 @@ describe('undo and redo buttons', () => {
     await wrapper.find('[data-undo]').trigger('click')
     expect(board.state.counters).toHaveLength(0)
   })
+
+  /**
+   * `undo` and `redo` both refuse outright while the view is derived — a
+   * blend is not something an earlier snapshot could be applied under. Left
+   * unreflected, a coach pausing mid-move saw two live-looking buttons that
+   * quietly did nothing.
+   */
+  it('are disabled while the drill is mid-move, even though there is something to undo and redo', () => {
+    const board = useBoard()
+    board.addCounter('red')
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+    board.undo() // leaves something to undo AND something to redo
+    expect(board.canUndo.value).toBe(true)
+    expect(board.canRedo.value).toBe(true)
+
+    board.scrubTo(500)
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-undo]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-redo]').attributes('disabled')).toBeDefined()
+
+    board.endScrub()
+  })
 })
 
 describe('menu actions', () => {
@@ -243,6 +267,76 @@ describe('clearing the board', () => {
     expect(wrapper.find('[data-clear-players]').attributes('disabled')).toBeUndefined()
     expect(wrapper.find('[data-clear-drawings]').attributes('disabled')).toBeDefined()
     expect(wrapper.find('[data-reset]').attributes('disabled')).toBeUndefined()
+  })
+
+  /**
+   * Counters, markers and labels are drill-wide, so the current frame's own
+   * length already speaks for every frame. Drawings and the ball's
+   * possession are not: a coach parked on an empty frame must still be
+   * offered Clear drawings and Reset when an earlier or later frame has
+   * something to lose, or there is no way to reach it from that frame.
+   */
+  it('are not disabled just because the frame showing has nothing, when another frame does', () => {
+    const board = useBoard()
+    board.addFrame()
+    board.goToFrame(0)
+    const line = board.startLine({ x: 5, y: 5 }, '#fff')
+    board.updateSegment(line, { x: 60, y: 5 })
+    board.finishDrawing(line)
+    board.goToFrame(1) // parked on the frame with nothing on it
+
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-clear-drawings]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-reset]').attributes('disabled')).toBeUndefined()
+  })
+
+  /**
+   * Every mutator these buttons call refuses outright while the view is
+   * derived, so pausing mid-move used to leave five live-looking buttons
+   * that quietly did nothing when pressed.
+   */
+  it('are disabled while the drill is mid-move, even though there is something to act on', () => {
+    const board = useBoard()
+    board.addCounter('red')
+    const line = board.startLine({ x: 5, y: 5 }, '#fff')
+    board.updateSegment(line, { x: 60, y: 5 })
+    board.finishDrawing(line)
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+    board.scrubTo(500)
+
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-clear-players]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-clear-drawings]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-reset]').attributes('disabled')).toBeDefined()
+
+    board.endScrub()
+  })
+
+  /**
+   * `board.resetBoard()` already refuses while the view is derived — but
+   * `Toolbar.resetBoard()` used to emit `reset` unconditionally regardless,
+   * so the app forgot the pattern that was open even though nothing on the
+   * board had actually changed. The next Save then wrote a duplicate under a
+   * new id, silently, with no undo.
+   */
+  it('emits nothing while mid-move, so a saved pattern is not silently detached', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+    board.scrubTo(500)
+
+    const wrapper = mountToolbar()
+    await wrapper.find('[data-reset]').trigger('click')
+
+    expect(board.state.frames).toHaveLength(2)
+    expect(board.state.counters).toHaveLength(1)
+    expect(wrapper.emitted('reset')).toBeUndefined()
+
+    board.endScrub()
   })
 })
 

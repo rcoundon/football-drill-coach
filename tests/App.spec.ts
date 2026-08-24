@@ -91,6 +91,38 @@ describe('resetting the board', () => {
     expect(wrapper.find('[data-current-pattern]').text()).not.toContain('High press')
     expect(storage.listPatterns().find((p) => p.id === saved.id)).toBeDefined()
   })
+
+  /**
+   * Reset refuses on the board while the drill is playing or mid-move — but
+   * the toolbar used to forget the open pattern regardless, so the coach saw
+   * "Unsaved" for a board that had not actually changed, and the next Save
+   * wrote a duplicate under a new id.
+   */
+  it('is refused while the drill is playing or mid-move, so a saved pattern is not silently detached', async () => {
+    const board = useBoard()
+    const storage = useStorage()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+    storage.savePattern('High press', board.snapshot())
+
+    wrapper = mountApp()
+    await wrapper.vm.$nextTick()
+
+    await openLibraryAndLoad(wrapper)
+    expect(wrapper.find('[data-current-pattern]').text()).toContain('High press')
+
+    board.scrubTo(500)
+    await wrapper.vm.$nextTick()
+
+    await wrapper.find('[data-reset]').trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[data-current-pattern]').text()).toContain('High press')
+    expect(board.state.frames).toHaveLength(2)
+
+    board.endScrub()
+  })
 })
 
 describe('dialogs', () => {
@@ -932,6 +964,79 @@ describe('the frame strip', () => {
   it('is on the page', () => {
     wrapper = mountApp()
     expect(wrapper.find('[data-add-frame]').exists()).toBe(true)
+  })
+})
+
+/**
+ * jsdom has no canvas, so `boardToGifBlob` always rejects here — every
+ * export in this suite runs the `finally` path. That is exactly what these
+ * pin: exportGif had no test at all before this, and separately, the GIF
+ * button was declared `exporting` but never wired to it, so nothing on
+ * screen showed an export was under way.
+ */
+describe('exporting an animation', () => {
+  it('restores the playhead and reports the failure, rather than leaving the board wherever it last sampled to', async () => {
+    const board = useBoard()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+    const app = (wrapper = mountApp())
+    await nextTick()
+
+    const wasAt = board.playback.at
+    await app.find('[data-export-gif]').trigger('click')
+
+    await vi.waitFor(() => {
+      expect(app.find('.notice').text()).toMatch(/could not create the image/i)
+    })
+
+    expect(board.playback.at).toBe(wasAt)
+    expect(board.isDerived.value).toBe(false)
+  })
+
+  it('disables the GIF button for as long as the export is running', async () => {
+    const board = useBoard()
+    board.addFrame()
+    const app = (wrapper = mountApp())
+    await nextTick()
+
+    const click = app.find('[data-export-gif]').trigger('click')
+    await nextTick()
+    expect(app.find('[data-export-gif]').attributes('disabled')).toBeDefined()
+
+    await click
+    await vi.waitFor(() => {
+      expect(app.find('.notice').text()).toMatch(/could not create the image/i)
+    })
+
+    expect(app.find('[data-export-gif]').attributes('disabled')).toBeUndefined()
+  })
+
+  /**
+   * The frame strip's own transport must not be able to race the export's
+   * seek loop. Space is the case a disabled button cannot catch: it drives
+   * `board.play()` directly, so the lock has to live under the button, not
+   * only on it.
+   */
+  it('refuses to start playing from the keyboard while it runs', async () => {
+    const board = useBoard()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+    const app = (wrapper = mountApp())
+    await nextTick()
+
+    const click = app.find('[data-export-gif]').trigger('click')
+    await nextTick()
+
+    fire({ key: ' ' })
+    await nextTick()
+    expect(board.playback.playing).toBe(false)
+
+    await click
+    await vi.waitFor(() => {
+      expect(app.find('.notice').text()).toMatch(/could not create the image/i)
+    })
   })
 })
 

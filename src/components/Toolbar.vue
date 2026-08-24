@@ -23,8 +23,10 @@ const props = withDefaults(
      * gathered group there.
      */
     selectionSize?: number
+    /** True while a GIF export is sampling the board. */
+    exporting?: boolean
   }>(),
-  { patternName: '', railed: false, selectionSize: 0 },
+  { patternName: '', railed: false, selectionSize: 0, exporting: false },
 )
 
 const emit = defineEmits<{
@@ -62,18 +64,48 @@ function addPlayer(color: CounterColor): void {
 const { isNarrow } = useViewport()
 const menuOpen = ref(false)
 
-/** Nothing to clear: no players, no drawings, and the ball never moved. */
+/** Why Undo, Redo, Clear players, Clear drawings and Reset refuse mid-move. */
+const lockedTitle = 'Nothing can change while the drill is playing or mid-move'
+
+/**
+ * True while a drawing sits on some frame, current or not.
+ *
+ * `board.state.drawings` is the current frame's own array, and Clear
+ * drawings reaches every frame — a coach parked on a drawing-free moment
+ * must still be able to press it when an earlier or later one has something
+ * to rub out.
+ */
+const hasAnyDrawings = computed(() => board.state.frames.some((frame) => frame.drawings.length > 0))
+
+/** True while a ball is attached to someone on some frame, current or not. */
+const hasAttachedBall = computed(() =>
+  board.state.frames.some((frame) => frame.ball.attachedTo !== null),
+)
+
+/**
+ * Nothing to clear: no players, no drawings anywhere in the drill, and the
+ * ball never moved. Counters, markers and labels are drill-wide — the same
+ * set on every frame — so the current frame's own arrays already answer for
+ * all of them; only drawings and the ball's possession are per-frame.
+ */
 const isBoardEmpty = computed(
   () =>
     board.state.counters.length === 0 &&
     board.state.markers.length === 0 &&
     board.state.labels.length === 0 &&
     board.state.notes === '' &&
-    board.state.drawings.length === 0 &&
-    board.state.ball.attachedTo === null,
+    !hasAnyDrawings.value &&
+    !hasAttachedBall.value,
 )
 
 function resetBoard() {
+  // Reset refuses while the view is derived, same as every other mutator —
+  // but unlike them it is reached through this wrapper rather than straight
+  // from a template binding, so the wrapper has to know that too. Without
+  // this, board.resetBoard() no-ops but 'reset' still fires, and the app
+  // forgets the pattern that was open even though nothing on the board
+  // changed — the next Save then writes a duplicate under a new id.
+  if (board.isDerived.value) return
   board.resetBoard()
   // The board is no longer the pattern that was open, so the app must stop
   // treating a later Save as an update to it.
@@ -135,8 +167,20 @@ const heldLabel = computed(() =>
     </div>
 
     <div class="group">
-      <button data-undo class="chip" :disabled="!board.canUndo.value" @click="board.undo()">Undo</button>
-      <button data-redo class="chip" :disabled="!board.canRedo.value" @click="board.redo()">Redo</button>
+      <button
+        data-undo
+        class="chip"
+        :disabled="!board.canUndo.value || board.isDerived.value"
+        :title="board.isDerived.value ? lockedTitle : undefined"
+        @click="board.undo()"
+      >Undo</button>
+      <button
+        data-redo
+        class="chip"
+        :disabled="!board.canRedo.value || board.isDerived.value"
+        :title="board.isDerived.value ? lockedTitle : undefined"
+        @click="board.redo()"
+      >Redo</button>
       <!--
         Beside Undo, which is the one group never folded behind the More
         menu. A tablet has no Cmd+D and no Delete key, so on the device this
@@ -194,15 +238,15 @@ const heldLabel = computed(() =>
       <button
         data-clear-players
         class="chip"
-        :disabled="board.state.counters.length === 0"
-        title="Take every player off, leaving the drawings"
+        :disabled="board.state.counters.length === 0 || board.isDerived.value"
+        :title="board.isDerived.value ? lockedTitle : 'Take every player off, leaving the drawings'"
         @click="board.clearCounters()"
       >Clear players</button>
       <button
         data-clear-drawings
         class="chip"
-        :disabled="board.state.drawings.length === 0"
-        title="Rub out every drawing, leaving the players"
+        :disabled="!hasAnyDrawings || board.isDerived.value"
+        :title="board.isDerived.value ? lockedTitle : 'Rub out every drawing, leaving the players'"
         @click="board.clearDrawings()"
       >Clear drawings</button>
       <button
@@ -226,8 +270,8 @@ const heldLabel = computed(() =>
       <button
         data-reset
         class="chip"
-        :disabled="isBoardEmpty"
-        title="Start a fresh board, keeping the pitch you are on"
+        :disabled="isBoardEmpty || board.isDerived.value"
+        :title="board.isDerived.value ? lockedTitle : 'Start a fresh board, keeping the pitch you are on'"
         @click="resetBoard()"
       >Reset</button>
     </div>
@@ -250,7 +294,8 @@ const heldLabel = computed(() =>
         v-if="board.state.frames.length > 1"
         data-export-gif
         class="chip"
-        title="Save the drill as an animation"
+        :disabled="exporting"
+        :title="exporting ? 'Already building an animation' : 'Save the drill as an animation'"
         @click="emit('exportGif')"
       >GIF</button>
       <button data-export-json class="chip" @click="emit('exportJson')">Export</button>

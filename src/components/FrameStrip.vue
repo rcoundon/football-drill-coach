@@ -3,7 +3,17 @@ import { computed } from 'vue'
 import { DEFAULT_FRAME_MS, MAX_FRAME_MS, MIN_FRAME_MS } from '../animation'
 import { useBoard } from '../composables/useBoard'
 
+withDefaults(defineProps<{ /** True while a GIF export is sampling the board. */ exporting?: boolean }>(), {
+  exporting: false,
+})
+
 const board = useBoard()
+
+/** Why + Frame, Delete frame, ◀, ▶ and the duration field refuse mid-move. */
+const lockedTitle = 'Nothing can change while the drill is playing or mid-move'
+
+/** Why Play, Rewind and the scrubber are locked — only true during an export. */
+const exportingTitle = 'The drill is being exported as an animation'
 
 /**
  * A drill that has never used frames looks exactly as it did before frames
@@ -52,7 +62,8 @@ function togglePlay(): void {
     <button
       data-add-frame
       class="chip"
-      title="Add a moment, copied from the one you are on"
+      :disabled="board.isDerived.value"
+      :title="board.isDerived.value ? lockedTitle : 'Add a moment, copied from the one you are on'"
       @click="board.addFrame()"
     >+ Frame</button>
 
@@ -72,23 +83,24 @@ function togglePlay(): void {
         <button
           data-frame-earlier
           class="chip"
-          :disabled="current === 0"
-          title="Move this moment earlier"
+          :disabled="current === 0 || board.isDerived.value"
+          :title="board.isDerived.value ? lockedTitle : 'Move this moment earlier'"
           aria-label="Move this moment earlier"
           @click="board.moveFrame(current, current - 1)"
         >◀</button>
         <button
           data-frame-later
           class="chip"
-          :disabled="current === last"
-          title="Move this moment later"
+          :disabled="current === last || board.isDerived.value"
+          :title="board.isDerived.value ? lockedTitle : 'Move this moment later'"
           aria-label="Move this moment later"
           @click="board.moveFrame(current, current + 1)"
         >▶</button>
         <button
           data-delete-frame
           class="chip"
-          title="Remove this moment"
+          :disabled="board.isDerived.value"
+          :title="board.isDerived.value ? lockedTitle : 'Remove this moment'"
           @click="board.deleteFrame(current)"
         >Delete frame</button>
       </div>
@@ -107,23 +119,34 @@ function togglePlay(): void {
           :max="MAX_FRAME_MS / 1000"
           step="0.1"
           :value="durationSeconds"
+          :disabled="board.isDerived.value"
+          :title="board.isDerived.value ? lockedTitle : undefined"
           @change="setDuration"
         />
         <span class="duration-label">s</span>
       </label>
 
+      <!--
+        The transport itself stays live while the view is merely a blend —
+        pausing mid-move must not lock the coach out of pausing. An export is
+        different: it drives the playhead itself, and Play racing its own
+        seek loop would corrupt the samples, so these three are gated on
+        `exporting` specifically rather than on the general lock.
+      -->
       <div class="group transport">
         <button
           data-rewind
           class="chip"
-          title="Back to the start"
+          :disabled="exporting"
+          :title="exporting ? exportingTitle : 'Back to the start'"
           aria-label="Back to the start"
           @click="board.rewind()"
         >⏮</button>
         <button
           data-play
           class="chip"
-          :title="board.playback.playing ? 'Pause' : 'Play the drill'"
+          :disabled="exporting"
+          :title="exporting ? exportingTitle : board.playback.playing ? 'Pause' : 'Play the drill'"
           :aria-label="board.playback.playing ? 'Pause' : 'Play the drill'"
           @click="togglePlay()"
         >{{ board.playback.playing ? '❚❚' : '▶' }}</button>
@@ -135,6 +158,8 @@ function togglePlay(): void {
           :max="board.timeline.value.total"
           step="10"
           :value="board.playback.at"
+          :disabled="exporting"
+          :title="exporting ? exportingTitle : undefined"
           aria-label="Scrub through the drill"
           @input="onScrub"
           @change="board.endScrub()"

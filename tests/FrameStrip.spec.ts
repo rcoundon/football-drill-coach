@@ -179,3 +179,70 @@ describe('the transport', () => {
     expect(wrapper.find('[data-scrub]').attributes('max')).toBe('1000')
   })
 })
+
+/**
+ * This is the strip that CREATES the derived state, and it is the one
+ * component that used to ignore it entirely: pressing Play and then + Frame
+ * did nothing, with no sign why. Every mutator these controls call refuses
+ * outright while the view is a blend.
+ */
+describe('while the drill is mid-move', () => {
+  beforeEach(() => {
+    board.addFrame()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.setFrameDuration(2, 1000)
+    board.goToFrame(1)
+    board.scrubTo(1500) // between the second and third frame
+  })
+
+  afterEach(() => board.endScrub())
+
+  it('locks every control that would change the drill', () => {
+    const wrapper = mount(FrameStrip)
+    expect(wrapper.find('[data-add-frame]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-delete-frame]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-frame-earlier]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-frame-later]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-frame-duration]').attributes('disabled')).toBeDefined()
+  })
+
+  /**
+   * A safeguard the other way: the transport is how a coach gets OUT of a
+   * blend, so it must never be caught by the same lock — pausing mid-move
+   * must not also disable Pause.
+   */
+  it('leaves the transport itself live', () => {
+    const wrapper = mount(FrameStrip)
+    expect(wrapper.find('[data-play]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-rewind]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-scrub]').attributes('disabled')).toBeUndefined()
+  })
+})
+
+/**
+ * An export drives the playhead itself, one sample at a time. Unlike an
+ * ordinary blend, the transport must NOT stay live here: Play racing the
+ * export's own seek loop is exactly what corrupts the samples.
+ */
+describe('while an export is running', () => {
+  beforeEach(() => {
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+  })
+
+  it('locks the transport too', () => {
+    const wrapper = mount(FrameStrip, { props: { exporting: true } })
+    expect(wrapper.find('[data-play]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-rewind]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-scrub]').attributes('disabled')).toBeDefined()
+  })
+
+  it('leaves the transport alone otherwise', () => {
+    const wrapper = mount(FrameStrip, { props: { exporting: false } })
+    expect(wrapper.find('[data-play]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-rewind]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-scrub]').attributes('disabled')).toBeUndefined()
+  })
+})

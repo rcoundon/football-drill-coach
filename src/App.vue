@@ -207,6 +207,12 @@ async function exportGif() {
   const samples = gifSchedule(board.state.frames)
   const wasAt = board.playback.at
   exporting.value = true
+  // Locks the board for the export's duration, on top of the reentrancy
+  // guard above: without it, Play or a frame jump fired while sampling races
+  // this function's own seek loop and corrupts the samples, even though the
+  // GIF button itself is disabled — a keyboard shortcut reaches `play()`
+  // directly, past any button's disabled attribute.
+  board.beginExport()
 
   try {
     const blob = await exporter.boardToGifBlob(
@@ -228,6 +234,9 @@ async function exportGif() {
     notice.value = error instanceof Error ? error.message : 'The animation could not be created.'
   } finally {
     exporting.value = false
+    // Released before the playhead is put back: `endScrub` lands on a frame
+    // through `goToFrame`, which the export lock itself refuses.
+    board.endExport()
     board.scrubTo(wasAt)
     board.endScrub()
   }
@@ -421,6 +430,7 @@ watch(
       :pattern-name="currentName"
       :railed="isRail"
       :selection-size="selectionSize"
+      :exporting="exporting"
       @duplicate="boardRef?.duplicateSelected()"
       @deleteSelection="boardRef?.deleteSelected()"
       @save="openSavePrompt"
@@ -449,7 +459,7 @@ watch(
           @edit-label="promptEditLabel"
           @selection-size="selectionSize = $event"
         />
-        <FrameStrip />
+        <FrameStrip :exporting="exporting" />
       </div>
 
       <aside v-if="board.state.notesVisible" class="notes">

@@ -178,8 +178,32 @@ const view = computed<FrameView>(() => {
 
 const viewBallPosition = computed(() => ballPositionIn(view.value))
 
-/** True while what is on screen is a blend rather than a frame. */
-const isDerived = computed(() => playback.playing || position.value.t !== 0)
+/**
+ * Set for the duration of a GIF export.
+ *
+ * An export drives the playhead by hand, sampling one moment at a time, and
+ * a sample can land exactly on a frame — `position.value.t === 0` — where the
+ * ordinary derived check would say editing is fine. It is not: `play()` or
+ * `goToFrame()` firing mid-export would run a second clock, or jump the
+ * playhead, against the export's own seek loop and corrupt the samples it is
+ * already part-way through collecting. Folding this into `isDerived` closes
+ * that gap the same way the blend check does, and for free locks every
+ * ordinary mutator too — a player should not appear mid-export any more than
+ * mid-play.
+ */
+const exportLock = ref(false)
+
+/** True while what is on screen is a blend rather than a frame, or while a GIF export is sampling it. */
+const isDerived = computed(() => playback.playing || position.value.t !== 0 || exportLock.value)
+
+function beginExport(): void {
+  exportLock.value = true
+}
+
+/** Release the lock `beginExport` took. Safe to call whether or not it did. */
+function endExport(): void {
+  exportLock.value = false
+}
 
 let idCounter = 0
 
@@ -270,6 +294,9 @@ function tick(now: number): void {
 }
 
 function play(): void {
+  // An export drives the playhead itself; a second clock racing its seek
+  // loop is exactly what corrupts the samples.
+  if (exportLock.value) return
   if (playback.playing) return
   if (timeline.value.total <= 0) return
   // At the very end, play means play again — a button that appears to do
@@ -523,6 +550,9 @@ function setFrameDuration(index: number, ms: number): void {
  * should not bury real work under five entries that changed nothing.
  */
 function goToFrame(index: number): void {
+  // Jumping the playhead mid-export would desync it from the export's own
+  // seek loop, the same way play() would.
+  if (exportLock.value) return
   if (index < 0 || index >= state.frames.length) return
   pause()
   state.currentFrame = index
@@ -1222,6 +1252,8 @@ const board = {
   rewind,
   scrubTo,
   endScrub,
+  beginExport,
+  endExport,
   canRedo,
   snapshot,
   loadSnapshot,
@@ -1290,5 +1322,6 @@ export function __resetBoardForTests(): void {
   idCounter = 0
   playback.playing = false
   playback.at = 0
+  exportLock.value = false
   stopClock()
 }

@@ -319,6 +319,47 @@ describe('the playback clock', () => {
   })
 })
 
+/**
+ * A GIF export drives the playhead by hand, one sample at a time, and a
+ * sample can land exactly on a frame — where the ordinary blend check says
+ * editing is fine. `beginExport`/`endExport` cover that gap: they make the
+ * board derived for the export's whole run regardless of where the playhead
+ * happens to be, and `play`/`goToFrame` refuse outright so nothing racing
+ * the export's own seek loop can desync it.
+ */
+describe('exporting', () => {
+  it('makes the board derived for its duration, wherever the playhead is', () => {
+    board.goToFrame(0)
+    expect(board.isDerived.value).toBe(false)
+
+    board.beginExport()
+    expect(board.isDerived.value).toBe(true)
+
+    board.endExport()
+    expect(board.isDerived.value).toBe(false)
+  })
+
+  it('refuses to start playing while it runs', () => {
+    twoFrameDrill()
+    board.beginExport()
+
+    board.play()
+
+    expect(board.playback.playing).toBe(false)
+    board.endExport()
+  })
+
+  it('refuses to jump to a frame while it runs', () => {
+    twoFrameDrill()
+    board.beginExport()
+
+    board.goToFrame(1)
+
+    expect(board.state.currentFrame).toBe(0)
+    board.endExport()
+  })
+})
+
 describe('the ball in the view', () => {
   it('is drawn where the view says, not where the board says', () => {
     board.addCounter('red')
