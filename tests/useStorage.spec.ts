@@ -50,10 +50,10 @@ describe('savePattern and listPatterns', () => {
     const store = useStorage()
     const saved = store.savePattern('Drill', snap())
     expect(saved.frames).toHaveLength(1)
-    expect(saved.version).toBe(1)
+    expect(saved.version).toBe(2)
   })
 
-  it('keeps drawings at the pattern level, not inside the frame', () => {
+  it('keeps drawings on the frame that owns them, not the pattern', () => {
     const store = useStorage()
     const withDrawing: BoardSnapshot = {
       ...snap(),
@@ -65,10 +65,8 @@ describe('savePattern and listPatterns', () => {
       ],
     }
     const saved = store.savePattern('Drill', withDrawing)
-    expect(saved.drawings).toHaveLength(1)
-    // The frame carries its own (currently always empty) drawings field per
-    // the Frame type, but the drawing itself is not duplicated into it.
-    expect(saved.frames[0].drawings).toEqual([])
+    expect(saved.drawings).toBeUndefined()
+    expect(saved.frames[0].drawings).toHaveLength(1)
   })
 
   it('updates in place when given an existing id', () => {
@@ -265,8 +263,8 @@ describe('parsePattern', () => {
   it('rejects an unknown schema version', () => {
     const store = useStorage()
     const saved = store.savePattern('Drill', snap())
-    const future = { ...saved, version: 2 }
-    expect(() => parsePattern(future)).toThrow(/version 2/i)
+    const future = { ...saved, version: 3 }
+    expect(() => parsePattern(future)).toThrow(/different version/i)
   })
 
   it('rejects a pattern with no frames', () => {
@@ -493,7 +491,7 @@ describe('straight-line drawings', () => {
     const store = useStorage()
     const saved = store.savePattern('Zones', { ...snap(), frames: [{ ...snap().frames[0], drawings: [line] }] })
     const broken = structuredClone(saved)
-    ;(broken.drawings[0] as { to: unknown }).to = 'over there'
+    ;(broken.frames[0].drawings[0] as { to: unknown }).to = 'over there'
     expect(() => parsePattern(broken)).toThrow(/damaged drawing/i)
   })
 })
@@ -525,7 +523,7 @@ describe('curved arrows', () => {
     const store = useStorage()
     const saved = store.savePattern('Switch', { ...snap(), frames: [{ ...snap().frames[0], drawings: [curved] }] })
     const old = structuredClone(saved)
-    delete (old.drawings[0] as { bend?: number }).bend
+    delete (old.frames[0].drawings[0] as { bend?: number }).bend
     expect(() => parsePattern(old)).not.toThrow()
     expect(store.patternToSnapshot(old).frames[0].drawings[0]).not.toHaveProperty('bend')
   })
@@ -534,7 +532,7 @@ describe('curved arrows', () => {
     const store = useStorage()
     const saved = store.savePattern('Switch', { ...snap(), frames: [{ ...snap().frames[0], drawings: [curved] }] })
     const broken = structuredClone(saved)
-    ;(broken.drawings[0] as { bend: unknown }).bend = 'a lot'
+    ;(broken.frames[0].drawings[0] as { bend: unknown }).bend = 'a lot'
     expect(() => parsePattern(broken)).toThrow(/damaged drawing/i)
   })
 
@@ -549,7 +547,7 @@ describe('curved arrows', () => {
     const store = useStorage()
     const saved = store.savePattern('Switch', { ...snap(), frames: [{ ...snap().frames[0], drawings: [curved] }] })
     const broken = structuredClone(saved)
-    ;(broken.drawings[0] as { bendAlong?: unknown }).bendAlong = 'near the end'
+    ;(broken.frames[0].drawings[0] as { bendAlong?: unknown }).bendAlong = 'near the end'
     expect(() => parsePattern(broken)).toThrow(/damaged drawing/i)
   })
 
@@ -557,7 +555,7 @@ describe('curved arrows', () => {
     const store = useStorage()
     const saved = store.savePattern('Switch', { ...snap(), frames: [{ ...snap().frames[0], drawings: [curved] }] })
     const broken = structuredClone(saved)
-    ;(broken.drawings[0] as { bend: unknown }).bend = Infinity
+    ;(broken.frames[0].drawings[0] as { bend: unknown }).bend = Infinity
     expect(() => parsePattern(broken)).toThrow(/damaged drawing/i)
   })
 })
@@ -688,6 +686,175 @@ describe('pitch labels', () => {
     const broken = structuredClone(saved)
     ;(broken.frames[0].labels[0] as { text: unknown }).text = 42
     expect(() => parsePattern(broken)).toThrow()
+  })
+})
+
+describe('opening a pattern saved before playback existed', () => {
+  it('reads its pattern-level drawings into the first frame', () => {
+    const v1 = {
+      id: 'p1',
+      name: 'Old drill',
+      version: 1,
+      pitch: { type: 'full', rotated: false },
+      drawings: [{ id: 'd1', kind: 'line', color: '#fff', from: { x: 0, y: 0 }, to: { x: 9, y: 9 } }],
+      frames: [
+        {
+          counters: [{ id: 'c1', color: 'red', label: '', pos: { x: 10, y: 10 } }],
+          markers: [],
+          labels: [],
+          ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+        },
+      ],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    }
+    localStorage.setItem(PATTERNS_KEY, JSON.stringify([v1]))
+
+    const storage = useStorage()
+    const [pattern] = storage.listPatterns()
+    const snap = storage.patternToSnapshot(pattern)
+
+    expect(snap.frames).toHaveLength(1)
+    expect(snap.frames[0].drawings).toHaveLength(1)
+    expect(snap.frames[0].counters).toHaveLength(1)
+    expect(snap.currentFrame).toBe(0)
+  })
+
+  it('is written back as version 2 with the drawings on the frame', () => {
+    const storage = useStorage()
+    const saved = storage.savePattern('Drill', {
+      frames: [
+        {
+          counters: [],
+          markers: [],
+          labels: [],
+          ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+          drawings: [{ id: 'd1', kind: 'line', color: '#fff', from: { x: 0, y: 0 }, to: { x: 9, y: 9 } }],
+        },
+      ],
+      currentFrame: 0,
+      labelsVisible: true,
+      notes: '',
+      notesVisible: true,
+      pitch: { type: 'blank', rotated: false },
+    })
+
+    expect(saved.version).toBe(2)
+    expect(saved.drawings).toBeUndefined()
+    expect(saved.frames[0].drawings).toHaveLength(1)
+  })
+})
+
+describe('a multi-frame pattern round-trips', () => {
+  it('keeps every frame and its duration', () => {
+    const storage = useStorage()
+    const frame = (duration?: number) => ({
+      counters: [],
+      markers: [],
+      labels: [],
+      ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+      drawings: [],
+      ...(duration === undefined ? {} : { duration }),
+    })
+    const saved = storage.savePattern('Drill', {
+      frames: [frame(), frame(400), frame(600)],
+      currentFrame: 2,
+      labelsVisible: true,
+      notes: '',
+      notesVisible: true,
+      pitch: { type: 'blank', rotated: false },
+    })
+
+    const back = storage.patternToSnapshot(saved)
+    expect(back.frames).toHaveLength(3)
+    expect(back.frames[1].duration).toBe(400)
+    expect(back.frames[2].duration).toBe(600)
+  })
+
+  it('always opens on the first frame, because that is where a drill starts', () => {
+    const storage = useStorage()
+    const frame = () => ({
+      counters: [],
+      markers: [],
+      labels: [],
+      ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+      drawings: [],
+    })
+    const saved = storage.savePattern('Drill', {
+      frames: [frame(), frame()],
+      currentFrame: 1,
+      labelsVisible: true,
+      notes: '',
+      notesVisible: true,
+      pitch: { type: 'blank', rotated: false },
+    })
+    expect(storage.patternToSnapshot(saved).currentFrame).toBe(0)
+  })
+})
+
+describe('restoring a draft saved before playback existed', () => {
+  it('wraps the flat board into a single frame', () => {
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({
+        counters: [{ id: 'c1', color: 'red', label: '', pos: { x: 10, y: 10 } }],
+        markers: [],
+        labels: [],
+        labelsVisible: true,
+        notes: 'old',
+        notesVisible: true,
+        ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+        drawings: [{ id: 'd1', kind: 'line', color: '#fff', from: { x: 0, y: 0 }, to: { x: 9, y: 9 } }],
+        pitch: { type: 'blank', rotated: false },
+      }),
+    )
+
+    const draft = useStorage().loadDraft()
+    expect(draft).not.toBeNull()
+    expect(draft!.frames).toHaveLength(1)
+    expect(draft!.frames[0].counters).toHaveLength(1)
+    expect(draft!.frames[0].drawings).toHaveLength(1)
+    expect(draft!.notes).toBe('old')
+    expect(draft!.currentFrame).toBe(0)
+  })
+
+  it('reads a framed draft straight back', () => {
+    const storage = useStorage()
+    storage.saveDraft({
+      frames: [
+        {
+          counters: [],
+          markers: [],
+          labels: [],
+          ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+          drawings: [],
+        },
+        {
+          counters: [],
+          markers: [],
+          labels: [],
+          ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+          drawings: [],
+          duration: 250,
+        },
+      ],
+      currentFrame: 1,
+      labelsVisible: true,
+      notes: '',
+      notesVisible: true,
+      pitch: { type: 'blank', rotated: false },
+    })
+    const draft = storage.loadDraft()
+    expect(draft!.frames).toHaveLength(2)
+    expect(draft!.currentFrame).toBe(1)
+  })
+
+  it('still throws away a draft whose frame is damaged, rather than bricking the app', () => {
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({ frames: [{ counters: 'not an array' }], currentFrame: 0 }),
+    )
+    expect(useStorage().loadDraft()).toBeNull()
   })
 })
 

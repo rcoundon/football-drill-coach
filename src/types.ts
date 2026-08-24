@@ -138,9 +138,13 @@ export type Frame = {
 export type Pattern = {
   id: string
   name: string
-  version: 1
+  version: 2
   pitch: { type: PitchType; rotated: boolean }
-  drawings: Drawing[]
+  /**
+   * Where drawings lived before they belonged to a moment. Read into the
+   * first frame when a v1 pattern is opened, and never written again.
+   */
+  drawings?: Drawing[]
   labelsVisible?: boolean
   /**
    * Free text describing the whole drill — setup, coaching points,

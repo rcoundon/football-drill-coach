@@ -1,11 +1,15 @@
 import { ref } from 'vue'
-import type { Frame, Pattern } from '../types'
+import type { Ball, Counter, Drawing, Frame, Label, Marker, Pattern } from '../types'
 import type { BoardSnapshot } from './useBoard'
+import { PITCH_H, PITCH_W } from '../geometry'
 
 export const PATTERNS_KEY = 'fct.patterns.v1'
 export const DRAFT_KEY = 'fct.draft.v1'
 
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
+
+/** Versions this build can open. Only SCHEMA_VERSION is ever written. */
+const READABLE_VERSIONS = new Set([1, 2])
 
 const lastError = ref<string | null>(null)
 
@@ -111,10 +115,8 @@ function isValidDrawing(value: unknown): boolean {
 export function parsePattern(value: unknown): Pattern {
   if (!isObject(value)) throw new Error('That is not a saved pattern.')
 
-  if (value.version !== SCHEMA_VERSION) {
-    throw new Error(
-      `This pattern was saved by a newer version of the app (version ${String(value.version)}). Update the app to open it.`,
-    )
+  if (typeof value.version !== 'number' || !READABLE_VERSIONS.has(value.version)) {
+    throw new Error('That pattern was saved by a different version of this app.')
   }
 
   if (typeof value.id !== 'string' || typeof value.name !== 'string') {
@@ -129,13 +131,18 @@ export function parsePattern(value: unknown): Pattern {
     throw new Error('That pattern is missing its pitch settings.')
   }
 
-  if (!Array.isArray(value.drawings)) throw new Error('That pattern is missing its drawings.')
+  // A v2 pattern has no pattern-level drawings at all — they moved onto the
+  // frame that owns them. Only a v1 pattern still has this field, so it must
+  // be tolerated as absent rather than required.
+  if (value.drawings !== undefined) {
+    if (!Array.isArray(value.drawings)) throw new Error('That pattern is missing its drawings.')
+    if (!value.drawings.every(isValidDrawing)) {
+      throw new Error('That pattern has a damaged drawing.')
+    }
+  }
 
   if (value.notes !== undefined && typeof value.notes !== 'string') {
     throw new Error('That pattern has damaged notes.')
-  }
-  if (!value.drawings.every(isValidDrawing)) {
-    throw new Error('That pattern has a damaged drawing.')
   }
 
   if (!Array.isArray(value.frames) || value.frames.length === 0) {
@@ -157,6 +164,11 @@ export function parsePattern(value: unknown): Pattern {
     }
     if (!labelsOf(frame).every(isValidLabel)) {
       throw new Error('That pattern has a damaged label.')
+    }
+    if (frame.drawings !== undefined) {
+      if (!Array.isArray(frame.drawings) || !frame.drawings.every(isValidDrawing)) {
+        throw new Error('That pattern has a damaged drawing.')
+      }
     }
   }
 
@@ -279,27 +291,49 @@ function makeId(): string {
   return `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
 }
 
+/**
+ * Fill in what a frame saved by an older build does not have.
+ *
+ * A v1 pattern kept its drawings at the pattern level, where they hung over
+ * the whole drill. They belong to the first frame now — the only frame a v1
+ * pattern has.
+ */
+function frameWithDefaults(frame: Record<string, unknown>, legacyDrawings: Drawing[]): Frame {
+  return {
+    counters: (frame.counters ?? []) as Counter[],
+    markers: markersOf(frame) as Marker[],
+    labels: labelsOf(frame) as Label[],
+    ball: withBallDefaults(frame.ball) as Ball,
+    drawings: (frame.drawings ?? legacyDrawings) as Drawing[],
+    ...(typeof frame.duration === 'number' ? { duration: frame.duration } : {}),
+  }
+}
+
+/**
+ * The same empty moment `emptyFrame()` builds in useBoard — not imported, to
+ * keep the two modules apart. Never reached by a pattern that went through
+ * `parsePattern`, which already rejects an empty frames array; this is only
+ * a last-resort fallback for a caller that hands `patternToSnapshot` a
+ * pattern that skipped that check.
+ */
+function emptyFrameData(): Frame {
+  return {
+    counters: [],
+    markers: [],
+    labels: [],
+    ball: { pos: { x: PITCH_W / 2, y: PITCH_H / 2 + 10 }, attachedTo: null, visible: true },
+    drawings: [],
+  }
+}
+
 function toPattern(name: string, snap: BoardSnapshot, id: string, createdAt: string): Pattern {
   const copy = structuredClone(snap)
-  // Stopgap: the pattern format still has exactly one frame, whose drawings
-  // live on the pattern rather than the frame. Task 4 rewrites this function
-  // to carry every frame once the library has somewhere to show them.
-  const frame = copy.frames[copy.currentFrame] ?? copy.frames[0]
   return {
     id,
     name,
     version: SCHEMA_VERSION,
     pitch: copy.pitch,
-    drawings: frame.drawings,
-    frames: [
-      {
-        counters: frame.counters,
-        markers: frame.markers ?? [],
-        labels: frame.labels ?? [],
-        ball: frame.ball,
-        drawings: [],
-      },
-    ],
+    frames: copy.frames,
     labelsVisible: copy.labelsVisible ?? true,
     notes: copy.notes ?? '',
     notesVisible: copy.notesVisible ?? true,
@@ -362,25 +396,23 @@ function renamePattern(id: string, name: string): void {
 }
 
 function patternToSnapshot(pattern: Pattern): BoardSnapshot {
-  const copy = structuredClone(pattern)
-  const frame = copy.frames[0]
+  const copy = structuredClone(pattern) as unknown as Record<string, unknown>
+  const legacy = (copy.drawings ?? []) as Drawing[]
+  const rawFrames = copy.frames as Record<string, unknown>[]
+  const frames = rawFrames.map((frame, index) =>
+    // Only the first frame inherits the legacy drawings. A v1 pattern has no
+    // others, and a v2 one has no legacy drawings to inherit.
+    frameWithDefaults(frame, index === 0 ? legacy : []),
+  )
   return {
-    frames: [
-      {
-        counters: frame.counters,
-        markers: markersOf(frame as unknown as Record<string, unknown>) as Frame['markers'],
-        labels: labelsOf(frame as unknown as Record<string, unknown>) as Frame['labels'],
-        ball: withBallDefaults(frame.ball) as Frame['ball'],
-        // Pattern-level drawings, not the frame's own (currently always
-        // empty) field — see the stopgap note on toPattern.
-        drawings: copy.drawings,
-      },
-    ],
+    // A drill starts at the beginning. Reopening halfway through the
+    // animation is never what anyone meant by opening a pattern.
+    frames: frames.length > 0 ? frames : [emptyFrameData()],
     currentFrame: 0,
-    labelsVisible: (copy as { labelsVisible?: boolean }).labelsVisible ?? true,
-    notes: (copy as { notes?: string }).notes ?? '',
-    notesVisible: (copy as { notesVisible?: boolean }).notesVisible ?? true,
-    pitch: copy.pitch,
+    labelsVisible: (copy.labelsVisible as boolean | undefined) ?? true,
+    notes: (copy.notes as string | undefined) ?? '',
+    notesVisible: (copy.notesVisible as boolean | undefined) ?? true,
+    pitch: copy.pitch as BoardSnapshot['pitch'],
   }
 }
 
@@ -393,7 +425,16 @@ function isValidPitch(value: unknown): boolean {
   return isObject(value) && typeof value.type === 'string' && typeof value.rotated === 'boolean'
 }
 
-/** Validate a single frame within a snapshot, to the same standard as the library path. */
+/**
+ * Validate a single frame's worth of board data, to the same standard as the
+ * library path.
+ *
+ * Drawings are required, not optional, here: unlike markers and labels
+ * (which arrived after this validator did, so a pattern saved before them
+ * genuinely has no such array) every draft this app has ever written has
+ * always had a drawings array on its one moment. A missing one means the
+ * draft is damaged, not old.
+ */
 function isValidFrame(value: unknown): boolean {
   return (
     isObject(value) &&
@@ -415,15 +456,42 @@ function isValidFrame(value: unknown): boolean {
  * at all: a draft missing its ball is restored, `ballPosition` throws during
  * render, and because the draft is reloaded on every start the app is
  * bricked with no way back from inside it.
+ *
+ * A draft written before playback existed is flat — one moment with no
+ * `frames` array at all — so both shapes are accepted here and the flat one
+ * is wrapped into a single frame on the way out, in `toSnapshot`.
  */
 function isValidSnapshot(value: unknown): boolean {
-  return (
-    isObject(value) &&
-    Array.isArray(value.frames) &&
-    value.frames.length > 0 &&
-    value.frames.every(isValidFrame) &&
-    isValidPitch(value.pitch)
-  )
+  if (!isObject(value)) return false
+  if (!isValidPitch(value.pitch)) return false
+  if (Array.isArray(value.frames)) {
+    return value.frames.length > 0 && value.frames.every(isValidFrame)
+  }
+  return isValidFrame(value)
+}
+
+/**
+ * Turn an already-validated draft value into a BoardSnapshot.
+ *
+ * `currentFrame` is passed through as stored, not clamped here: `apply()` in
+ * useBoard already clamps it for every caller — a trimmed pattern, a fresh
+ * board, this draft — because it is the one place that must, regardless of
+ * where the snapshot came from. Clamping again here would just be a second
+ * copy of that rule, free to drift from the first.
+ */
+function toSnapshot(value: Record<string, unknown>): BoardSnapshot {
+  const frames = Array.isArray(value.frames)
+    ? (value.frames as Record<string, unknown>[]).map((frame) => frameWithDefaults(frame, []))
+    : // A draft from before playback existed: the whole board was one moment.
+      [frameWithDefaults(value, [])]
+  return {
+    frames,
+    currentFrame: typeof value.currentFrame === 'number' ? value.currentFrame : 0,
+    labelsVisible: (value.labelsVisible as boolean | undefined) ?? true,
+    notes: (value.notes as string | undefined) ?? '',
+    notesVisible: (value.notesVisible as boolean | undefined) ?? true,
+    pitch: value.pitch as BoardSnapshot['pitch'],
+  }
 }
 
 /**
@@ -436,24 +504,7 @@ function loadDraft(): BoardSnapshot | null {
   try {
     const raw = readRaw(DRAFT_KEY)
     if (!isValidSnapshot(raw)) return null
-    // A draft written before cones or labels existed has frames with no
-    // markers/labels array.
-    const draft = raw as Record<string, unknown>
-    const frames = (draft.frames as Record<string, unknown>[]).map((frame) => ({
-      ...frame,
-      ball: withBallDefaults(frame.ball),
-      markers: markersOf(frame),
-      labels: labelsOf(frame),
-    }))
-    const currentFrame = typeof draft.currentFrame === 'number' ? draft.currentFrame : 0
-    return {
-      ...draft,
-      frames,
-      currentFrame: Math.max(0, Math.min(currentFrame, frames.length - 1)),
-      labelsVisible: draft.labelsVisible !== false,
-      notes: typeof draft.notes === 'string' ? draft.notes : '',
-      notesVisible: draft.notesVisible !== false,
-    } as unknown as BoardSnapshot
+    return toSnapshot(raw as Record<string, unknown>)
   } catch {
     return null
   }
