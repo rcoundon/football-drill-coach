@@ -286,3 +286,39 @@ describe('a ball being carried', () => {
     expect(interpolateFrames(a, b, 0.25).balls[0].attachedTo).toBeNull()
   })
 })
+
+/**
+ * The whole change rests on matching a ball in one phase to the SAME ball in
+ * the next, by id. Every fixture above happens to hold one ball in the same
+ * slot in both frames, so matching by index would pass all of them — which
+ * means the load-bearing decision was asserted by nothing. These two put the
+ * balls in a different order, where index and id disagree.
+ */
+describe('balls are matched by id, not by where they sit in the list', () => {
+  it('follows each ball to its own destination when the order differs', () => {
+    const a = frame({ balls: [ball(0, 0, null, 'b1'), ball(100, 0, null, 'b2')] })
+    const b = frame({ balls: [ball(100, 40, null, 'b2'), ball(0, 40, null, 'b1')] })
+
+    const view = interpolateFrames(a, b, 0.5)
+    const shown = Object.fromEntries(view.balls.map((x) => [x.id, x.pos]))
+
+    // b1 travels 0,0 -> 0,40 and b2 travels 100,0 -> 100,40. Matching by
+    // index would have them crossing the pitch instead.
+    expect(shown.b1).toEqual({ x: 0, y: 20 })
+    expect(shown.b2).toEqual({ x: 100, y: 20 })
+  })
+
+  it('follows the right carrier when two balls swap places in the list', () => {
+    const counters = [counter('c1', 0, 0), counter('c2', 60, 0)]
+    const a = frame({ counters, balls: [ball(0, 0, 'c1', 'b1'), ball(0, 0, 'c2', 'b2')] })
+    const b = frame({
+      counters: [counter('c1', 0, 50), counter('c2', 60, 50)],
+      balls: [ball(0, 0, 'c2', 'b2'), ball(0, 0, 'c1', 'b1')],
+    })
+
+    const view = interpolateFrames(a, b, 0.25)
+    const held = Object.fromEntries(view.balls.map((x) => [x.id, x.attachedTo]))
+    expect(held.b1).toBe('c1')
+    expect(held.b2).toBe('c2')
+  })
+})

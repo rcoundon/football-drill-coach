@@ -1180,3 +1180,39 @@ describe('opening a drill saved when there was only one ball', () => {
     expect(useStorage().loadDraft()).toBeNull()
   })
 })
+
+/**
+ * Every other thing on the board is rejected without an id; balls were not,
+ * and the whole change rests on them having one. An imported drill with
+ * id-less balls got as far as `removeBall(undefined)`, which filters on
+ * `b.id !== undefined` and takes off every id-less ball at once — erasing one
+ * would have erased several.
+ */
+describe('a ball without an id is damage', () => {
+  const withBalls = (balls: unknown) => ({ ...snap(), frames: [{ ...snap().frames[0], balls }] })
+
+  it('is refused in a draft', () => {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(withBalls([{ pos: { x: 1, y: 1 }, attachedTo: null }])))
+    expect(useStorage().loadDraft()).toBeNull()
+  })
+
+  it('is refused in a saved drill', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Imported', snap())
+    const damaged = structuredClone(saved) as Record<string, unknown>
+    ;(damaged.frames as Record<string, unknown>[])[0].balls = [{ pos: { x: 1, y: 1 }, attachedTo: null }]
+    expect(() => parsePattern(damaged)).toThrow(/ball/i)
+  })
+
+  it('but the older single-ball shape is still read, since migration mints its id', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Older drill', snap())
+    const legacy = structuredClone(saved) as Record<string, unknown>
+    const frames = legacy.frames as Record<string, unknown>[]
+    delete frames[0].balls
+    frames[0].ball = { pos: { x: 40, y: 20 }, attachedTo: null }
+
+    expect(() => parsePattern(legacy)).not.toThrow()
+    expect(store.patternToSnapshot(parsePattern(legacy)).frames[0].balls[0].id).toBeTruthy()
+  })
+})

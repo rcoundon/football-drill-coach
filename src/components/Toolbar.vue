@@ -72,6 +72,7 @@ const lockedTitle = 'Nothing can change while the drill is playing or mid-move'
 const atBallCap = computed(() => board.state.balls.length >= MAX_BALLS)
 
 const addBallTitle = computed(() => {
+  if (!board.state.ballsVisible) return 'Show the balls before putting another one out'
   if (atBallCap.value) return `A drill can have ${MAX_BALLS} balls at most`
   if (board.isDerived.value) return lockedTitle
   return 'Put another ball out, on every phase'
@@ -300,7 +301,7 @@ const heldLabel = computed(() =>
       <button
         data-add-ball
         class="chip"
-        :disabled="atBallCap || board.isDerived.value"
+        :disabled="atBallCap || !board.state.ballsVisible || board.isDerived.value"
         :title="addBallTitle"
         @click="board.addBall()"
       >+ Ball</button>

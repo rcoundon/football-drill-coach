@@ -83,7 +83,19 @@ function ballsVisibleOf(value: Record<string, unknown>): boolean {
   return !(isObject(legacy) && legacy.visible === false)
 }
 
+/**
+ * A ball in a version 3 list. Its id is required, like every other thing on
+ * the board — playback matches balls by it, and `removeBall` filters on it,
+ * so an id-less ball would take every other id-less ball off with it.
+ *
+ * `isValidLegacyBall` is the exemption: a drill written before version 3 had
+ * no ids to write, and migration mints one on the way in.
+ */
 function isValidBall(value: unknown): boolean {
+  return isValidLegacyBall(value) && isObject(value) && typeof value.id === 'string'
+}
+
+function isValidLegacyBall(value: unknown): boolean {
   return (
     isObject(value) &&
     isVec(value.pos) &&
@@ -194,8 +206,9 @@ export function parsePattern(value: unknown): Pattern {
     if (!frame.counters.every(isValidCounter)) {
       throw new Error('That pattern has a damaged player position.')
     }
-    const ballsToCheck = Array.isArray(frame.balls) ? frame.balls : [frame.ball]
-    if (!ballsToCheck.every(isValidBall)) {
+    const ballsAreAList = Array.isArray(frame.balls)
+    const ballsToCheck: unknown[] = ballsAreAList ? (frame.balls as unknown[]) : [frame.ball]
+    if (!ballsToCheck.every(ballsAreAList ? isValidBall : isValidLegacyBall)) {
       throw new Error('That pattern has a damaged ball position.')
     }
     if (!markersOf(frame).every(isValidMarker)) {
@@ -505,10 +518,11 @@ function isValidFrame(value: unknown): boolean {
     value.counters.every(isValidCounter) &&
     markersOf(value).every(isValidMarker) &&
     labelsOf(value).every(isValidLabel) &&
-    // Either shape: a list from version 3, a single ball before it.
+    // Either shape: a list from version 3, a single ball before it. Only the
+    // list is held to having ids — a legacy ball gets one when it migrates.
     (Array.isArray(value.balls)
       ? value.balls.every(isValidBall)
-      : isValidBall(value.ball)) &&
+      : isValidLegacyBall(value.ball)) &&
     Array.isArray(value.drawings) &&
     value.drawings.every(isValidDrawing) &&
     // Optional — the first frame of a draft has none — but a present value

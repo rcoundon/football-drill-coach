@@ -674,3 +674,18 @@ describe('a board with balls on it is not an empty board', () => {
     expect(wrapper.find('[data-reset]').attributes('disabled')).toBeUndefined()
   })
 })
+
+describe('putting a ball out while they are hidden', () => {
+  it('will not, and says why', async () => {
+    const board = useBoard()
+    board.toggleBallsVisible()
+    const wrapper = mountToolbar()
+    await wrapper.vm.$nextTick()
+
+    const add = wrapper.find('[data-add-ball]')
+    // Otherwise the chip works, nothing appears, and the coach presses it
+    // again — then finds four balls when they next show them.
+    expect(add.attributes('disabled')).toBeDefined()
+    expect(add.attributes('title')).toMatch(/hidden|show/i)
+  })
+})

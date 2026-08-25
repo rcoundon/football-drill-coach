@@ -197,3 +197,26 @@ describe('balls in a group', () => {
     expect(board.ballById(id)!.pos).toEqual({ x: 25, y: 20 })
   })
 })
+
+describe('rough edges found by walking the board', () => {
+  it('a copy refused at the cap leaves no undo entry behind', () => {
+    while (board.state.balls.length < MAX_BALLS) board.addBall()
+
+    const copies = board.duplicateGroup([{ kind: 'ball', id: board.state.balls[0].id }], { x: 4, y: 4 })
+    expect(copies).toEqual([])
+
+    // The refused copy must not have spent a step. One undo therefore takes
+    // back the last ball ADDED, not a no-op that changed nothing.
+    board.undo()
+    expect(board.state.balls).toHaveLength(MAX_BALLS - 1)
+  })
+
+  it('does not stack balls on top of each other at the touchline', () => {
+    const first = board.state.balls[0]
+    board.moveBall(first.id, { x: 1000, y: 30 }) // clamps to the right edge
+    const a = board.addBall()!
+    const b = board.addBall()!
+    expect(a.pos).not.toEqual(first.pos)
+    expect(b.pos).not.toEqual(a.pos)
+  })
+})

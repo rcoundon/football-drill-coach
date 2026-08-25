@@ -867,7 +867,12 @@ function ballById(id: string): Ball | undefined {
 function nextBallPosition(): Vec {
   const last = state.balls[state.balls.length - 1]
   if (!last) return { x: PITCH_W / 2, y: PITCH_H / 2 + 10 }
-  return clampToPitch({ x: last.pos.x + BALL_SPACING, y: last.pos.y })
+  const stepped = clampToPitch({ x: last.pos.x + BALL_SPACING, y: last.pos.y })
+  // Clamping alone is not enough: once a ball sits on the right touchline
+  // every one after it lands on exactly the same spot, and only the topmost
+  // can be grabbed. Step back the other way when there is no room forward.
+  if (stepped.x !== last.pos.x) return stepped
+  return clampToPitch({ x: last.pos.x - BALL_SPACING, y: last.pos.y })
 }
 
 /**
@@ -1266,18 +1271,21 @@ function duplicateGroup(refs: SelectionRef[], offset: Vec): SelectionRef[] {
   const live = refs.filter((ref) => pointsOfRef(ref) !== null)
   if (live.length === 0) return []
 
-  commit()
-
   /*
-   * Balls are capped, so only as many as there is room for are copied. Taken
-   * before any frame is touched, because the answer has to be the same for
+   * Balls are capped, so only as many as there is room for are copied. Worked
+   * out before any frame is touched, because the answer has to be the same for
    * every phase — a cap applied per phase would leave a ball on some and not
    * others, which is exactly what the cast rule exists to prevent.
+   *
+   * And before `commit`, so a copy that turns out to be entirely refused does
+   * not leave an undo entry for work that never happened.
    */
   const room = MAX_BALLS - state.balls.length
   let ballsSoFar = 0
   const copyable = live.filter((ref) => ref.kind !== 'ball' || ballsSoFar++ < room)
   if (copyable.length === 0) return []
+
+  commit()
 
   // One new id per original, shared by that original's copy on every frame,
   // so the copies are one player rather than one per moment.
