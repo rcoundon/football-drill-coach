@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import type { ToolMode } from '../src/types'
 import Toolbar from '../src/components/Toolbar.vue'
-import { useBoard, __resetBoardForTests } from '../src/composables/useBoard'
+import { useBoard, __resetBoardForTests, MAX_BALLS } from '../src/composables/useBoard'
 import { COUNTER_COLORS } from '../src/geometry'
 import { __resetViewportForTests } from '../src/composables/useViewport'
 
@@ -614,5 +614,42 @@ describe('calling a drill a drill', () => {
       props: { tool: 'select' as ToolMode, drawColor: '#ffffff', patternName: 'Overlap' },
     })
     expect(wrapper.find('[data-save]').attributes('title')).toBe('Update “Overlap”')
+  })
+})
+
+describe('putting more balls out', () => {
+  it('offers a way to add one', () => {
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-add-ball]').exists()).toBe(true)
+  })
+
+  it('adds one to the drill', async () => {
+    const board = useBoard()
+    const before = board.state.balls.length
+    const wrapper = mountToolbar()
+    await wrapper.find('[data-add-ball]').trigger('click')
+    expect(board.state.balls).toHaveLength(before + 1)
+  })
+
+  it('stops at the cap, and says why', async () => {
+    const board = useBoard()
+    while (board.state.balls.length < MAX_BALLS) board.addBall()
+    const wrapper = mountToolbar()
+    await wrapper.vm.$nextTick()
+    const add = wrapper.find('[data-add-ball]')
+    expect(add.attributes('disabled')).toBeDefined()
+    expect(add.attributes('title')).toMatch(new RegExp(`${MAX_BALLS}`))
+  })
+
+  it('will not add one while the drill is playing', async () => {
+    const board = useBoard()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+    board.scrubTo(500)
+    const wrapper = mountToolbar()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-add-ball]').attributes('disabled')).toBeDefined()
+    board.endScrub()
   })
 })

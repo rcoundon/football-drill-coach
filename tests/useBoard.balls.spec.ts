@@ -151,3 +151,49 @@ describe('showing and hiding', () => {
     expect(board.state.balls[0].attachedTo).toBe(counter.id)
   })
 })
+
+describe('balls in a group', () => {
+  it('copies a free ball, on every phase', () => {
+    board.addFrame()
+    const id = board.state.balls[0].id
+    const copies = board.duplicateGroup([{ kind: 'ball', id }], { x: 4, y: 4 })
+
+    expect(copies).toHaveLength(1)
+    expect(board.state.frames[0].balls).toHaveLength(2)
+    expect(board.state.frames[1].balls).toHaveLength(2)
+    expect(board.state.frames[0].balls[1].id).toBe(copies[0].id)
+  })
+
+  it('never copies past the cap', () => {
+    while (board.state.balls.length < MAX_BALLS) board.addBall()
+    const id = board.state.balls[0].id
+    board.duplicateGroup([{ kind: 'ball', id }], { x: 4, y: 4 })
+    expect(board.state.balls).toHaveLength(MAX_BALLS)
+  })
+
+  it('a copy is free, never carried — a drill does not grow a carrier', () => {
+    const counter = board.addCounter('red')
+    board.moveCounter(counter.id, { x: 30, y: 30 })
+    board.dropBall(board.state.balls[0].id, { x: 30, y: 30 })
+    // A carried ball is not gathered, so this is the copy of a free one that
+    // happens to sit near a player.
+    const free = board.addBall()!
+    const copies = board.duplicateGroup([{ kind: 'ball', id: free.id }], { x: 1, y: 1 })
+    expect(board.ballById(copies[0].id)!.attachedTo).toBeNull()
+  })
+
+  it('deleting a group takes its balls off every phase', () => {
+    board.addFrame()
+    const id = board.state.balls[0].id
+    board.deleteGroup([{ kind: 'ball', id }])
+    expect(board.state.frames[0].balls).toHaveLength(0)
+    expect(board.state.frames[1].balls).toHaveLength(0)
+  })
+
+  it('moves with the rest of the group', () => {
+    const id = board.state.balls[0].id
+    board.moveBall(id, { x: 20, y: 20 })
+    board.translateGroup([{ kind: 'ball', id }], { x: 5, y: 0 })
+    expect(board.ballById(id)!.pos).toEqual({ x: 25, y: 20 })
+  })
+})

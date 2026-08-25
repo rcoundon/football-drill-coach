@@ -399,6 +399,11 @@ function onMarkerGrab(id: string, event: PointerEvent) {
 
 function onBallGrab(id: string, event: PointerEvent) {
   if (board.isDerived.value) return
+  if (props.tool === 'erase') {
+    event.stopPropagation()
+    board.removeBall(id)
+    return
+  }
   if (props.tool !== 'select') return
   if (dragIsLive()) return
   event.stopPropagation()

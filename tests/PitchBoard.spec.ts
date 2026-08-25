@@ -2454,3 +2454,60 @@ describe('rendering the playhead', () => {
     board.pause()
   })
 })
+
+describe('more than one ball', () => {
+  it('draws every ball the drill has out', async () => {
+    const board = useBoard()
+    board.addBall()
+    board.addBall()
+    const wrapper = mountBoard()
+    await nextTick()
+    expect(wrapper.findAll('[data-ball]')).toHaveLength(3)
+  })
+
+  it('draws none of them once they are hidden', async () => {
+    const board = useBoard()
+    board.addBall()
+    board.toggleBallsVisible()
+    const wrapper = mountBoard()
+    await nextTick()
+    expect(wrapper.findAll('[data-ball]')).toHaveLength(0)
+  })
+
+  it('rings a player for each ball being carried, and nobody else', async () => {
+    const board = useBoard()
+    const carrier = board.addCounter('red')
+    board.moveCounter(carrier.id, { x: 30, y: 30 })
+    const second = board.addCounter('blue')
+    board.moveCounter(second.id, { x: 70, y: 30 })
+    board.addCounter('yellow') // nobody gives this one a ball
+
+    board.dropBall(board.state.balls[0].id, { x: 30, y: 30 })
+    const other = board.addBall()!
+    board.dropBall(other.id, { x: 70, y: 30 })
+
+    const wrapper = mountBoard()
+    await nextTick()
+    // Two carriers, three players: the third must not be ringed.
+    expect(wrapper.findAll('[data-possession-ring]')).toHaveLength(2)
+  })
+
+  it('erases the ball you press, leaving the others', async () => {
+    const board = useBoard()
+    board.addBall()
+    const doomed = board.state.balls[0].id
+    const wrapper = mountBoard('erase')
+    await nextTick()
+
+    // The tokens render in list order, so the first drawn is the first held.
+    // firePointer knows the listener sits on the hit circle, not the group.
+    await firePointer(wrapper.findAll('[data-ball]')[0], 'pointerdown', {
+      clientX: 0,
+      clientY: 0,
+      pointerId: 1,
+    })
+
+    expect(board.state.balls.map((b) => b.id)).not.toContain(doomed)
+    expect(board.state.balls).toHaveLength(1)
+  })
+})

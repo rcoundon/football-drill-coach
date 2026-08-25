@@ -1268,15 +1268,26 @@ function duplicateGroup(refs: SelectionRef[], offset: Vec): SelectionRef[] {
 
   commit()
 
+  /*
+   * Balls are capped, so only as many as there is room for are copied. Taken
+   * before any frame is touched, because the answer has to be the same for
+   * every phase — a cap applied per phase would leave a ball on some and not
+   * others, which is exactly what the cast rule exists to prevent.
+   */
+  const room = MAX_BALLS - state.balls.length
+  let ballsSoFar = 0
+  const copyable = live.filter((ref) => ref.kind !== 'ball' || ballsSoFar++ < room)
+  if (copyable.length === 0) return []
+
   // One new id per original, shared by that original's copy on every frame,
   // so the copies are one player rather than one per moment.
-  const copies: SelectionRef[] = live.map((ref) => ({ kind: ref.kind, id: newId() }))
+  const copies: SelectionRef[] = copyable.map((ref) => ({ kind: ref.kind, id: newId() }))
 
   allFrames().forEach((frame, index) => {
     const isCurrent = index === state.currentFrame
     const made: SelectionRef[] = []
 
-    live.forEach((ref, i) => {
+    copyable.forEach((ref, i) => {
       const copyId = copies[i].id
       if (ref.kind === 'counter') {
         const original = frame.counters.find((c) => c.id === ref.id)
@@ -1300,6 +1311,15 @@ function duplicateGroup(refs: SelectionRef[], offset: Vec): SelectionRef[] {
         const copy = clone(toRaw(original))
         copy.id = copyId
         frame.labels.push(copy)
+      } else if (ref.kind === 'ball') {
+        const original = frame.balls.find((b) => b.id === ref.id)
+        if (!original) return
+        const copy = clone(toRaw(original))
+        copy.id = copyId
+        // Free, whatever the original was doing. A drill has the carriers it
+        // has, and copying a shape is not a reason to grow another.
+        copy.attachedTo = null
+        frame.balls.push(copy)
       } else {
         // Drawings belong to the moment, so only this one gets a copy.
         if (!isCurrent) return
