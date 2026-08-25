@@ -1,29 +1,28 @@
 import { computed, reactive, ref, toRaw } from 'vue'
 import type {
-  Ball,
   Counter,
   CounterColor,
   Drawing,
+  Frame,
   Label,
   Marker,
   PitchType,
   SelectionRef,
   Vec,
 } from '../types'
-import { PITCH_H, PITCH_W, clampToPitch, distance, snapToAxis } from '../geometry'
+import { BALL_OFFSET, PITCH_H, PITCH_W, clampToPitch, distance, snapToAxis } from '../geometry'
+import {
+  MAX_FRAME_MS,
+  MIN_FRAME_MS,
+  ballPositionIn,
+  interpolateFrames,
+  timelineOf,
+} from '../animation'
+import type { FrameView } from '../animation'
+
+export { BALL_OFFSET } from '../geometry'
 
 export const UNDO_LIMIT = 50
-
-/**
- * Where an attached ball sits relative to its holder, in pitch units.
- *
- * Far enough out that the ball's own hit circle clears the whole drawn
- * counter: the ball is painted after the counters, so any overlap steals the
- * press, and an overlap reaching the counter's centre means pressing the
- * middle of a player in possession grabs the ball instead of the player.
- * See BALL_HIT_RADIUS_ATTACHED in BallToken.vue for the other half.
- */
-export const BALL_OFFSET: Vec = { x: 3.4, y: 3.4 }
 
 /**
  * How close to a counter the ball must land to be taken into possession, in
@@ -58,29 +57,35 @@ export const MIN_PEN_STEP = 0.6
 /** Arrows shorter than this are treated as an accidental tap. */
 export const MIN_SEGMENT_LENGTH = 2
 
-export type BoardState = {
-  counters: Counter[]
-  markers: Marker[]
-  labels: Label[]
+/**
+ * The board as data: a list of moments, plus the settings that belong to the
+ * drill rather than to any one of them.
+ */
+export type BoardSnapshot = {
+  frames: Frame[]
+  currentFrame: number
   labelsVisible: boolean
   notes: string
   notesVisible: boolean
-  ball: Ball
-  drawings: Drawing[]
   pitch: { type: PitchType; rotated: boolean }
 }
 
-/** A plain, disconnected copy of the board. */
-export type BoardSnapshot = BoardState
+/**
+ * The board as everything else sees it: the data above, plus five accessors
+ * onto whichever frame is current.
+ *
+ * The accessors are the reason roughly three hundred existing references to
+ * `state.counters` and `state.ball` did not have to be rewritten when frames
+ * arrived. Reading one through Vue's proxy tracks `frames` and
+ * `currentFrame`, so switching frame re-renders without anything extra.
+ */
+export type BoardState = BoardSnapshot & FrameView
 
-function emptyState(): BoardState {
+function emptyFrame(): Frame {
   return {
     counters: [],
     markers: [],
     labels: [],
-    labelsVisible: true,
-    notes: '',
-    notesVisible: true,
     // Not the pitch centre: that is where the first counter lands, and the
     // ball's hit circle would sit right on top of the counter's body, so the
     // coach's first drag would grab the ball instead of the player. Just
@@ -88,8 +93,44 @@ function emptyState(): BoardState {
     // type and well inside the half pitch's 25..75 band.
     ball: { pos: { x: PITCH_W / 2, y: PITCH_H / 2 + 10 }, attachedTo: null, visible: true },
     drawings: [],
+  }
+}
+
+function emptySnapshot(): BoardSnapshot {
+  return {
+    frames: [emptyFrame()],
+    currentFrame: 0,
+    labelsVisible: true,
+    notes: '',
+    notesVisible: true,
     pitch: { type: 'blank', rotated: false },
   }
+}
+
+const FRAME_FIELDS = ['counters', 'markers', 'labels', 'ball', 'drawings'] as const
+
+/**
+ * Add the five accessors onto the current frame.
+ *
+ * Non-enumerable on purpose: a spread or a `structuredClone` of the state
+ * must not materialise a second copy of the current frame's arrays alongside
+ * the frame that owns them.
+ */
+function withFrameAccessors(base: BoardSnapshot): BoardState {
+  const target = base as BoardState
+  for (const field of FRAME_FIELDS) {
+    Object.defineProperty(target, field, {
+      enumerable: false,
+      configurable: true,
+      get(this: BoardState) {
+        return this.frames[this.currentFrame][field]
+      },
+      set(this: BoardState, value: unknown) {
+        ;(this.frames[this.currentFrame] as unknown as Record<string, unknown>)[field] = value
+      },
+    })
+  }
+  return target
 }
 
 /**
@@ -100,9 +141,69 @@ function clone<T>(value: T): T {
   return structuredClone(toRaw(value))
 }
 
-const state = reactive<BoardState>(emptyState())
+const state = reactive<BoardState>(withFrameAccessors(emptySnapshot()))
 const undoStack = ref<BoardSnapshot[]>([])
 const redoStack = ref<BoardSnapshot[]>([])
+
+/**
+ * Where the drill is being watched from.
+ *
+ * `at` is milliseconds from the start of the drill. It is not part of the
+ * snapshot: it is where the coach is looking, not something about the drill,
+ * so it is neither saved nor undone. `currentFrame` is the part that is.
+ *
+ * The invariant, whenever the board is not playing and not being scrubbed:
+ * `at === timeline.startOf(state.currentFrame)`.
+ */
+const playback = reactive({ playing: false, at: 0 })
+
+const timeline = computed(() => timelineOf(state.frames))
+
+const position = computed(() => timeline.value.at(playback.at))
+
+/**
+ * What the board draws.
+ *
+ * Parked on a frame this is the frame's own arrays, by identity, so nothing
+ * about editing or rendering changes from before frames existed. Between two
+ * frames it is a blend, which is derived and must never be written to — see
+ * `isDerived`.
+ */
+const view = computed<FrameView>(() => {
+  const { index, t } = position.value
+  const frame = state.frames[index]
+  if (t === 0 || index + 1 >= state.frames.length) return frame
+  return interpolateFrames(frame, state.frames[index + 1], t)
+})
+
+const viewBallPosition = computed(() => ballPositionIn(view.value))
+
+/**
+ * Set for the duration of a GIF export.
+ *
+ * An export drives the playhead by hand, sampling one moment at a time, and
+ * a sample can land exactly on a frame — `position.value.t === 0` — where the
+ * ordinary derived check would say editing is fine. It is not: `play()` or
+ * `goToFrame()` firing mid-export would run a second clock, or jump the
+ * playhead, against the export's own seek loop and corrupt the samples it is
+ * already part-way through collecting. Folding this into `isDerived` closes
+ * that gap the same way the blend check does, and for free locks every
+ * ordinary mutator too — a player should not appear mid-export any more than
+ * mid-play.
+ */
+const exportLock = ref(false)
+
+/** True while what is on screen is a blend rather than a frame, or while a GIF export is sampling it. */
+const isDerived = computed(() => playback.playing || position.value.t !== 0 || exportLock.value)
+
+function beginExport(): void {
+  exportLock.value = true
+}
+
+/** Release the lock `beginExport` took. Safe to call whether or not it did. */
+function endExport(): void {
+  exportLock.value = false
+}
 
 let idCounter = 0
 
@@ -122,33 +223,146 @@ function rawFilter<T>(array: T[], keep: (item: T) => boolean): T[] {
   return (toRaw(array) as T[]).filter((item) => keep(toRaw(item) as T))
 }
 
+/**
+ * Every frame, unproxied.
+ *
+ * The cast is drill-wide: adding, removing or renaming a player, cone or
+ * label applies to the whole drill, because a squad does not change halfway
+ * through a session and a player popping into existence mid-animation is
+ * never what anyone meant. Only positions and drawings belong to one moment.
+ */
+function allFrames(): Frame[] {
+  return state.frames
+}
+
 /** A plain copy of the current state, safe to keep. */
 function snapshot(): BoardSnapshot {
   const raw = toRaw(state)
   return structuredClone({
-    counters: raw.counters,
-    markers: raw.markers,
-    labels: raw.labels,
+    frames: raw.frames,
+    currentFrame: raw.currentFrame,
     labelsVisible: raw.labelsVisible,
     notes: raw.notes,
     notesVisible: raw.notesVisible,
-    ball: raw.ball,
-    drawings: raw.drawings,
     pitch: raw.pitch,
   })
 }
 
 function apply(snap: BoardSnapshot): void {
   const copy = clone(snap)
-  state.counters = copy.counters
-  state.markers = copy.markers ?? []
-  state.labels = copy.labels ?? []
+  // A snapshot from a damaged draft, or a pattern whose frames were trimmed,
+  // must not leave `currentFrame` pointing past the end: every accessor would
+  // then read through `undefined` and the board would render as an exception
+  // with no way back from inside the app.
+  const frames = copy.frames?.length ? copy.frames : [emptyFrame()]
+  state.frames = frames
+  state.currentFrame = Math.max(0, Math.min(copy.currentFrame ?? 0, frames.length - 1))
   state.labelsVisible = copy.labelsVisible ?? true
   state.notes = copy.notes ?? ''
   state.notesVisible = copy.notesVisible ?? true
-  state.ball = copy.ball
-  state.drawings = copy.drawings
   state.pitch = copy.pitch
+  playback.playing = false
+  stopClock()
+  playback.at = timeline.value.startOf(state.currentFrame)
+}
+
+let rafHandle: number | null = null
+let lastTick = 0
+
+function stopClock(): void {
+  if (rafHandle !== null) cancelAnimationFrame(rafHandle)
+  rafHandle = null
+}
+
+/**
+ * Delta-timed rather than frame-counted, so a drill plays at the speed the
+ * coach set it to on a slow tablet as well as a fast laptop.
+ */
+function tick(now: number): void {
+  if (!playback.playing) return
+  const delta = lastTick === 0 ? 0 : now - lastTick
+  lastTick = now
+  playback.at = Math.min(playback.at + delta, timeline.value.total)
+  state.currentFrame = position.value.index
+  if (playback.at >= timeline.value.total) {
+    // Stops on the last frame. The exported GIF loops; a drill being
+    // demonstrated wants to end somewhere.
+    pause()
+    return
+  }
+  rafHandle = requestAnimationFrame(tick)
+}
+
+function play(): void {
+  // An export drives the playhead itself; a second clock racing its seek
+  // loop is exactly what corrupts the samples.
+  if (exportLock.value) return
+  if (playback.playing) return
+  if (timeline.value.total <= 0) return
+  // At the very end, play means play again — a button that appears to do
+  // nothing is worse than one that starts over.
+  if (playback.at >= timeline.value.total) playback.at = 0
+  playback.playing = true
+  lastTick = 0
+  state.currentFrame = position.value.index
+  rafHandle = requestAnimationFrame(tick)
+}
+
+function pause(): void {
+  playback.playing = false
+  stopClock()
+  state.currentFrame = position.value.index
+}
+
+function rewind(): void {
+  pause()
+  playback.at = 0
+  state.currentFrame = 0
+}
+
+/** Drag-time. Leaves the view derived, so editing stays blocked. */
+function scrubTo(ms: number): void {
+  pause()
+  playback.at = Math.max(0, Math.min(ms, timeline.value.total))
+  state.currentFrame = position.value.index
+}
+
+/**
+ * Release. Lands on the nearer frame, so the board is never left parked
+ * mid-move refusing every drag with nothing on screen saying why.
+ */
+function endScrub(): void {
+  const { index, t } = position.value
+  const target = t > 0.5 ? Math.min(index + 1, state.frames.length - 1) : index
+  goToFrame(target)
+}
+
+/**
+ * Refuse a change while the board is showing a blend of two frames.
+ *
+ * The blend is a derived object: writing to it would be thrown away on the
+ * next tick, and the coach would drag a player and watch nothing happen.
+ * Blocking here rather than only in the component means no future caller can
+ * forget.
+ *
+ * `addCounter`, `addMarker`, `startPen`, `startArrow` and `startLine` are
+ * deliberately NOT guarded with this. Guarding them would mean changing a
+ * return type that dozens of existing tests depend on, for no gain: every one
+ * of them is reached only through `PitchBoard`'s pointer handlers or the
+ * toolbar's player swatches, both of which are blocked elsewhere. Do not add
+ * a guard to them later — it breaks that return type and the tests with it.
+ *
+ * `commit()` is deliberately NOT guarded with this either, even though every
+ * moment-writer above already refuses at its own first line and so never
+ * reaches it while derived. `setNotes`, the visibility toggles, `setPitchType`
+ * and `setRotated` are drill-wide and stay callable while derived on purpose —
+ * and they still call `commit()`. Guarding it there would silently drop their
+ * undo entry while letting the mutation through, which is worse than doing
+ * nothing: an edit that cannot be undone. Do not add a guard to `commit()`
+ * later for the same reason.
+ */
+function locked(): boolean {
+  return isDerived.value
 }
 
 /**
@@ -169,6 +383,7 @@ function commit(): BoardSnapshot {
 }
 
 function undo(): void {
+  if (locked()) return
   const previous = undoStack.value.pop()
   if (!previous) return
   redoStack.value.push(snapshot())
@@ -176,6 +391,7 @@ function undo(): void {
 }
 
 function redo(): void {
+  if (locked()) return
   const next = redoStack.value.pop()
   if (!next) return
   undoStack.value.push(snapshot())
@@ -228,8 +444,9 @@ function toggleRotated(): void {
  * view would mean re-selecting it every time.
  */
 function resetBoard(): void {
+  if (locked()) return
   commit()
-  apply({ ...emptyState(), pitch: { ...toRaw(state).pitch } })
+  apply({ ...emptySnapshot(), pitch: { ...toRaw(state).pitch } })
 }
 
 /**
@@ -240,16 +457,20 @@ function resetBoard(): void {
  * ball in it, it just no longer belongs to anyone.
  */
 function clearCounters(): void {
+  if (locked()) return
   if (state.counters.length === 0) return
   commit()
-  if (state.ball.attachedTo) {
-    state.ball.pos = ballPosition()
-    state.ball.attachedTo = null
+  for (const frame of allFrames()) {
+    if (frame.ball.attachedTo) {
+      frame.ball.pos = ballPositionIn(frame)
+      frame.ball.attachedTo = null
+    }
+    frame.counters = []
   }
-  state.counters = []
 }
 
 function loadSnapshot(snap: BoardSnapshot): void {
+  if (locked()) return
   commit()
   apply(snap)
 }
@@ -265,6 +486,97 @@ function loadSnapshot(snap: BoardSnapshot): void {
  */
 function restoreSnapshot(snap: BoardSnapshot): void {
   apply(snap)
+}
+
+/**
+ * Add a moment, as a copy of the one the coach is on.
+ *
+ * A copy rather than a blank board, because the next frame of a drill is
+ * nearly always the same players a few yards further on. It also means the
+ * cast stays in step without anything having to enforce it, and the drawings
+ * carry over so the arrow describing a pass survives until the pass has
+ * happened and the coach rubs it out.
+ */
+function addFrame(): number {
+  if (locked()) return state.currentFrame
+  commit()
+  const index = state.currentFrame + 1
+  state.frames.splice(index, 0, clone(toRaw(state).frames[state.currentFrame]))
+  state.currentFrame = index
+  parkPlayhead()
+  return index
+}
+
+/** A drill has to be something. The last frame cannot be removed. */
+function deleteFrame(index: number): void {
+  if (locked()) return
+  if (state.frames.length <= 1) return
+  if (index < 0 || index >= state.frames.length) return
+  commit()
+  state.frames.splice(index, 1)
+  // A frame removed from earlier in the drill shifts everything after it
+  // down, the one being watched included. Without this the coach deletes
+  // frame 1 and finds themselves looking at a different moment.
+  if (index < state.currentFrame) state.currentFrame -= 1
+  else state.currentFrame = Math.min(state.currentFrame, state.frames.length - 1)
+  parkPlayhead()
+}
+
+/** Reorder, keeping the coach on the frame they were looking at. */
+function moveFrame(from: number, to: number): void {
+  if (locked()) return
+  const last = state.frames.length - 1
+  if (from < 0 || from > last || to < 0 || to > last || from === to) return
+  commit()
+  // Follow the frame the coach is watching wherever the reorder puts it,
+  // including when it is some other frame that moved across it.
+  const watched = state.frames[state.currentFrame]
+  const [frame] = state.frames.splice(from, 1)
+  state.frames.splice(to, 0, frame)
+  const found = state.frames.indexOf(watched)
+  if (found === -1) throw new Error('moveFrame lost track of the watched frame')
+  state.currentFrame = found
+  parkPlayhead()
+}
+
+function setFrameDuration(index: number, ms: number): void {
+  if (locked()) return
+  const frame = state.frames[index]
+  if (!frame) return
+  commit()
+  frame.duration = Math.round(Math.max(MIN_FRAME_MS, Math.min(MAX_FRAME_MS, ms)))
+  // Retiming a phase moves where every phase after it begins, this one
+  // included, so where the playhead is parked has just changed meaning.
+  parkPlayhead()
+}
+
+/**
+ * Select a frame. Deliberately not a commit: looking at a moment changes
+ * nothing about the drill, and stepping through five frames to read them
+ * should not bury real work under five entries that changed nothing.
+ */
+/**
+ * Park the playhead at the start of whichever phase the coach is now on.
+ *
+ * The board renders whatever phase the PLAYHEAD is on, while edits go to
+ * `currentFrame`. Any operation that moves the coach to a different phase must
+ * therefore move the playhead too — otherwise they edit one phase while
+ * looking at another, and a drag appears to do nothing because it landed on a
+ * phase that is not on screen. Adding, deleting and reordering a phase each
+ * did exactly that before this existed.
+ */
+function parkPlayhead(): void {
+  playback.at = timeline.value.startOf(state.currentFrame)
+}
+
+function goToFrame(index: number): void {
+  // Jumping the playhead mid-export would desync it from the export's own
+  // seek loop, the same way play() would.
+  if (exportLock.value) return
+  if (index < 0 || index >= state.frames.length) return
+  pause()
+  state.currentFrame = index
+  parkPlayhead()
 }
 
 function counterById(id: string): Counter | undefined {
@@ -331,8 +643,14 @@ function addCounter(color: CounterColor): Counter {
     label: '',
     pos: nextCounterPosition(),
   }
-  state.counters.push(counter)
-  return counter
+  // Same id and same spot on every frame, so a new player stands still until
+  // the coach moves them somewhere.
+  for (const frame of allFrames()) frame.counters.push(clone(counter))
+  // Looked back up rather than returning `counter` itself: the caller gets
+  // the live counter on the current frame, which keeps tracking it the way
+  // every other lookup does, rather than a detached copy left stale by the
+  // next move.
+  return counterById(counter.id)!
 }
 
 /**
@@ -370,39 +688,50 @@ function cleanLabelText(text: string): string {
 }
 
 function addLabel(at: Vec, text: string): Label | null {
+  if (locked()) return null
   const clean = cleanLabelText(text)
   if (clean === '') return null
   commit()
   const label: Label = { id: newId(), pos: clampToPitch(at), text: clean }
-  state.labels.push(label)
-  return label
+  for (const frame of allFrames()) frame.labels.push(clone(label))
+  // Read back out of state rather than returning the local `label` that was
+  // cloned in: the clone pushed into every frame's array is a copy, so the
+  // local is an orphan that would never again reflect a later move.
+  return labelById(label.id)!
 }
 
 /** Clearing the text removes the label: an empty one has nothing to say. */
 function setLabelText(id: string, text: string): void {
+  if (locked()) return
   const label = labelById(id)
   if (!label) return
   const clean = cleanLabelText(text)
   commit()
-  if (clean === '') {
-    state.labels = rawFilter(state.labels, (l) => l.id !== id)
-    return
+  for (const frame of allFrames()) {
+    if (clean === '') {
+      frame.labels = rawFilter(frame.labels, (l) => l.id !== id)
+      continue
+    }
+    const target = frame.labels.find((l) => l.id === id)
+    if (target) target.text = clean
   }
-  label.text = clean
 }
 
 /** Called on every pointer-move of a drag, so it deliberately does not commit. */
 function moveLabel(id: string, pos: Vec): void {
+  if (locked()) return
   const label = labelById(id)
   if (!label) return
   label.pos = clampToPitch(pos)
 }
 
 function deleteLabel(id: string): void {
-  const index = state.labels.findIndex((l) => l.id === id)
-  if (index === -1) return
+  if (locked()) return
+  if (!labelById(id)) return
   commit()
-  state.labels.splice(index, 1)
+  for (const frame of allFrames()) {
+    frame.labels = rawFilter(frame.labels, (l) => l.id !== id)
+  }
 }
 
 function toggleLabelsVisible(): void {
@@ -424,47 +753,60 @@ function markerById(id: string): Marker | undefined {
 function addMarker(at: Vec): Marker {
   commit()
   const marker: Marker = { id: newId(), pos: clampToPitch(at) }
-  state.markers.push(marker)
-  return marker
+  for (const frame of allFrames()) frame.markers.push(clone(marker))
+  return markerById(marker.id)!
 }
 
 /** Called on every pointer-move of a drag, so it deliberately does not commit. */
 function moveMarker(id: string, pos: Vec): void {
+  if (locked()) return
   const marker = markerById(id)
   if (!marker) return
   marker.pos = clampToPitch(pos)
 }
 
 function deleteMarker(id: string): void {
-  const index = state.markers.findIndex((m) => m.id === id)
-  if (index === -1) return
+  if (locked()) return
+  if (!markerById(id)) return
   commit()
-  state.markers.splice(index, 1)
+  for (const frame of allFrames()) {
+    frame.markers = rawFilter(frame.markers, (m) => m.id !== id)
+  }
 }
 
 /** Called on every pointer-move of a drag, so it deliberately does not commit. */
 function moveCounter(id: string, pos: Vec): void {
+  if (locked()) return
   const counter = counterById(id)
   if (!counter) return
   counter.pos = clampToPitch(pos)
 }
 
 function setCounterLabel(id: string, label: string): void {
+  if (locked()) return
   const counter = counterById(id)
   if (!counter) return
   commit()
-  counter.label = label.trim().slice(0, 4)
+  const clean = label.trim().slice(0, 4)
+  for (const frame of allFrames()) {
+    const target = frame.counters.find((c) => c.id === id)
+    if (target) target.label = clean
+  }
 }
 
 function deleteCounter(id: string): void {
+  if (locked()) return
   const index = state.counters.findIndex((c) => c.id === id)
   if (index === -1) return
   commit()
-  if (state.ball.attachedTo === id) {
-    state.ball.pos = { ...state.counters[index].pos }
-    state.ball.attachedTo = null
+  for (const frame of allFrames()) {
+    const victim = frame.counters.find((c) => c.id === id)
+    if (victim && frame.ball.attachedTo === id) {
+      frame.ball.pos = { ...victim.pos }
+      frame.ball.attachedTo = null
+    }
+    frame.counters = rawFilter(frame.counters, (c) => c.id !== id)
   }
-  state.counters.splice(index, 1)
 }
 
 /** Drag-time move. Detaches from any holder; does not commit. */
@@ -475,6 +817,7 @@ function toggleBallVisible(): void {
 }
 
 function moveBall(pos: Vec): void {
+  if (locked()) return
   state.ball.attachedTo = null
   state.ball.pos = clampToPitch(pos)
 }
@@ -501,6 +844,7 @@ function ballDistanceTo(counter: Counter, at: Vec): number {
 
 /** Pointer-up. Resolves possession; does not commit. */
 function dropBall(pos: Vec): void {
+  if (locked()) return
   const at = clampToPitch(pos)
   state.ball.pos = at
 
@@ -550,6 +894,7 @@ function startPen(at: Vec, color: string): string {
 
 /** Drag-time; does not commit. Skips points too close to the previous one. */
 function extendPen(id: string, at: Vec): void {
+  if (locked()) return
   const drawing = drawingById(id)
   if (!drawing || drawing.kind !== 'pen') return
   const point = clampToPitch(at)
@@ -584,6 +929,7 @@ function startLine(at: Vec, color: string): string {
  * traces a run or a pass, and squaring it off would misstate the movement.
  */
 function updateSegment(id: string, to: Vec): void {
+  if (locked()) return
   const drawing = drawingById(id)
   if (!drawing || drawing.kind === 'pen') return
   const point = clampToPitch(to)
@@ -601,6 +947,7 @@ function updateSegment(id: string, to: Vec): void {
  * there is no peak to place on an arrow with no bow.
  */
 function setArrowBend(id: string, bend: number, bendAlong = 0): void {
+  if (locked()) return
   const drawing = drawingById(id)
   if (!drawing || drawing.kind !== 'arrow') return
   if (bend === 0) {
@@ -627,6 +974,7 @@ function setArrowBend(id: string, bend: number, bendAlong = 0): void {
  * the chord, so the bow keeps its shape and its lean while the ends move.
  */
 function moveSegmentEnd(id: string, end: 'from' | 'to', pos: Vec): void {
+  if (locked()) return
   const drawing = drawingById(id)
   if (!drawing || drawing.kind === 'pen') return
   const anchor = end === 'to' ? drawing.from : drawing.to
@@ -654,6 +1002,7 @@ function pointsOf(drawing: Drawing): Vec[] {
  * the chord, so the bow travels with its ends.
  */
 function translateDrawing(id: string, delta: Vec): void {
+  if (locked()) return
   translateGroup([{ kind: 'drawing', id }], delta)
 }
 
@@ -679,26 +1028,20 @@ function pointsOfRef(ref: SelectionRef): Vec[] | null {
 }
 
 /**
- * Slide a whole group across the pitch. Called on every pointer-move of a
- * drag, so it deliberately does not commit.
+ * Slide a set of points, trimming the move so the shape stays on the pitch.
  *
- * The delta is trimmed once against the group's own bounding box, exactly as
- * a single drawing's is: clamping each member on its own would collapse a
- * shape against the touchline instead of stopping it there, which is the one
- * thing a coach moving a shape would never want. Members that have since
- * gone are skipped rather than treated as being at the origin, which would
- * drag the whole group towards the corner.
+ * The delta is trimmed rather than each point clamped: clamping collapses a
+ * shape against the touchline, and trimming lets a shape already on an edge
+ * keep sliding along it. Something wider than the pitch cannot be brought
+ * inside and squeezing it would distort it, so the room it has is allowed to
+ * go negative and the min/max simply cancel the move on that axis.
  */
-function translateGroup(refs: SelectionRef[], delta: Vec): void {
-  const points = refs.flatMap((ref) => pointsOfRef(ref) ?? [])
+function translatePoints(points: Vec[], delta: Vec): void {
   if (points.length === 0) return
 
   const xs = points.map((p) => p.x)
   const ys = points.map((p) => p.y)
 
-  // Something wider than the pitch cannot be brought inside, and squeezing it
-  // would distort it, so the room it has is allowed to go negative and the
-  // min/max below simply cancel the move on that axis.
   const dx = Math.min(PITCH_W - Math.max(...xs), Math.max(-Math.min(...xs), delta.x))
   const dy = Math.min(PITCH_H - Math.max(...ys), Math.max(-Math.min(...ys), delta.y))
 
@@ -709,14 +1052,48 @@ function translateGroup(refs: SelectionRef[], delta: Vec): void {
 }
 
 /**
+ * Slide a whole group across the pitch. Called on every pointer-move of a
+ * drag, so it deliberately does not commit.
+ *
+ * Members that have since gone are skipped rather than treated as being at
+ * the origin, which would drag the whole group towards the corner.
+ */
+function translateGroup(refs: SelectionRef[], delta: Vec): void {
+  if (locked()) return
+  translatePoints(refs.flatMap((ref) => pointsOfRef(ref) ?? []), delta)
+}
+
+/** The live position points of a reference, within one frame. */
+function pointsOfRefIn(frame: Frame, ref: SelectionRef): Vec[] | null {
+  if (ref.kind === 'counter') {
+    const counter = frame.counters.find((c) => c.id === ref.id)
+    return counter ? [counter.pos] : null
+  }
+  if (ref.kind === 'marker') {
+    const marker = frame.markers.find((m) => m.id === ref.id)
+    return marker ? [marker.pos] : null
+  }
+  if (ref.kind === 'label') {
+    const label = frame.labels.find((l) => l.id === ref.id)
+    return label ? [label.pos] : null
+  }
+  const drawing = frame.drawings.find((d) => d.id === ref.id)
+  return drawing ? pointsOf(drawing) : null
+}
+
+/**
  * Take a whole group off the board in one undo entry, rather than one per
  * member — a coach who boxed a shape and pressed Delete meant one action.
+ *
+ * The cast comes off every frame; a drawing belongs to the moment it
+ * describes, so it comes off only this one.
  *
  * A ball being carried by a deleted player is set down where it was riding,
  * matching what deleting a single player already does: the drill still has a
  * ball in it, it just no longer belongs to anyone.
  */
 function deleteGroup(refs: SelectionRef[]): void {
+  if (locked()) return
   if (refs.length === 0) return
   const ids = {
     counter: new Set<string>(),
@@ -728,14 +1105,17 @@ function deleteGroup(refs: SelectionRef[]): void {
 
   commit()
 
-  if (state.ball.attachedTo && ids.counter.has(state.ball.attachedTo)) {
-    state.ball.pos = ballPosition()
-    state.ball.attachedTo = null
+  for (const frame of allFrames()) {
+    if (frame.ball.attachedTo && ids.counter.has(frame.ball.attachedTo)) {
+      frame.ball.pos = ballPositionIn(frame)
+      frame.ball.attachedTo = null
+    }
+    frame.counters = rawFilter(frame.counters, (c) => !ids.counter.has(c.id))
+    frame.markers = rawFilter(frame.markers, (m) => !ids.marker.has(m.id))
+    frame.labels = rawFilter(frame.labels, (l) => !ids.label.has(l.id))
   }
 
-  state.counters = rawFilter(state.counters, (c) => !ids.counter.has(c.id))
-  state.markers = rawFilter(state.markers, (m) => !ids.marker.has(m.id))
-  state.labels = rawFilter(state.labels, (l) => !ids.label.has(l.id))
+  // Drawings belong to the moment, so only this one loses them.
   state.drawings = rawFilter(state.drawings, (d) => !ids.drawing.has(d.id))
 }
 
@@ -743,53 +1123,72 @@ function deleteGroup(refs: SelectionRef[]): void {
  * Copy a whole group, offset a little so the copy is plainly a copy rather
  * than something that quietly landed on top of the original.
  *
- * Returns the copies, so the caller can leave the coach holding them: the
- * next thing anyone does after duplicating a shape is drag it into place.
+ * The copy joins the cast on every frame, offset from wherever the original
+ * stands on that frame, so a duplicated player repeats the original's run
+ * rather than standing still through it. A drawing belongs to the moment it
+ * describes, so only the current frame gets a copy of one.
  *
- * The offset goes through `translateGroup`, so a shape duplicated against
- * the touchline stays on the pitch and keeps its formation. A copied player
- * never inherits the ball — a drill has one ball, and duplicating a shape is
- * not a reason to grow another.
+ * Returns the copies, so the caller can leave the coach holding them: the
+ * next thing anyone does after duplicating a shape is drag it into place. A
+ * copied player never inherits the ball — a drill has one ball, and
+ * duplicating a shape is not a reason to grow another.
  */
 function duplicateGroup(refs: SelectionRef[], offset: Vec): SelectionRef[] {
+  if (locked()) return []
   const live = refs.filter((ref) => pointsOfRef(ref) !== null)
   if (live.length === 0) return []
 
   commit()
 
-  const copies: SelectionRef[] = []
-  for (const ref of live) {
-    if (ref.kind === 'counter') {
-      const original = counterById(ref.id)!
-      const copy: Counter = {
-        id: newId(),
-        color: original.color,
-        label: original.label,
-        pos: { ...original.pos },
-      }
-      state.counters.push(copy)
-      copies.push({ kind: 'counter', id: copy.id })
-    } else if (ref.kind === 'marker') {
-      const original = markerById(ref.id)!
-      const copy: Marker = { id: newId(), pos: { ...original.pos } }
-      state.markers.push(copy)
-      copies.push({ kind: 'marker', id: copy.id })
-    } else if (ref.kind === 'label') {
-      const original = labelById(ref.id)!
-      const copy: Label = { id: newId(), pos: { ...original.pos }, text: original.text }
-      state.labels.push(copy)
-      copies.push({ kind: 'label', id: copy.id })
-    } else {
-      // Cloned whole rather than field by field, so a bend, a dash style or
-      // anything a drawing grows later comes along without being listed here.
-      const copy = clone(drawingById(ref.id)!)
-      copy.id = newId()
-      state.drawings.push(copy)
-      copies.push({ kind: 'drawing', id: copy.id })
-    }
-  }
+  // One new id per original, shared by that original's copy on every frame,
+  // so the copies are one player rather than one per moment.
+  const copies: SelectionRef[] = live.map((ref) => ({ kind: ref.kind, id: newId() }))
 
-  translateGroup(copies, offset)
+  allFrames().forEach((frame, index) => {
+    const isCurrent = index === state.currentFrame
+    const made: SelectionRef[] = []
+
+    live.forEach((ref, i) => {
+      const copyId = copies[i].id
+      if (ref.kind === 'counter') {
+        const original = frame.counters.find((c) => c.id === ref.id)
+        if (!original) return
+        // Cloned whole rather than field by field, so anything a counter
+        // grows later comes along without being listed here. A copy never
+        // inherits the ball: a drill has one ball, and duplicating a shape is
+        // not a reason to grow another.
+        const copy = clone(toRaw(original))
+        copy.id = copyId
+        frame.counters.push(copy)
+      } else if (ref.kind === 'marker') {
+        const original = frame.markers.find((m) => m.id === ref.id)
+        if (!original) return
+        const copy = clone(toRaw(original))
+        copy.id = copyId
+        frame.markers.push(copy)
+      } else if (ref.kind === 'label') {
+        const original = frame.labels.find((l) => l.id === ref.id)
+        if (!original) return
+        const copy = clone(toRaw(original))
+        copy.id = copyId
+        frame.labels.push(copy)
+      } else {
+        // Drawings belong to the moment, so only this one gets a copy.
+        if (!isCurrent) return
+        const original = frame.drawings.find((d) => d.id === ref.id)
+        if (!original) return
+        const copy = clone(toRaw(original))
+        copy.id = copyId
+        frame.drawings.push(copy)
+      }
+      made.push(copies[i])
+    })
+
+    // Each frame is trimmed against the pitch on its own, so a copy made
+    // beside a touchline in one moment is not pushed off in another.
+    translatePoints(made.flatMap((ref) => pointsOfRefIn(frame, ref) ?? []), offset)
+  })
+
   return copies
 }
 
@@ -797,7 +1196,9 @@ function duplicateGroup(refs: SelectionRef[], offset: Vec): SelectionRef[] {
 function forgetDrawingInHistory(id: string): void {
   for (const stack of [undoStack, redoStack]) {
     for (const entry of stack.value) {
-      entry.drawings = rawFilter(entry.drawings, (d) => d.id !== id)
+      for (const frame of entry.frames) {
+        frame.drawings = rawFilter(frame.drawings, (d) => d.id !== id)
+      }
     }
   }
 }
@@ -838,6 +1239,7 @@ function finishDrawing(id: string): void {
 }
 
 function deleteDrawing(id: string): void {
+  if (locked()) return
   const index = state.drawings.findIndex((d) => d.id === id)
   if (index === -1) return
   commit()
@@ -845,9 +1247,10 @@ function deleteDrawing(id: string): void {
 }
 
 function clearDrawings(): void {
-  if (state.drawings.length === 0) return
+  if (locked()) return
+  if (state.frames.every((frame) => frame.drawings.length === 0)) return
   commit()
-  state.drawings = []
+  for (const frame of allFrames()) frame.drawings = []
 }
 
 const canUndo = computed(() => undoStack.value.length > 0)
@@ -859,12 +1262,29 @@ const board = {
   undo,
   redo,
   canUndo,
+  playback,
+  timeline,
+  view,
+  viewBallPosition,
+  isDerived,
+  play,
+  pause,
+  rewind,
+  scrubTo,
+  endScrub,
+  beginExport,
+  endExport,
   canRedo,
   snapshot,
   loadSnapshot,
   restoreSnapshot,
   resetBoard,
   clearCounters,
+  addFrame,
+  deleteFrame,
+  moveFrame,
+  setFrameDuration,
+  goToFrame,
   setPitchType,
   setRotated,
   toggleRotated,
@@ -914,9 +1334,13 @@ export function useBoard() {
 /** Test-only: put the singleton back to its just-loaded condition. */
 export function __resetBoardForTests(): void {
   notesUndoEntry = null
-  apply(emptyState())
+  apply(emptySnapshot())
   undoStack.value = []
   redoStack.value = []
   strokeUndoEntries.clear()
   idCounter = 0
+  playback.playing = false
+  playback.at = 0
+  exportLock.value = false
+  stopClock()
 }

@@ -66,26 +66,48 @@ them would otherwise bury real work under five entries that changed nothing.
 
 ## Frames and playback
 
-The headline gap, and the reason `Pattern.frames` is an array holding exactly
-one frame today. This is the difference between depicting a moment and
-explaining a drill: a coach shows a third-man run by playing it, not by
-drawing three arrows and talking over them.
+Landed. `Pattern.frames` finally holds more than one. A frame is the whole
+board at a moment — players, cones, labels, the ball and the drawings — and the
+board tweens between them.
 
-Scope is real:
+Five decisions are worth keeping, because each closed off a plausible
+alternative:
 
-- A frame strip: add, duplicate, delete, reorder.
-- Tweening counter and ball positions between frames, with play, pause and
-  scrub.
-- Exporting an animation, not just a still.
+- **Drawings belong to a frame.** They moved off the pattern, so the arrow
+  describing a pass is on screen while the pass happens rather than hanging
+  over the whole drill. A new frame copies the one before it, so they carry
+  over by default. The alternative — a frame span on each drawing — was more
+  precise and needed its own UI.
+- **The cast is drill-wide.** Only positions and drawings differ between
+  frames. That is what makes tweening by id total rather than a special case,
+  and it is why nobody appears halfway through a drill.
+- **Frames sit behind a getter layer.** `state.counters` and the rest are
+  accessors onto the current frame, which is why roughly three hundred existing
+  references and the whole test suite survived the change untouched.
+- **Bodies are eased and the ball is not.** A player accelerates away and
+  settles; a struck ball does neither. The ball is also detached for the whole
+  move, which is what makes a pass look like a ball travelling rather than one
+  that sits on the passer's boot and teleports.
+- **Editing is refused whenever the view is a blend**, not merely while
+  playing, and releasing the scrub lands on the nearest frame. Otherwise the
+  board can be left parked mid-move refusing every drag with nothing on screen
+  saying why.
 
-**One question settles the design and should be answered before any code is
-written: are drawings per-frame or per-pattern?** They are per-pattern today,
-which is almost certainly wrong once movement is animated — the arrow
-describing a pass should appear on the frame where the pass happens, not hang
-over the whole drill. Changing it is a schema change, so it wants deciding
-first rather than discovering halfway through.
+Two things the spec left implicit were decided along the way. Opening a saved
+pattern always lands on frame one rather than wherever it was saved from,
+because reopening halfway through an animation is not what anyone means by
+opening a drill. And duplicating a player copies them onto every frame,
+offset from wherever the original stands in that moment, so the copy repeats
+the run rather than standing still through it.
 
-This one deserves its own design session rather than a quick sketch.
+Still to do:
+
+- **Timing one movement against another.** A run that starts before the pass
+  that finds it. Every object on a frame currently moves over the same
+  duration, and staggering them needs its own model and its own UI.
+- **Motion paths.** A player travels in a straight line between frames. A
+  curved run is expressed by adding a frame at the turn, which is usually
+  enough — worth revisiting only if it turns out not to be.
 
 ## Smaller things
 

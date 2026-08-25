@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import type { Pattern, ToolMode, Vec } from './types'
+import { gifSchedule } from './animation'
 import Toolbar from './components/Toolbar.vue'
 import ToolRail from './components/ToolRail.vue'
 import PitchBoard from './components/PitchBoard.vue'
 import PatternLibrary from './components/PatternLibrary.vue'
+import HelpPanel from './components/HelpPanel.vue'
+import FrameStrip from './components/FrameStrip.vue'
 import { MAX_LABEL_LENGTH, MAX_NOTES_LENGTH, useBoard } from './composables/useBoard'
 import { useStorage } from './composables/useStorage'
 import { useExport } from './composables/useExport'
@@ -28,6 +31,7 @@ const selectionSize = ref(0)
 const notice = ref<string | null>(null)
 
 const libraryOpen = ref(false)
+const helpOpen = ref(false)
 
 /**
  * The pattern the board came from, and the single owner of that fact.
@@ -52,7 +56,7 @@ const saveNameDraft = ref('')
 const savePromptMode = ref<'new' | 'fork'>('new')
 
 const savePromptTitle = computed(() =>
-  savePromptMode.value === 'fork' ? 'Save a copy as' : 'Name this pattern',
+  savePromptMode.value === 'fork' ? 'Save a copy as' : 'Name this drill',
 )
 
 /** Save: update the open pattern in place, or ask for a name if there is none. */
@@ -68,14 +72,14 @@ function openSavePrompt() {
     return
   }
   savePromptMode.value = 'new'
-  saveNameDraft.value = currentName.value || 'New pattern'
+  saveNameDraft.value = currentName.value || 'New drill'
   savePromptOpen.value = true
 }
 
 /** Save as…: fork the board into a new pattern under a new name. */
 function openSaveAsPrompt() {
   savePromptMode.value = 'fork'
-  saveNameDraft.value = currentName.value ? `${currentName.value} copy` : 'New pattern'
+  saveNameDraft.value = currentName.value ? `${currentName.value} copy` : 'New drill'
   savePromptOpen.value = true
 }
 
@@ -187,6 +191,59 @@ async function exportPng() {
   }
 }
 
+const exporting = ref(false)
+
+/**
+ * Export the drill as an animation.
+ *
+ * The playhead is driven by hand and restored in a `finally`, so a failure
+ * halfway through leaves the board where the coach left it rather than
+ * parked mid-move. `nextTick` between samples is what makes the SVG show
+ * the moment being captured; without it every sample would be the same
+ * picture.
+ */
+async function exportGif() {
+  const svg = boardRef.value?.svgEl
+  if (!svg || exporting.value) return
+
+  const samples = gifSchedule(board.state.frames)
+  const wasAt = board.playback.at
+  exporting.value = true
+  // Locks the board for the export's duration, on top of the reentrancy
+  // guard above: without it, Play or a frame jump fired while sampling races
+  // this function's own seek loop and corrupts the samples, even though the
+  // GIF button itself is disabled — a keyboard shortcut reaches `play()`
+  // directly, past any button's disabled attribute.
+  board.beginExport()
+
+  try {
+    const blob = await exporter.boardToGifBlob(
+      svg,
+      samples,
+      async (atMs) => {
+        board.scrubTo(atMs)
+        await nextTick()
+      },
+      board.state.notesVisible ? board.state.notes : '',
+      800,
+      (done, total) => {
+        notice.value = `Building the animation… ${done} of ${total}`
+      },
+    )
+    exporter.downloadBlob(blob, `${exporter.slugify(currentName.value || 'tactics-board')}.gif`)
+    notice.value = 'Animation saved.'
+  } catch (error) {
+    notice.value = error instanceof Error ? error.message : 'The animation could not be created.'
+  } finally {
+    exporting.value = false
+    // Released before the playhead is put back: `endScrub` lands on a frame
+    // through `goToFrame`, which the export lock itself refuses.
+    board.endExport()
+    board.scrubTo(wasAt)
+    board.endScrub()
+  }
+}
+
 function exportJson() {
   const patterns = storage.listPatterns()
   if (patterns.length === 0) {
@@ -234,13 +291,18 @@ const isDialogOpen = computed(
   () =>
     savePromptOpen.value ||
     libraryOpen.value ||
+    helpOpen.value ||
     renameCounterId.value !== null ||
     labelTarget.value !== null,
 )
 
 function onKeydown(event: KeyboardEvent) {
   const target = event.target as HTMLElement | null
-  if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return
+  if (
+    target &&
+    (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+  )
+    return
 
   /*
    * Shortcuts must not reach the board while a dialog is up. Checking the
@@ -288,6 +350,33 @@ function onKeydown(event: KeyboardEvent) {
     return
   }
 
+  if (event.key === ' ') {
+    /*
+     * Space alone carries this exemption because Space alone needs it: a
+     * focused BUTTON, A or SELECT already activates itself on Space, so
+     * stealing the key here would both toggle playback AND suppress the
+     * chip's own press (preventDefault silences the platform's default
+     * action too). Escape, Delete, Backspace and the tool letters do none
+     * of that on a focused button — there is nothing native to protect —
+     * so they must NOT be given this same exemption. Do not move this
+     * check into the shared guard above: doing so once already broke
+     * Escape/Delete/tool-switching for a coach who had just clicked a chip,
+     * which is most of the time a chip has focus.
+     */
+    if (
+      target &&
+      (target.tagName === 'BUTTON' || target.tagName === 'A' || target.tagName === 'SELECT')
+    )
+      return
+    // Space is the universal play/pause, but it is also a character typed
+    // into a field — the shared guard above is what keeps a space in the
+    // drill notes from starting the animation.
+    event.preventDefault()
+    if (board.playback.playing) board.pause()
+    else board.play()
+    return
+  }
+
   if (event.key.toLowerCase() === 'b') {
     board.toggleBallVisible()
     return
@@ -325,6 +414,10 @@ let saveTimer: ReturnType<typeof setTimeout> | undefined
 watch(
   () => board.state,
   () => {
+    // Playing moves the playhead, not the drill. Writing a draft several
+    // times a second during a play-through risks restoring a half-tweened
+    // board on the next start, and none of it is a change worth saving.
+    if (board.isDerived.value) return
     clearTimeout(saveTimer)
     saveTimer = setTimeout(() => storage.saveDraft(board.snapshot()), 400)
   },
@@ -340,15 +433,18 @@ watch(
       :pattern-name="currentName"
       :railed="isRail"
       :selection-size="selectionSize"
+      :exporting="exporting"
       @duplicate="boardRef?.duplicateSelected()"
       @deleteSelection="boardRef?.deleteSelected()"
       @save="openSavePrompt"
       @saveAs="openSaveAsPrompt"
       @open="libraryOpen = true"
       @exportPng="exportPng"
+      @exportGif="exportGif"
       @exportJson="exportJson"
       @importJson="importJson"
       @reset="onBoardReset"
+      @help="helpOpen = true"
     />
     <div class="workspace">
       <ToolRail
@@ -367,6 +463,7 @@ watch(
           @edit-label="promptEditLabel"
           @selection-size="selectionSize = $event"
         />
+        <FrameStrip :exporting="exporting" />
       </div>
 
       <aside v-if="board.state.notesVisible" class="notes">
@@ -390,6 +487,8 @@ watch(
       @rename="onPatternRenamed"
       @delete="onPatternDeleted"
     />
+
+    <HelpPanel :open="helpOpen" @close="helpOpen = false" />
 
     <div v-if="labelTarget" class="overlay" @click.self="labelTarget = null">
       <div class="prompt" role="dialog" aria-label="Label text">
@@ -471,7 +570,14 @@ body { font-family: system-ui, sans-serif; background: #102010; }
 <style scoped>
 .app { display: flex; flex-direction: column; height: 100%; }
 .workspace { flex: 1; min-height: 0; display: flex; gap: 0.75rem; padding: 0.75rem; }
-.stage { flex: 1; min-height: 0; min-width: 0; }
+/*
+ * A column, so the frame strip is always on screen and the board gives up the
+ * room for it. The board used to take the whole height and push the strip off
+ * the bottom of the page, which made the way into frames something a coach had
+ * to scroll to find.
+ */
+.stage { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.stage > :first-child { flex: 1; min-height: 0; }
 
 /*
  * Beside the board on a wide screen, beneath it on a narrow one — a coach

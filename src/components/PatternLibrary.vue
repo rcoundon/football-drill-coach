@@ -87,13 +87,13 @@ function formatDate(iso: string): string {
 
 <template>
   <div v-if="open" class="overlay" @click.self="emit('close')">
-    <section class="panel" role="dialog" aria-label="Saved patterns">
+    <section class="panel" role="dialog" aria-label="Saved drills">
       <header class="head">
-        <h2>Saved patterns</h2>
+        <h2>Saved drills</h2>
         <button class="chip" @click="emit('close')">Close</button>
       </header>
 
-      <p v-if="isEmpty" class="empty">Nothing saved yet. Set up a pattern and press Save.</p>
+      <p v-if="isEmpty" class="empty">Nothing saved yet. Build a drill and press Save.</p>
 
       <ul v-else class="list">
         <li v-for="pattern in patterns" :key="pattern.id" data-pattern class="row">

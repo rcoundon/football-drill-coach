@@ -114,22 +114,37 @@ export type Ball = {
 }
 
 /**
- * One moment of the drill. v1 always has exactly one frame; record and
- * playback will append frames without any schema change.
+ * One moment of the drill: where everything stands, and what is drawn over
+ * it. A frame is the whole board at an instant, which is why drawings live
+ * here rather than on the pattern — the arrow describing a pass belongs to
+ * the moment the pass happens, not to the whole drill.
  */
 export type Frame = {
   counters: Counter[]
   markers: Marker[]
   labels: Label[]
   ball: Ball
+  drawings: Drawing[]
+  /**
+   * How long the move INTO this frame takes, in milliseconds. Absent means
+   * DEFAULT_FRAME_MS. The first frame's value is ignored: nothing moves into
+   * the start of a drill.
+   *
+   * Optional so a pattern saved before playback existed needs no rewriting.
+   */
+  duration?: number
 }
 
 export type Pattern = {
   id: string
   name: string
-  version: 1
+  version: 2
   pitch: { type: PitchType; rotated: boolean }
-  drawings: Drawing[]
+  /**
+   * Where drawings lived before they belonged to a moment. Read into the
+   * first frame when a v1 pattern is opened, and never written again.
+   */
+  drawings?: Drawing[]
   labelsVisible?: boolean
   /**
    * Free text describing the whole drill — setup, coaching points,

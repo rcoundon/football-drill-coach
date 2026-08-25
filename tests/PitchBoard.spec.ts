@@ -75,6 +75,17 @@ function clientFor(x: number, y: number) {
 }
 
 /**
+ * Where a counter is actually drawn. PlayerCounter has no `data-x`/`data-y` —
+ * position is carried on the group's `transform`, so read it from there.
+ */
+function counterPos(wrapper: ReturnType<typeof mountBoard>): Vec {
+  const transform = wrapper.find('[data-counter]').element.getAttribute('transform')
+  const match = transform?.match(/translate\(([-\d.]+) ([-\d.]+)\)/)
+  if (!match) throw new Error(`counter has no translate transform: ${String(transform)}`)
+  return { x: Number(match[1]), y: Number(match[2]) }
+}
+
+/**
  * Choose a drawing the way a coach does — by pressing it. Handles only exist
  * for the drawing being worked on, so nearly every handle test starts here.
  */
@@ -2351,5 +2362,95 @@ describe('duplicating what is held', () => {
     await boxTheShape(wrapper)
 
     expect(wrapper.emitted('selectionSize')?.at(-1)).toEqual([2])
+  })
+})
+
+describe('rendering the playhead', () => {
+  it('draws players where the blend says, not where the frame says', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    const id = board.state.counters[0].id
+    board.moveCounter(id, { x: 10, y: 30 })
+    board.addFrame()
+    board.moveCounter(id, { x: 50, y: 30 })
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+
+    const wrapper = mountBoard()
+    board.scrubTo(500)
+    await nextTick()
+
+    // Halfway between 10 and 50 under the easing curve, which is even at t=0.5.
+    expect(counterPos(wrapper).x).toBeCloseTo(30, 4)
+  })
+
+  it('ignores a press while the view is a blend', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    const id = board.state.counters[0].id
+    board.moveCounter(id, { x: 10, y: 30 })
+    board.addFrame()
+    board.moveCounter(id, { x: 50, y: 30 })
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+
+    const wrapper = mountBoard()
+    board.scrubTo(500)
+    await nextTick()
+
+    /*
+     * `moveCounter` already no-ops while derived, at the state layer, so a
+     * bare position check here would pass even without a board-level guard.
+     * Spying on `commit` catches the part that is this task's to fix: the
+     * press must never start a drag at all, not just fail to move anything.
+     */
+    const commitSpy = vi.spyOn(board, 'commit')
+    await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(30, 30))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(80, 10))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(80, 10))
+
+    expect(commitSpy).not.toHaveBeenCalled()
+    expect(board.state.frames[0].counters.find((c) => c.id === id)!.pos).toEqual({ x: 10, y: 30 })
+  })
+
+  it('follows the coach to another frame', async () => {
+    // Carried forward from Task 2's review: the plan rests on a rendered
+    // board actually following the current frame, and until now that was
+    // only ever asserted by reading state directly, which would pass even
+    // if nothing re-rendered.
+    const board = useBoard()
+    board.addCounter('red')
+    const id = board.state.counters[0].id
+    board.moveCounter(id, { x: 10, y: 30 })
+    board.addFrame()
+    board.moveCounter(id, { x: 50, y: 30 })
+
+    const wrapper = mountBoard()
+    board.goToFrame(0)
+    await nextTick()
+    expect(counterPos(wrapper).x).toBeCloseTo(10, 4)
+
+    board.goToFrame(1)
+    await nextTick()
+    expect(counterPos(wrapper).x).toBeCloseTo(50, 4)
+  })
+
+  it('clears the selection when play starts', async () => {
+    const board = useBoard()
+    const drawingId = board.startLine({ x: 5, y: 5 }, '#fff')
+    board.updateSegment(drawingId, { x: 25, y: 25 })
+    board.finishDrawing(drawingId)
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+
+    const wrapper = mountBoard()
+    await selectDrawing(wrapper, clientFor(15, 15))
+    expect(wrapper.emitted('selectionSize')?.at(-1)).toEqual([1])
+
+    board.play()
+    await nextTick()
+    expect(wrapper.emitted('selectionSize')?.at(-1)).toEqual([0])
+    board.pause()
   })
 })

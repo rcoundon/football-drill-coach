@@ -11,14 +11,19 @@ beforeEach(() => {
 
 function seed(name: string) {
   return useStorage().savePattern(name, {
-    counters: [{ id: 'a', color: 'red', label: '1', pos: { x: 10, y: 10 } }],
-    markers: [],
-    labels: [],
+    frames: [
+      {
+        counters: [{ id: 'a', color: 'red', label: '1', pos: { x: 10, y: 10 } }],
+        markers: [],
+        labels: [],
+        ball: { pos: { x: 5, y: 5 }, attachedTo: null, visible: true },
+        drawings: [],
+      },
+    ],
+    currentFrame: 0,
     labelsVisible: true,
     notes: '',
     notesVisible: true,
-    ball: { pos: { x: 5, y: 5 }, attachedTo: null, visible: true },
-    drawings: [],
     pitch: { type: 'full', rotated: false },
   })
 }
@@ -125,5 +130,21 @@ describe('renaming', () => {
     await wrapper.find('[data-rename-save]').trigger('click')
 
     expect(wrapper.emitted('rename')).toEqual([[{ id: saved.id, name: 'Counter press' }]])
+  })
+})
+
+describe('calling a drill a drill', () => {
+  it('titles the library after what a coach saved', () => {
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    expect(wrapper.find('h2').text()).toBe('Saved drills')
+    expect(wrapper.attributes('aria-label') ?? wrapper.find('[role="dialog"]').attributes('aria-label')).toBe(
+      'Saved drills',
+    )
+  })
+
+  it('says what to do when there is nothing saved yet', () => {
+    localStorage.clear()
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    expect(wrapper.find('.empty').text()).toBe('Nothing saved yet. Build a drill and press Save.')
   })
 })

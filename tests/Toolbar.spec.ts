@@ -36,6 +36,18 @@ describe('colour palette', () => {
     await wrapper.find('[data-add-counter="blue"]').trigger('click')
     expect(wrapper.emitted('update:tool')).toBeUndefined()
   })
+
+  it('will not add a player while the drill is playing', async () => {
+    const board = useBoard()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+    board.scrubTo(500)
+
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-add-counter="red"]').attributes('disabled')).toBeDefined()
+    board.endScrub()
+  })
 })
 
 describe('tool selection', () => {
@@ -95,6 +107,24 @@ describe('acting on what is held', () => {
   })
 })
 
+/**
+ * A coach who does not know what a control does has no way to find out —
+ * that gap is what the Help panel exists to close. The chip sits beside
+ * Undo, Redo, Copy and Delete: the one group never folded behind ☰ More.
+ */
+describe('Help', () => {
+  it('sits beside Undo, Redo, Copy and Delete', () => {
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-help]').exists()).toBe(true)
+  })
+
+  it('emits help when pressed', async () => {
+    const wrapper = mountToolbar()
+    await wrapper.find('[data-help]').trigger('click')
+    expect(wrapper.emitted('help')).toBeTruthy()
+  })
+})
+
 describe('pitch controls', () => {
   it('changes the pitch type', async () => {
     const board = useBoard()
@@ -124,6 +154,30 @@ describe('undo and redo buttons', () => {
     const wrapper = mountToolbar()
     await wrapper.find('[data-undo]').trigger('click')
     expect(board.state.counters).toHaveLength(0)
+  })
+
+  /**
+   * `undo` and `redo` both refuse outright while the view is derived — a
+   * blend is not something an earlier snapshot could be applied under. Left
+   * unreflected, a coach pausing mid-move saw two live-looking buttons that
+   * quietly did nothing.
+   */
+  it('are disabled while the drill is mid-move, even though there is something to undo and redo', () => {
+    const board = useBoard()
+    board.addCounter('red')
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+    board.undo() // leaves something to undo AND something to redo
+    expect(board.canUndo.value).toBe(true)
+    expect(board.canRedo.value).toBe(true)
+
+    board.scrubTo(500)
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-undo]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-redo]').attributes('disabled')).toBeDefined()
+
+    board.endScrub()
   })
 })
 
@@ -165,7 +219,7 @@ describe('the open pattern', () => {
   it('says so when nothing is open, so Save cannot look like an update', () => {
     const wrapper = mountToolbar()
     expect(wrapper.find('[data-current-pattern]').text()).toMatch(/unsaved/i)
-    expect(wrapper.find('[data-save]').attributes('title')).toMatch(/new pattern/i)
+    expect(wrapper.find('[data-save]').attributes('title')).toMatch(/new drill/i)
   })
 })
 
@@ -231,6 +285,76 @@ describe('clearing the board', () => {
     expect(wrapper.find('[data-clear-players]').attributes('disabled')).toBeUndefined()
     expect(wrapper.find('[data-clear-drawings]').attributes('disabled')).toBeDefined()
     expect(wrapper.find('[data-reset]').attributes('disabled')).toBeUndefined()
+  })
+
+  /**
+   * Counters, markers and labels are drill-wide, so the current frame's own
+   * length already speaks for every frame. Drawings and the ball's
+   * possession are not: a coach parked on an empty frame must still be
+   * offered Clear drawings and Reset when an earlier or later frame has
+   * something to lose, or there is no way to reach it from that frame.
+   */
+  it('are not disabled just because the frame showing has nothing, when another frame does', () => {
+    const board = useBoard()
+    board.addFrame()
+    board.goToFrame(0)
+    const line = board.startLine({ x: 5, y: 5 }, '#fff')
+    board.updateSegment(line, { x: 60, y: 5 })
+    board.finishDrawing(line)
+    board.goToFrame(1) // parked on the frame with nothing on it
+
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-clear-drawings]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-reset]').attributes('disabled')).toBeUndefined()
+  })
+
+  /**
+   * Every mutator these buttons call refuses outright while the view is
+   * derived, so pausing mid-move used to leave five live-looking buttons
+   * that quietly did nothing when pressed.
+   */
+  it('are disabled while the drill is mid-move, even though there is something to act on', () => {
+    const board = useBoard()
+    board.addCounter('red')
+    const line = board.startLine({ x: 5, y: 5 }, '#fff')
+    board.updateSegment(line, { x: 60, y: 5 })
+    board.finishDrawing(line)
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+    board.scrubTo(500)
+
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-clear-players]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-clear-drawings]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-reset]').attributes('disabled')).toBeDefined()
+
+    board.endScrub()
+  })
+
+  /**
+   * `board.resetBoard()` already refuses while the view is derived — but
+   * `Toolbar.resetBoard()` used to emit `reset` unconditionally regardless,
+   * so the app forgot the pattern that was open even though nothing on the
+   * board had actually changed. The next Save then wrote a duplicate under a
+   * new id, silently, with no undo.
+   */
+  it('emits nothing while mid-move, so a saved pattern is not silently detached', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+    board.scrubTo(500)
+
+    const wrapper = mountToolbar()
+    await wrapper.find('[data-reset]').trigger('click')
+
+    expect(board.state.frames).toHaveLength(2)
+    expect(board.state.counters).toHaveLength(1)
+    expect(wrapper.emitted('reset')).toBeUndefined()
+
+    board.endScrub()
   })
 })
 
@@ -357,6 +481,18 @@ describe('on a narrow screen', () => {
   })
 
   /**
+   * Help belongs with Undo, Redo, Copy and Delete rather than behind ☰ More:
+   * a coach who does not know what a control does needs the explanation to
+   * be as reachable as the control itself, on the device this board is
+   * mostly used on.
+   */
+  it('keeps Help out in the open on a narrow screen too', () => {
+    stubNarrow(true)
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-help]').exists()).toBe(true)
+  })
+
+  /**
    * The controls used once per drill move behind a menu so the ones used
    * constantly can be big enough to hit.
    */
@@ -394,6 +530,33 @@ describe('on a narrow screen', () => {
   })
 })
 
+/**
+ * A GIF of a single still is a worse PNG, so the button only appears once
+ * there is a second frame for it to actually animate between.
+ */
+describe('the GIF button', () => {
+  it('is hidden while the drill is a single moment, because PNG covers that', () => {
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-export-gif]').exists()).toBe(false)
+  })
+
+  it('appears once there is something to animate', async () => {
+    const board = useBoard()
+    board.addFrame()
+    const wrapper = mountToolbar()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-export-gif]').exists()).toBe(true)
+  })
+
+  it('asks the app to export', async () => {
+    const board = useBoard()
+    board.addFrame()
+    const wrapper = mountToolbar()
+    await wrapper.find('[data-export-gif]').trigger('click')
+    expect(wrapper.emitted('exportGif')).toHaveLength(1)
+  })
+})
+
 describe('when a rail is carrying the tools', () => {
   function mountRailed() {
     return mount(Toolbar, {
@@ -424,5 +587,32 @@ describe('when a rail is carrying the tools', () => {
 
   it('needs no More menu, because what is left already fits', () => {
     expect(mountRailed().find('[data-more]').exists()).toBe(false)
+  })
+})
+
+/**
+ * The board says "drill" everywhere a coach reads — Build the drill, Drill
+ * notes, all through the Help panel — but the row that saves one said
+ * "Pattern", which is the internal noun for the same object. A coach who had
+ * just been told to build a drill went looking for a drill and found a
+ * pattern, so the way to save their work read as something else entirely.
+ */
+describe('calling a drill a drill', () => {
+  it('names the group after what a coach is saving', () => {
+    const wrapper = mountToolbar()
+    expect(wrapper.text()).toContain('Drill')
+    expect(wrapper.text()).not.toContain('Pattern')
+  })
+
+  it('offers to save a new drill when nothing is open', () => {
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-save]').attributes('title')).toBe('Save as a new drill')
+  })
+
+  it('offers to update the drill that is open', () => {
+    const wrapper = mount(Toolbar, {
+      props: { tool: 'select' as ToolMode, drawColor: '#ffffff', patternName: 'Overlap' },
+    })
+    expect(wrapper.find('[data-save]').attributes('title')).toBe('Update “Overlap”')
   })
 })

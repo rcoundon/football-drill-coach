@@ -62,8 +62,9 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function fire(init: KeyboardEventInit, target: EventTarget = window) {
-  target.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }))
+/** Returns what `dispatchEvent` returns: false once something calls `preventDefault`. */
+function fire(init: KeyboardEventInit, target: EventTarget = window): boolean {
+  return target.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }))
 }
 
 describe('resetting the board', () => {
@@ -89,6 +90,38 @@ describe('resetting the board', () => {
 
     expect(wrapper.find('[data-current-pattern]').text()).not.toContain('High press')
     expect(storage.listPatterns().find((p) => p.id === saved.id)).toBeDefined()
+  })
+
+  /**
+   * Reset refuses on the board while the drill is playing or mid-move — but
+   * the toolbar used to forget the open pattern regardless, so the coach saw
+   * "Unsaved" for a board that had not actually changed, and the next Save
+   * wrote a duplicate under a new id.
+   */
+  it('is refused while the drill is playing or mid-move, so a saved pattern is not silently detached', async () => {
+    const board = useBoard()
+    const storage = useStorage()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+    storage.savePattern('High press', board.snapshot())
+
+    wrapper = mountApp()
+    await wrapper.vm.$nextTick()
+
+    await openLibraryAndLoad(wrapper)
+    expect(wrapper.find('[data-current-pattern]').text()).toContain('High press')
+
+    board.scrubTo(500)
+    await wrapper.vm.$nextTick()
+
+    await wrapper.find('[data-reset]').trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[data-current-pattern]').text()).toContain('High press')
+    expect(board.state.frames).toHaveLength(2)
+
+    board.endScrub()
   })
 })
 
@@ -390,14 +423,19 @@ describe('renaming a counter label', () => {
 
 function sampleSnapshot(): BoardSnapshot {
   return {
-    counters: [{ id: 'a', color: 'red', label: '1', pos: { x: 10, y: 10 } }],
-    markers: [],
-    labels: [],
+    frames: [
+      {
+        counters: [{ id: 'a', color: 'red', label: '1', pos: { x: 10, y: 10 } }],
+        markers: [],
+        labels: [],
+        ball: { pos: { x: 5, y: 5 }, attachedTo: null, visible: true },
+        drawings: [],
+      },
+    ],
+    currentFrame: 0,
     labelsVisible: true,
     notes: '',
     notesVisible: true,
-    ball: { pos: { x: 5, y: 5 }, attachedTo: null, visible: true },
-    drawings: [],
     pitch: { type: 'full', rotated: false },
   }
 }
@@ -919,5 +957,239 @@ describe('the tablet rail layout', () => {
     expect(
       wrapper.findComponent({ name: 'ToolRail' }).find('[data-tool="cone"]').classes(),
     ).toContain('is-active')
+  })
+})
+
+describe('the frame strip', () => {
+  it('is on the page', () => {
+    wrapper = mountApp()
+    expect(wrapper.find('[data-add-frame]').exists()).toBe(true)
+  })
+})
+
+/**
+ * jsdom has no canvas, so `boardToGifBlob` always rejects here — every
+ * export in this suite runs the `finally` path. That is exactly what these
+ * pin: exportGif had no test at all before this, and separately, the GIF
+ * button was declared `exporting` but never wired to it, so nothing on
+ * screen showed an export was under way.
+ */
+describe('exporting an animation', () => {
+  it('restores the playhead and reports the failure, rather than leaving the board wherever it last sampled to', async () => {
+    const board = useBoard()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+    const app = (wrapper = mountApp())
+    await nextTick()
+
+    const wasAt = board.playback.at
+    await app.find('[data-export-gif]').trigger('click')
+
+    await vi.waitFor(() => {
+      expect(app.find('.notice').text()).toMatch(/could not create the image/i)
+    })
+
+    expect(board.playback.at).toBe(wasAt)
+    expect(board.isDerived.value).toBe(false)
+  })
+
+  it('disables the GIF button for as long as the export is running', async () => {
+    const board = useBoard()
+    board.addFrame()
+    const app = (wrapper = mountApp())
+    await nextTick()
+
+    const click = app.find('[data-export-gif]').trigger('click')
+    await nextTick()
+    expect(app.find('[data-export-gif]').attributes('disabled')).toBeDefined()
+
+    await click
+    await vi.waitFor(() => {
+      expect(app.find('.notice').text()).toMatch(/could not create the image/i)
+    })
+
+    expect(app.find('[data-export-gif]').attributes('disabled')).toBeUndefined()
+  })
+
+  /**
+   * The frame strip's own transport must not be able to race the export's
+   * seek loop. Space is the case a disabled button cannot catch: it drives
+   * `board.play()` directly, so the lock has to live under the button, not
+   * only on it.
+   */
+  it('refuses to start playing from the keyboard while it runs', async () => {
+    const board = useBoard()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+    const app = (wrapper = mountApp())
+    await nextTick()
+
+    const click = app.find('[data-export-gif]').trigger('click')
+    await nextTick()
+
+    fire({ key: ' ' })
+    await nextTick()
+    expect(board.playback.playing).toBe(false)
+
+    await click
+    await vi.waitFor(() => {
+      expect(app.find('.notice').text()).toMatch(/could not create the image/i)
+    })
+  })
+})
+
+describe('space plays and pauses', () => {
+  it('toggles playback', async () => {
+    const board = useBoard()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+    wrapper = mountApp()
+
+    fire({ key: ' ' })
+    await nextTick()
+    expect(board.playback.playing).toBe(true)
+
+    fire({ key: ' ' })
+    await nextTick()
+    expect(board.playback.playing).toBe(false)
+  })
+
+  it('is left alone while the coach is typing in the notes', async () => {
+    const board = useBoard()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    wrapper = mountApp()
+
+    const notes = wrapper.find('[data-notes]').element as HTMLTextAreaElement
+    notes.focus()
+    fire({ key: ' ' }, notes)
+    await nextTick()
+    expect(board.playback.playing).toBe(false)
+
+    // A control, not an afterthought: without it this test cannot fail,
+    // because Space typed nowhere at all would also leave playback alone.
+    // Firing the same key on the window proves the shortcut really exists
+    // and that the notes field is the reason it did not fire above.
+    fire({ key: ' ' })
+    await nextTick()
+    expect(board.playback.playing).toBe(true)
+  })
+
+  it('leaves a focused chip alone, so the chip still responds to its own Space press', async () => {
+    const board = useBoard()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    wrapper = mountApp()
+
+    // The add-frame chip is a real <button>, exactly like every chip in
+    // Toolbar, ToolRail and FrameStrip. Space is the platform's own way to
+    // press a focused button, so the shortcut must not steal it — a coach
+    // who just clicked a chip still has that chip focused.
+    const chip = wrapper.find('[data-add-frame]').element as HTMLButtonElement
+    chip.focus()
+    const notPrevented = fire({ key: ' ' }, chip)
+    await nextTick()
+    expect(board.playback.playing).toBe(false)
+    // Not prevented: the chip's own native activation must survive, or
+    // clicking a chip and then pressing Space would appear to do nothing.
+    expect(notPrevented).toBe(true)
+  })
+})
+
+/**
+ * Round 1 of this feature exempted a focused button/link/select from the
+ * *shared* typing guard, on the reasoning that "one guard, one place this
+ * decision lives". That fixed Space stealing a chip's own press, but the
+ * same guard sits in front of every other shortcut too: Escape, Delete,
+ * Backspace and the tool letters do nothing on a focused button natively,
+ * so exempting BUTTON there was never protecting anything — it was only
+ * silencing them. A coach who clicks Move, boxes a group, and presses
+ * Delete does this constantly, since the button they just clicked keeps
+ * focus. These three pin that the fix belongs on Space alone.
+ */
+describe('other shortcuts still work with a chip focused', () => {
+  /** Draw an arrow and select it by pressing it, as a coach would. */
+  async function selectAnArrow(app: VueWrapper) {
+    const board = useBoard()
+    const id = board.startArrow({ x: 20, y: 30 }, '#ffffff', 'pass')
+    board.updateSegment(id, { x: 60, y: 30 })
+    board.finishDrawing(id)
+    await app.vm.$nextTick()
+    const path = app.find('[data-drawing]').element
+    await firePointer(path, 'pointerdown', clientFor(40, 30))
+    await firePointer(app.find('svg').element, 'pointerup', clientFor(40, 30))
+  }
+
+  it('still clears the selection on Escape', async () => {
+    wrapper = mountApp()
+    await selectAnArrow(wrapper)
+    expect(wrapper.find('[data-selected]').exists()).toBe(true)
+
+    const chip = wrapper.find('[data-add-frame]').element as HTMLButtonElement
+    chip.focus()
+    fire({ key: 'Escape' }, chip)
+    await nextTick()
+
+    expect(wrapper.find('[data-selected]').exists()).toBe(false)
+  })
+
+  it('still deletes the selection on Delete', async () => {
+    const board = useBoard()
+    wrapper = mountApp()
+    await selectAnArrow(wrapper)
+
+    const chip = wrapper.find('[data-add-frame]').element as HTMLButtonElement
+    chip.focus()
+    fire({ key: 'Delete' }, chip)
+    await nextTick()
+
+    expect(board.state.drawings).toEqual([])
+  })
+
+  it('still switches tool on a tool letter', async () => {
+    wrapper = mountApp()
+
+    const chip = wrapper.find('[data-add-frame]').element as HTMLButtonElement
+    chip.focus()
+    fire({ key: 'p' }, chip)
+    await nextTick()
+
+    expect(wrapper.find('[data-tool="pen"]').classes()).toContain('is-active')
+  })
+})
+
+describe('autosave during playback', () => {
+  it('does not write a half-tweened board to the draft', async () => {
+    const board = useBoard()
+    const storage = useStorage()
+    wrapper = mountApp()
+
+    // Three frames, two moves, so scrubbing into the second move changes
+    // `currentFrame` (0 -> 1) while still leaving the view a blend. With
+    // only two frames the index cannot change without also landing exactly
+    // on a frame (t === 0), which would not exercise the guard at all.
+    board.addCounter('red')
+    board.addFrame()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.setFrameDuration(2, 1000)
+    board.goToFrame(0)
+
+    // Let that settle into a real saved draft, so what follows is checked
+    // against an actual baseline rather than "nothing was ever written".
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    const before = localStorage.getItem('fct.draft.v1')
+    expect(before).toBeTruthy()
+
+    board.play()
+    board.scrubTo(1500)
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    expect(localStorage.getItem('fct.draft.v1')).toBe(before)
+
+    board.pause()
+    void storage
   })
 })
