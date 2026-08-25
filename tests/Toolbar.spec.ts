@@ -653,3 +653,24 @@ describe('putting more balls out', () => {
     board.endScrub()
   })
 })
+
+describe('a board with balls on it is not an empty board', () => {
+  it('lets you reset once another ball is out', async () => {
+    const board = useBoard()
+    const wrapper = mountToolbar()
+    // A fresh board has one ball, and that alone is not something to clear.
+    expect(wrapper.find('[data-reset]').attributes('disabled')).toBeDefined()
+
+    board.addBall()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-reset]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('lets you reset once the only ball has been taken off', async () => {
+    const board = useBoard()
+    const wrapper = mountToolbar()
+    board.removeBall(board.state.balls[0].id)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-reset]').attributes('disabled')).toBeUndefined()
+  })
+})

@@ -106,7 +106,11 @@ const isBoardEmpty = computed(
     board.state.labels.length === 0 &&
     board.state.notes === '' &&
     !hasAnyDrawings.value &&
-    !hasAttachedBall.value,
+    !hasAttachedBall.value &&
+    // A fresh board comes with one ball out, so that alone is nothing to
+    // clear. Any other number means the coach put balls out or took the last
+    // one off, and either way there is something for Reset to undo.
+    board.state.balls.length === 1,
 )
 
 function resetBoard() {
