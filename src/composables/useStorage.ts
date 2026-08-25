@@ -1,15 +1,15 @@
 import { ref } from 'vue'
 import type { Ball, Counter, Drawing, Frame, Label, Marker, Pattern } from '../types'
 import type { BoardSnapshot } from './useBoard'
-import { PITCH_H, PITCH_W } from '../geometry'
+import type { Vec } from '../types'
 
 export const PATTERNS_KEY = 'fct.patterns.v1'
 export const DRAFT_KEY = 'fct.draft.v1'
 
-const SCHEMA_VERSION = 2
+const SCHEMA_VERSION = 3
 
 /** Versions this build can open. Only SCHEMA_VERSION is ever written. */
-const READABLE_VERSIONS = new Set([1, 2])
+const READABLE_VERSIONS = new Set([1, 2, 3])
 
 const lastError = ref<string | null>(null)
 
@@ -49,9 +49,38 @@ function isValidCounter(value: unknown): boolean {
  * pattern written before that had one on the pitch. A missing flag
  * therefore means visible, not invalid.
  */
-function withBallDefaults(ball: unknown): unknown {
-  if (!isObject(ball)) return ball
-  return { ...ball, visible: ball.visible !== false }
+/**
+ * The balls on a frame, however the frame was written.
+ *
+ * Before version 3 a frame had one ball, `frame.ball`, carrying its own
+ * `visible` flag. That ball becomes the first of a list, and the flag is
+ * lifted out to the drill by `ballsVisibleOf`. `sharedId` is minted once per
+ * drill and handed to every phase, because playback matches a ball in one
+ * phase to the same ball in the next — a fresh id per phase would leave it
+ * with nothing to match.
+ */
+function ballsOf(frame: Record<string, unknown>, sharedId: string): Ball[] {
+  if (Array.isArray(frame.balls)) return frame.balls as Ball[]
+  if (!isObject(frame.ball)) return []
+  const { pos, attachedTo } = frame.ball as { pos: Vec; attachedTo: string | null }
+  return [{ id: sharedId, pos, attachedTo }]
+}
+
+/**
+ * Whether the balls are shown, however the drill was written.
+ *
+ * Before version 3 this rode on the ball itself, which put it on the frame —
+ * so hiding the ball on one phase left it showing on the next. It is a
+ * drill-wide setting now, and an older drill's answer is taken from its first
+ * phase. A missing flag means visible: the ball could not be hidden at all
+ * until after version 1 shipped.
+ */
+function ballsVisibleOf(value: Record<string, unknown>): boolean {
+  if (typeof value.ballsVisible === 'boolean') return value.ballsVisible
+  const frames = value.frames as Record<string, unknown>[] | undefined
+  const first = Array.isArray(frames) ? frames[0] : value
+  const legacy = isObject(first) ? (first.ball as { visible?: unknown } | undefined) : undefined
+  return !(isObject(legacy) && legacy.visible === false)
 }
 
 function isValidBall(value: unknown): boolean {
@@ -152,13 +181,21 @@ export function parsePattern(value: unknown): Pattern {
   }
 
   for (const frame of value.frames) {
-    if (!isObject(frame) || !Array.isArray(frame.counters) || !isObject(frame.ball)) {
+    if (!isObject(frame) || !Array.isArray(frame.counters)) {
+      throw new Error('That pattern has a damaged frame.')
+    }
+    // Either shape is readable: a list from version 3, a single ball before it.
+    if (frame.balls !== undefined && !Array.isArray(frame.balls)) {
+      throw new Error('That pattern has a damaged ball position.')
+    }
+    if (frame.balls === undefined && !isObject(frame.ball)) {
       throw new Error('That pattern has a damaged frame.')
     }
     if (!frame.counters.every(isValidCounter)) {
       throw new Error('That pattern has a damaged player position.')
     }
-    if (!isValidBall(frame.ball)) {
+    const ballsToCheck = Array.isArray(frame.balls) ? frame.balls : [frame.ball]
+    if (!ballsToCheck.every(isValidBall)) {
       throw new Error('That pattern has a damaged ball position.')
     }
     if (!markersOf(frame).every(isValidMarker)) {
@@ -294,6 +331,16 @@ function nowIso(): string {
   return new Date().toISOString()
 }
 
+/**
+ * An id for a ball recovered from a drill saved before balls had them.
+ *
+ * Mirrors `newId` in useBoard rather than importing it, for the same reason
+ * `emptyFrameData` mirrors `emptyFrame`: the two modules stay apart.
+ */
+function makeBallId(): string {
+  return `b${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+}
+
 function makeId(): string {
   return `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
 }
@@ -305,12 +352,16 @@ function makeId(): string {
  * the whole drill. They belong to the first frame now — the only frame a v1
  * pattern has.
  */
-function frameWithDefaults(frame: Record<string, unknown>, legacyDrawings: Drawing[]): Frame {
+function frameWithDefaults(
+  frame: Record<string, unknown>,
+  legacyDrawings: Drawing[],
+  ballId: string,
+): Frame {
   return {
     counters: (frame.counters ?? []) as Counter[],
     markers: markersOf(frame) as Marker[],
     labels: labelsOf(frame) as Label[],
-    ball: withBallDefaults(frame.ball) as Ball,
+    balls: ballsOf(frame, ballId),
     drawings: (frame.drawings ?? legacyDrawings) as Drawing[],
     ...(typeof frame.duration === 'number' ? { duration: frame.duration } : {}),
   }
@@ -328,7 +379,7 @@ function emptyFrameData(): Frame {
     counters: [],
     markers: [],
     labels: [],
-    ball: { pos: { x: PITCH_W / 2, y: PITCH_H / 2 + 10 }, attachedTo: null, visible: true },
+    balls: [],
     drawings: [],
   }
 }
@@ -342,6 +393,7 @@ function toPattern(name: string, snap: BoardSnapshot, id: string, createdAt: str
     pitch: copy.pitch,
     frames: copy.frames,
     labelsVisible: copy.labelsVisible ?? true,
+    ballsVisible: copy.ballsVisible ?? true,
     notes: copy.notes ?? '',
     notesVisible: copy.notesVisible ?? true,
     createdAt,
@@ -406,10 +458,13 @@ function patternToSnapshot(pattern: Pattern): BoardSnapshot {
   const copy = structuredClone(pattern) as unknown as Record<string, unknown>
   const legacy = (copy.drawings ?? []) as Drawing[]
   const rawFrames = Array.isArray(copy.frames) ? (copy.frames as Record<string, unknown>[]) : []
+  // One id for the drill's single legacy ball, shared by every phase, so
+  // playback can still match it up. Unused once the frames carry their own.
+  const legacyBallId = makeBallId()
   const frames = rawFrames.map((frame, index) =>
     // Only the first frame inherits the legacy drawings. A v1 pattern has no
     // others, and a v2 one has no legacy drawings to inherit.
-    frameWithDefaults(frame, index === 0 ? legacy : []),
+    frameWithDefaults(frame, index === 0 ? legacy : [], legacyBallId),
   )
   return {
     // A drill starts at the beginning. Reopening halfway through the
@@ -417,6 +472,7 @@ function patternToSnapshot(pattern: Pattern): BoardSnapshot {
     frames: frames.length > 0 ? frames : [emptyFrameData()],
     currentFrame: 0,
     labelsVisible: (copy.labelsVisible as boolean | undefined) ?? true,
+    ballsVisible: ballsVisibleOf(copy),
     notes: (copy.notes as string | undefined) ?? '',
     notesVisible: (copy.notesVisible as boolean | undefined) ?? true,
     pitch: copy.pitch as BoardSnapshot['pitch'],
@@ -449,7 +505,10 @@ function isValidFrame(value: unknown): boolean {
     value.counters.every(isValidCounter) &&
     markersOf(value).every(isValidMarker) &&
     labelsOf(value).every(isValidLabel) &&
-    isValidBall(value.ball) &&
+    // Either shape: a list from version 3, a single ball before it.
+    (Array.isArray(value.balls)
+      ? value.balls.every(isValidBall)
+      : isValidBall(value.ball)) &&
     Array.isArray(value.drawings) &&
     value.drawings.every(isValidDrawing) &&
     // Optional — the first frame of a draft has none — but a present value
@@ -492,14 +551,18 @@ function isValidSnapshot(value: unknown): boolean {
  * copy of that rule, free to drift from the first.
  */
 function toSnapshot(value: Record<string, unknown>): BoardSnapshot {
+  const legacyBallId = makeBallId()
   const frames = Array.isArray(value.frames)
-    ? (value.frames as Record<string, unknown>[]).map((frame) => frameWithDefaults(frame, []))
+    ? (value.frames as Record<string, unknown>[]).map((frame) =>
+        frameWithDefaults(frame, [], legacyBallId),
+      )
     : // A draft from before playback existed: the whole board was one moment.
-      [frameWithDefaults(value, [])]
+      [frameWithDefaults(value, [], legacyBallId)]
   return {
     frames,
     currentFrame: typeof value.currentFrame === 'number' ? value.currentFrame : 0,
     labelsVisible: (value.labelsVisible as boolean | undefined) ?? true,
+    ballsVisible: ballsVisibleOf(value),
     notes: (value.notes as string | undefined) ?? '',
     notesVisible: (value.notesVisible as boolean | undefined) ?? true,
     pitch: value.pitch as BoardSnapshot['pitch'],

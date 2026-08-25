@@ -378,7 +378,7 @@ function onKeydown(event: KeyboardEvent) {
   }
 
   if (event.key.toLowerCase() === 'b') {
-    board.toggleBallVisible()
+    board.toggleBallsVisible()
     return
   }
 

@@ -11,7 +11,7 @@ function frame(partial: Partial<Frame> = {}): Frame {
     counters: [],
     markers: [],
     labels: [],
-    ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+    balls: [{ id: 'b1', pos: { x: 50, y: 30 }, attachedTo: null }],
     drawings: [],
     ...partial,
   }
@@ -22,6 +22,7 @@ function snapshotWith(frames: Frame[], currentFrame = 0): BoardSnapshot {
     frames,
     currentFrame,
     labelsVisible: true,
+    ballsVisible: true,
     notes: '',
     notesVisible: true,
     pitch: { type: 'blank', rotated: false },
@@ -74,9 +75,9 @@ describe('the flat fields read and write the current frame', () => {
 
   it('the ball belongs to the frame too', () => {
     board.restoreSnapshot(
-      snapshotWith([frame(), frame({ ball: { pos: { x: 11, y: 12 }, attachedTo: null, visible: true } })], 1),
+      snapshotWith([frame(), frame({ balls: [{ id: 'b1', pos: { x: 11, y: 12 }, attachedTo: null }] })], 1),
     )
-    expect(board.state.ball.pos).toEqual({ x: 11, y: 12 })
+    expect(board.state.balls[0].pos).toEqual({ x: 11, y: 12 })
   })
 })
 
@@ -108,7 +109,7 @@ describe('a snapshot is plain data', () => {
   it('does not carry the derived fields, which would be a second copy', () => {
     const snap = board.snapshot() as Record<string, unknown>
     expect(Object.keys(snap).sort()).toEqual(
-      ['currentFrame', 'frames', 'labelsVisible', 'notes', 'notesVisible', 'pitch'].sort(),
+      ['ballsVisible', 'currentFrame', 'frames', 'labelsVisible', 'notes', 'notesVisible', 'pitch'].sort(),
     )
   })
 })

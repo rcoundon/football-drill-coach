@@ -92,25 +92,27 @@ export type SegmentDrawing = ArrowDrawing | LineDrawing
 /**
  * The things a coach can gather into a group and move together.
  *
- * The ball is deliberately not one of them. It is a single object that is
- * already easy to drag, and it carries possession — a group move would have
- * to decide what happens to that, for no gain.
+ * Only a FREE ball is one of them. A carried ball is not a group member in
+ * its own right: it follows its carrier, automatically, because it is drawn
+ * relative to them. That sidesteps deciding what possession means during a
+ * group move, and it matches the pitch — you cannot lasso a ball out of
+ * someone's feet.
  */
-export type SelectableKind = 'counter' | 'marker' | 'label' | 'drawing'
+export type SelectableKind = 'counter' | 'marker' | 'label' | 'drawing' | 'ball'
 
 /** One member of a selection, named by what it is and which one it is. */
 export type SelectionRef = { kind: SelectableKind; id: string }
 
 export type Ball = {
-  pos: Vec
-  /** Counter id when a player has the ball, null when it is free on the grass. */
-  attachedTo: string | null
   /**
-   * Whether the ball is on the pitch at all. A shape or pressing drill has
-   * no ball; a passing drill does. Hiding it keeps `attachedTo`, so showing
-   * it again returns it to whoever was carrying it.
+   * Not decoration: playback matches a ball in one phase to the same ball in
+   * the next, exactly as it does for players. Without an id there is no way
+   * to say which ball travelled where.
    */
-  visible: boolean
+  id: string
+  pos: Vec
+  /** Counter id when a player has this ball, null when it is free on the grass. */
+  attachedTo: string | null
 }
 
 /**
@@ -123,7 +125,7 @@ export type Frame = {
   counters: Counter[]
   markers: Marker[]
   labels: Label[]
-  ball: Ball
+  balls: Ball[]
   drawings: Drawing[]
   /**
    * How long the move INTO this frame takes, in milliseconds. Absent means
@@ -138,7 +140,7 @@ export type Frame = {
 export type Pattern = {
   id: string
   name: string
-  version: 2
+  version: 3
   pitch: { type: PitchType; rotated: boolean }
   /**
    * Where drawings lived before they belonged to a moment. Read into the
@@ -146,6 +148,16 @@ export type Pattern = {
    */
   drawings?: Drawing[]
   labelsVisible?: boolean
+  /**
+   * Whether the balls are on the pitch at all. A shape or pressing drill has
+   * none out; a passing drill does. Hiding them keeps every ball's position
+   * and carrier, so showing them again hands each one back.
+   *
+   * Drill-wide, beside the other two visibility settings. It used to ride on
+   * the ball itself, which put it on the frame — so hiding the ball on one
+   * phase left it showing on the next.
+   */
+  ballsVisible?: boolean
   /**
    * Free text describing the whole drill — setup, coaching points,
    * progressions. Held at the pattern level rather than in a frame,

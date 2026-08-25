@@ -372,7 +372,7 @@ describe('the ball in the view', () => {
     board.addCounter('red')
     const id = board.state.counters[0].id
     board.moveCounter(id, { x: 10, y: 30 })
-    board.dropBall({ x: 10, y: 30 })
+    board.dropBall(board.state.balls[0].id, { x: 10, y: 30 })
     board.addFrame()
     board.moveCounter(id, { x: 50, y: 30 })
     board.setFrameDuration(1, 1000)
@@ -383,10 +383,11 @@ describe('the ball in the view', () => {
     // would have passed a check taken there.
     board.scrubTo(250)
     const shown = board.view.value.counters.find((c) => c.id === id)!
-    expect(board.view.value.ball.attachedTo).toBe(id)
-    expect(board.viewBallPosition.value.x).toBeCloseTo(shown.pos.x + BALL_OFFSET.x, 10)
-    expect(board.viewBallPosition.value.x).toBeGreaterThan(10)
-    expect(board.viewBallPosition.value.x).toBeLessThan(50)
+    expect(board.view.value.balls[0].attachedTo).toBe(id)
+    const drawn = board.viewBallPositions.value[0].pos
+    expect(drawn.x).toBeCloseTo(shown.pos.x + BALL_OFFSET.x, 10)
+    expect(drawn.x).toBeGreaterThan(10)
+    expect(drawn.x).toBeLessThan(50)
   })
 })
 

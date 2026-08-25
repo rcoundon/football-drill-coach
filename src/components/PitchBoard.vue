@@ -64,7 +64,7 @@ type DragTarget =
   | { kind: 'counter'; id: string }
   | { kind: 'marker'; id: string }
   | { kind: 'label'; id: string }
-  | { kind: 'ball' }
+  | { kind: 'ball'; id: string }
   | { kind: 'pen'; id: string }
   | { kind: 'segment'; id: string }
   | { kind: 'bend'; id: string }
@@ -218,13 +218,16 @@ const boardTransform = computed(() =>
  */
 const view = computed(() => board.view.value)
 
-const ballPos = computed(() => board.viewBallPosition.value)
-
-/** True only when the ball is actually riding on a counter that still exists. */
-const ballAttached = computed(() => {
-  const holder = view.value.ball.attachedTo
-  return holder !== null && view.value.counters.some((c) => c.id === holder)
-})
+/**
+ * Every ball on screen: where it is drawn, and whether it is riding on a
+ * counter that still exists.
+ */
+const shownBalls = computed(() =>
+  board.viewBallPositions.value.map(({ id, pos }) => {
+    const holder = view.value.balls.find((b) => b.id === id)?.attachedTo ?? null
+    return { id, pos, attached: holder !== null && view.value.counters.some((c) => c.id === holder) }
+  }),
+)
 
 function toPitch(event: PointerEvent) {
   const rect = svgEl.value!.getBoundingClientRect()
@@ -394,7 +397,7 @@ function onMarkerGrab(id: string, event: PointerEvent) {
   }
 }
 
-function onBallGrab(event: PointerEvent) {
+function onBallGrab(id: string, event: PointerEvent) {
   if (board.isDerived.value) return
   if (props.tool !== 'select') return
   if (dragIsLive()) return
@@ -403,6 +406,7 @@ function onBallGrab(event: PointerEvent) {
   board.commit()
   drag.value = {
     kind: 'ball',
+    id,
     pointerId: event.pointerId,
     origin: toPitch(event),
     // No offset: the ball is drawn away from its holder's centre, so
@@ -592,6 +596,21 @@ function gatherInto(box: { x: number; y: number; width: number; height: number }
       if (isInside(box, label.pos)) found.push({ kind: 'label', id: label.id })
     }
   }
+  /*
+   * Only a FREE ball joins a box. A carried one is not a group member in its
+   * own right — it follows its carrier, automatically, because it is drawn
+   * relative to them. That sidesteps deciding what possession means during a
+   * group move, and it matches the pitch: you cannot lasso a ball out of
+   * someone's feet. Hidden balls are not gathered either, for the same reason
+   * hidden labels are not: a coach cannot box what they cannot see.
+   */
+  if (board.state.ballsVisible) {
+    for (const ball of board.state.balls) {
+      if (ball.attachedTo === null && isInside(box, ball.pos)) {
+        found.push({ kind: 'ball', id: ball.id })
+      }
+    }
+  }
   for (const drawing of board.state.drawings) {
     const points = drawing.kind === 'pen' ? drawing.points : [drawing.from, drawing.to]
     if (points.some((p) => isInside(box, p))) found.push({ kind: 'drawing', id: drawing.id })
@@ -718,10 +737,11 @@ const selectedDrawingIds = computed(() =>
  * a little more than the thing it surrounds, so the ring reads as a halo
  * rather than as part of the piece.
  */
-const RING_RADIUS: Record<'counter' | 'marker' | 'label', number> = {
+const RING_RADIUS: Record<'counter' | 'marker' | 'label' | 'ball', number> = {
   counter: 3.2,
   marker: 2.6,
   label: 2.6,
+  ball: 2.2,
 }
 
 /** Where to draw a ring, for every selected thing that is not a drawing. */
@@ -734,7 +754,9 @@ const selectedTokens = computed(() => {
         ? board.counterById(ref.id)
         : ref.kind === 'marker'
           ? board.markerById(ref.id)
-          : board.labelById(ref.id)
+          : ref.kind === 'ball'
+            ? board.ballById(ref.id)
+            : board.labelById(ref.id)
     return token ? [{ key: `${ref.kind}-${ref.id}`, pos: token.pos, r: RING_RADIUS[ref.kind] }] : []
   })
 })
@@ -862,7 +884,7 @@ function onPointerMove(event: PointerEvent) {
   else if (active.kind === 'marker') board.moveMarker(active.id, carried)
   else if (active.kind === 'label') board.moveLabel(active.id, carried)
   else if (active.kind === 'ball') {
-    if (active.moved) board.moveBall(at)
+    if (active.moved) board.moveBall(active.id, at)
   } else if (active.kind === 'pen') board.extendPen(active.id, at)
   else if (active.kind === 'bend') bendTo(active.id, at)
   else if (active.kind === 'end') board.moveSegmentEnd(active.id, active.end, carried)
@@ -933,7 +955,7 @@ function onPointerUp(event: PointerEvent) {
   } else if (active.kind === 'label') {
     board.moveLabel(active.id, withGrabOffset(active, at))
   } else if (active.kind === 'ball') {
-    if (active.moved) board.dropBall(at)
+    if (active.moved) board.dropBall(active.id, at)
   } else if (active.kind === 'pen') {
     board.extendPen(active.id, at)
     board.finishDrawing(active.id)
@@ -1015,7 +1037,7 @@ function onPointerUp(event: PointerEvent) {
         :key="counter.id"
         :counter="counter"
         :rotated="board.state.pitch.rotated"
-        :has-ball="view.ball.visible && view.ball.attachedTo === counter.id"
+        :has-ball="board.state.ballsVisible && view.balls.some((b) => b.attachedTo === counter.id)"
         @grab="onCounterGrab(counter.id, $event)"
       />
       <PitchLabel
@@ -1026,10 +1048,11 @@ function onPointerUp(event: PointerEvent) {
         @grab="onLabelGrab(label.id, $event)"
       />
       <BallToken
-        v-if="view.ball.visible"
-        :pos="ballPos"
-        :attached="ballAttached"
-        @grab="onBallGrab"
+        v-for="ball in board.state.ballsVisible ? shownBalls : []"
+        :key="ball.id"
+        :pos="ball.pos"
+        :attached="ball.attached"
+        @grab="onBallGrab(ball.id, $event)"
       />
       <!--
         Painted over the tokens, unlike everything else that can be grabbed.

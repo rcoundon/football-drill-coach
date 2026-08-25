@@ -78,9 +78,9 @@ const lockedTitle = 'Nothing can change while the drill is playing or mid-move'
  */
 const hasAnyDrawings = computed(() => board.state.frames.some((frame) => frame.drawings.length > 0))
 
-/** True while a ball is attached to someone on some frame, current or not. */
+/** True while any ball is attached to someone on some phase, current or not. */
 const hasAttachedBall = computed(() =>
-  board.state.frames.some((frame) => frame.ball.attachedTo !== null),
+  board.state.frames.some((frame) => frame.balls.some((b) => b.attachedTo !== null)),
 )
 
 /**
@@ -275,9 +275,9 @@ const heldLabel = computed(() =>
       >Notes</button>
       <button
         data-toggle-ball
-        :class="['chip', { 'is-active': board.state.ball.visible }]"
-        :title="board.state.ball.visible ? 'Take the ball off the pitch' : 'Put the ball back on the pitch'"
-        @click="board.toggleBallVisible()"
+        :class="['chip', { 'is-active': board.state.ballsVisible }]"
+        :title="board.state.ballsVisible ? 'Take the balls off the pitch' : 'Put the balls back on the pitch'"
+        @click="board.toggleBallsVisible()"
       >Ball</button>
       <button
         data-reset

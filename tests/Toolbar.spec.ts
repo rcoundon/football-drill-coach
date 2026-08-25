@@ -381,7 +381,7 @@ describe('the ball toggle', () => {
     const board = useBoard()
     const wrapper = mountToolbar()
     await wrapper.find('[data-toggle-ball]').trigger('click')
-    expect(board.state.ball.visible).toBe(false)
+    expect(board.state.ballsVisible).toBe(false)
   })
 
   it('shows whether the ball is currently on the pitch', async () => {

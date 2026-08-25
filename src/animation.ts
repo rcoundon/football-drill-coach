@@ -22,7 +22,7 @@ export type FrameView = {
   counters: Counter[]
   markers: Marker[]
   labels: Label[]
-  ball: Ball
+  balls: Ball[]
   drawings: Drawing[]
 }
 
@@ -90,12 +90,12 @@ export function timelineOf(frames: Frame[]): Timeline {
 }
 
 /** Where the ball is actually drawn in a frame, carried or not. */
-export function ballPositionIn(frame: FrameView): Vec {
-  if (frame.ball.attachedTo) {
-    const holder = frame.counters.find((c) => c.id === frame.ball.attachedTo)
+export function ballPositionIn(frame: FrameView, ball: Ball): Vec {
+  if (ball.attachedTo) {
+    const holder = frame.counters.find((c) => c.id === ball.attachedTo)
     if (holder) return { x: holder.pos.x + BALL_OFFSET.x, y: holder.pos.y + BALL_OFFSET.y }
   }
-  return frame.ball.pos
+  return ball.pos
 }
 
 /**
@@ -166,7 +166,9 @@ export function interpolateFrames(a: Frame, b: Frame, t: number): FrameView {
   const counters = tweenAll(a.counters, b.counters, e)
 
   /*
-   * The same player holding the ball at both ends of the move is carrying it,
+   * Per ball, matched by id, exactly as the players are.
+   *
+   * The same player holding a ball at both ends of the move is carrying it,
    * not striking it. A carried ball has to move exactly as its carrier does —
    * so it keeps its possession and takes its position from the player, who has
    * already been eased. Giving it its own curve drifted it off the boot
@@ -175,26 +177,33 @@ export function interpolateFrames(a: Frame, b: Frame, t: number): FrameView {
    * Anything else is a ball in flight: played to someone else, or into space,
    * or picked up out of it. Then it is let go of and travels at the one
    * constant speed a struck ball has.
+   *
+   * A ball with no counterpart in the target frame holds where it is, the same
+   * insurance `tweenAll` gives a player — the cast is drill-wide, so it should
+   * not happen outside a hand-edited file.
    */
-  const carrier = a.ball.attachedTo
-  const carried = carrier !== null && carrier === b.ball.attachedTo
-  const holder = carried ? counters.find((c) => c.id === carrier) : undefined
+  const balls = a.balls.map((ball) => {
+    const target = b.balls.find((other) => other.id === ball.id)
+    const carrier = ball.attachedTo
+    const carried = carrier !== null && target !== undefined && carrier === target.attachedTo
+    const holder = carried ? counters.find((c) => c.id === carrier) : undefined
+    if (holder) {
+      return {
+        id: ball.id,
+        pos: { x: holder.pos.x + BALL_OFFSET.x, y: holder.pos.y + BALL_OFFSET.y },
+        attachedTo: holder.id,
+      }
+    }
+    const from = ballPositionIn(a, ball)
+    const to = target ? ballPositionIn(b, target) : from
+    return { id: ball.id, pos: lerpVec(from, to, t), attachedTo: null }
+  })
 
   return {
     counters,
     markers: tweenAll(a.markers, b.markers, e),
     labels: tweenAll(a.labels, b.labels, e),
-    ball: holder
-      ? {
-          pos: { x: holder.pos.x + BALL_OFFSET.x, y: holder.pos.y + BALL_OFFSET.y },
-          attachedTo: holder.id,
-          visible: a.ball.visible,
-        }
-      : {
-          pos: lerpVec(ballPositionIn(a), ballPositionIn(b), t),
-          attachedTo: null,
-          visible: a.ball.visible,
-        },
+    balls,
     drawings: a.drawings,
   }
 }

@@ -8,25 +8,25 @@ describe('dropBall', () => {
     const board = useBoard()
     board.addCounter('red')
     board.moveCounter(board.state.counters[0].id, { x: 10, y: 10 })
-    board.dropBall({ x: 80, y: 40 })
-    expect(board.state.ball.attachedTo).toBeNull()
-    expect(board.state.ball.pos).toEqual({ x: 80, y: 40 })
+    board.dropBall(board.state.balls[0].id, { x: 80, y: 40 })
+    expect(board.state.balls[0].attachedTo).toBeNull()
+    expect(board.state.balls[0].pos).toEqual({ x: 80, y: 40 })
   })
 
   it('attaches the ball to a counter dropped within the snap radius', () => {
     const board = useBoard()
     const c = board.addCounter('red')
     board.moveCounter(c.id, { x: 30, y: 30 })
-    board.dropBall({ x: 30 + SNAP_RADIUS * 0.5, y: 30 })
-    expect(board.state.ball.attachedTo).toBe(c.id)
+    board.dropBall(board.state.balls[0].id, { x: 30 + SNAP_RADIUS * 0.5, y: 30 })
+    expect(board.state.balls[0].attachedTo).toBe(c.id)
   })
 
   it('does not attach to a counter just outside the snap radius', () => {
     const board = useBoard()
     const c = board.addCounter('red')
     board.moveCounter(c.id, { x: 30, y: 30 })
-    board.dropBall({ x: 30 + SNAP_RADIUS * 1.5, y: 30 })
-    expect(board.state.ball.attachedTo).toBeNull()
+    board.dropBall(board.state.balls[0].id, { x: 30 + SNAP_RADIUS * 1.5, y: 30 })
+    expect(board.state.balls[0].attachedTo).toBeNull()
   })
 
   it('attaches to the NEAREST counter when two are in range', () => {
@@ -35,8 +35,8 @@ describe('dropBall', () => {
     const far = board.addCounter('blue')
     board.moveCounter(near.id, { x: 30, y: 30 })
     board.moveCounter(far.id, { x: 30 + SNAP_RADIUS * 0.9, y: 30 })
-    board.dropBall({ x: 30.1, y: 30 })
-    expect(board.state.ball.attachedTo).toBe(near.id)
+    board.dropBall(board.state.balls[0].id, { x: 30.1, y: 30 })
+    expect(board.state.balls[0].attachedTo).toBe(near.id)
   })
 
   /**
@@ -51,15 +51,15 @@ describe('dropBall', () => {
     const board = useBoard()
     const holder = board.addCounter('red')
     const neighbour = board.addCounter('blue')
-    board.dropBall({ ...holder.pos })
-    expect(board.state.ball.attachedTo).toBe(holder.id)
+    board.dropBall(board.state.balls[0].id, { ...holder.pos })
+    expect(board.state.balls[0].attachedTo).toBe(holder.id)
 
-    const drawn = board.ballPosition()
-    board.moveBall(drawn)
-    board.dropBall(drawn)
+    const drawn = board.ballPosition(board.state.balls[0].id)
+    board.moveBall(board.state.balls[0].id, drawn)
+    board.dropBall(board.state.balls[0].id, drawn)
 
-    expect(board.state.ball.attachedTo).toBe(holder.id)
-    expect(board.state.ball.attachedTo).not.toBe(neighbour.id)
+    expect(board.state.balls[0].attachedTo).toBe(holder.id)
+    expect(board.state.balls[0].attachedTo).not.toBe(neighbour.id)
   })
 
   it('keeps possession even when a neighbour is nearer the drawn ball than the holder is', () => {
@@ -67,25 +67,25 @@ describe('dropBall', () => {
     const holder = board.addCounter('red')
     const neighbour = board.addCounter('blue')
     board.moveCounter(holder.id, { x: 30, y: 30 })
-    board.dropBall({ x: 30, y: 30 })
-    expect(board.state.ball.attachedTo).toBe(holder.id)
+    board.dropBall(board.state.balls[0].id, { x: 30, y: 30 })
+    expect(board.state.balls[0].attachedTo).toBe(holder.id)
 
     // Right beside where the ball is drawn, and much nearer to it than the holder.
-    const drawn = board.ballPosition()
+    const drawn = board.ballPosition(board.state.balls[0].id)
     board.moveCounter(neighbour.id, { x: drawn.x + 0.6, y: drawn.y + 2.6 })
 
-    board.moveBall(drawn)
-    board.dropBall(drawn)
+    board.moveBall(board.state.balls[0].id, drawn)
+    board.dropBall(board.state.balls[0].id, drawn)
 
-    expect(board.state.ball.attachedTo).toBe(holder.id)
+    expect(board.state.balls[0].attachedTo).toBe(holder.id)
   })
 
   it('still attaches when the ball is dropped straight onto a player', () => {
     const board = useBoard()
     const c = board.addCounter('red')
     board.moveCounter(c.id, { x: 30, y: 30 })
-    board.dropBall({ x: 30, y: 30 })
-    expect(board.state.ball.attachedTo).toBe(c.id)
+    board.dropBall(board.state.balls[0].id, { x: 30, y: 30 })
+    expect(board.state.balls[0].attachedTo).toBe(c.id)
   })
 
   /**
@@ -95,66 +95,66 @@ describe('dropBall', () => {
   it('leaves the ball free when it is dropped in open space on a laid-out squad', () => {
     const board = useBoard()
     for (let i = 0; i < 11; i++) board.addCounter('red')
-    board.dropBall({ x: 10, y: 10 })
-    expect(board.state.ball.attachedTo).toBeNull()
+    board.dropBall(board.state.balls[0].id, { x: 10, y: 10 })
+    expect(board.state.balls[0].attachedTo).toBeNull()
   })
 
   it('keeps possession when the attached ball is tapped and released where it sits', () => {
     const board = useBoard()
     const c = board.addCounter('red')
     board.moveCounter(c.id, { x: 30, y: 30 })
-    board.dropBall({ x: 30, y: 30 })
-    expect(board.state.ball.attachedTo).toBe(c.id)
+    board.dropBall(board.state.balls[0].id, { x: 30, y: 30 })
+    expect(board.state.balls[0].attachedTo).toBe(c.id)
 
     // A tap grabs the ball where it is drawn — at its offset from the holder —
     // and a release without movement must put it straight back.
-    board.moveBall(board.ballPosition())
-    board.dropBall(board.state.ball.pos)
-    expect(board.state.ball.attachedTo).toBe(c.id)
+    board.moveBall(board.state.balls[0].id, board.ballPosition(board.state.balls[0].id))
+    board.dropBall(board.state.balls[0].id, board.state.balls[0].pos)
+    expect(board.state.balls[0].attachedTo).toBe(c.id)
   })
 
   it('detaches when dragged off a player onto empty grass', () => {
     const board = useBoard()
     const c = board.addCounter('red')
     board.moveCounter(c.id, { x: 30, y: 30 })
-    board.dropBall({ x: 30, y: 30 })
-    expect(board.state.ball.attachedTo).toBe(c.id)
-    board.dropBall({ x: 90, y: 10 })
-    expect(board.state.ball.attachedTo).toBeNull()
+    board.dropBall(board.state.balls[0].id, { x: 30, y: 30 })
+    expect(board.state.balls[0].attachedTo).toBe(c.id)
+    board.dropBall(board.state.balls[0].id, { x: 90, y: 10 })
+    expect(board.state.balls[0].attachedTo).toBeNull()
   })
 })
 
 describe('ballPosition', () => {
   it('is the stored position when the ball is free', () => {
     const board = useBoard()
-    board.dropBall({ x: 12, y: 34 })
-    expect(board.ballPosition()).toEqual({ x: 12, y: 34 })
+    board.dropBall(board.state.balls[0].id, { x: 12, y: 34 })
+    expect(board.ballPosition(board.state.balls[0].id)).toEqual({ x: 12, y: 34 })
   })
 
   it('rides at a fixed offset from the counter holding it', () => {
     const board = useBoard()
     const c = board.addCounter('red')
     board.moveCounter(c.id, { x: 30, y: 30 })
-    board.dropBall({ x: 30, y: 30 })
-    expect(board.ballPosition()).toEqual({ x: 30 + BALL_OFFSET.x, y: 30 + BALL_OFFSET.y })
+    board.dropBall(board.state.balls[0].id, { x: 30, y: 30 })
+    expect(board.ballPosition(board.state.balls[0].id)).toEqual({ x: 30 + BALL_OFFSET.x, y: 30 + BALL_OFFSET.y })
   })
 
   it('follows the counter when the counter moves', () => {
     const board = useBoard()
     const c = board.addCounter('red')
     board.moveCounter(c.id, { x: 30, y: 30 })
-    board.dropBall({ x: 30, y: 30 })
+    board.dropBall(board.state.balls[0].id, { x: 30, y: 30 })
     board.moveCounter(c.id, { x: 70, y: 20 })
-    expect(board.ballPosition()).toEqual({ x: 70 + BALL_OFFSET.x, y: 20 + BALL_OFFSET.y })
+    expect(board.ballPosition(board.state.balls[0].id)).toEqual({ x: 70 + BALL_OFFSET.x, y: 20 + BALL_OFFSET.y })
   })
 
   it('falls back to the free position if the holder vanishes', () => {
     const board = useBoard()
     const c = board.addCounter('red')
     board.moveCounter(c.id, { x: 30, y: 30 })
-    board.dropBall({ x: 30, y: 30 })
-    board.state.ball.attachedTo = 'ghost'
-    expect(() => board.ballPosition()).not.toThrow()
+    board.dropBall(board.state.balls[0].id, { x: 30, y: 30 })
+    board.state.balls[0].attachedTo = 'ghost'
+    expect(() => board.ballPosition(board.state.balls[0].id)).not.toThrow()
   })
 })
 
@@ -163,10 +163,10 @@ describe('deleting the counter that holds the ball', () => {
     const board = useBoard()
     const c = board.addCounter('red')
     board.moveCounter(c.id, { x: 44, y: 22 })
-    board.dropBall({ x: 44, y: 22 })
+    board.dropBall(board.state.balls[0].id, { x: 44, y: 22 })
     board.deleteCounter(c.id)
-    expect(board.state.ball.attachedTo).toBeNull()
-    expect(board.state.ball.pos).toEqual({ x: 44, y: 22 })
+    expect(board.state.balls[0].attachedTo).toBeNull()
+    expect(board.state.balls[0].pos).toEqual({ x: 44, y: 22 })
   })
 })
 
@@ -175,14 +175,14 @@ describe('moveBall', () => {
     const board = useBoard()
     const c = board.addCounter('red')
     board.moveCounter(c.id, { x: 30, y: 30 })
-    board.dropBall({ x: 30, y: 30 })
-    board.moveBall({ x: 31, y: 31 })
-    expect(board.state.ball.attachedTo).toBeNull()
+    board.dropBall(board.state.balls[0].id, { x: 30, y: 30 })
+    board.moveBall(board.state.balls[0].id, { x: 31, y: 31 })
+    expect(board.state.balls[0].attachedTo).toBeNull()
   })
 
   it('clamps to the pitch', () => {
     const board = useBoard()
-    board.moveBall({ x: -10, y: -10 })
-    expect(board.state.ball.pos).toEqual({ x: 0, y: 0 })
+    board.moveBall(board.state.balls[0].id, { x: -10, y: -10 })
+    expect(board.state.balls[0].pos).toEqual({ x: 0, y: 0 })
   })
 })

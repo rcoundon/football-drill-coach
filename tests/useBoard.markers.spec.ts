@@ -91,8 +91,8 @@ describe('cones and the ball', () => {
   it('never takes possession, however close the ball lands', () => {
     const board = useBoard()
     board.addMarker({ x: 30, y: 30 })
-    board.dropBall({ x: 30, y: 30 })
-    expect(board.state.ball.attachedTo).toBeNull()
+    board.dropBall(board.state.balls[0].id, { x: 30, y: 30 })
+    expect(board.state.balls[0].attachedTo).toBeNull()
   })
 
   it('does not steal the ball from a player standing beside it', () => {
@@ -100,8 +100,8 @@ describe('cones and the ball', () => {
     const player = board.addCounter('red')
     board.moveCounter(player.id, { x: 30, y: 30 })
     board.addMarker({ x: 30 + SNAP_RADIUS * 0.2, y: 30 })
-    board.dropBall({ x: 30 + SNAP_RADIUS * 0.3, y: 30 })
-    expect(board.state.ball.attachedTo).toBe(player.id)
+    board.dropBall(board.state.balls[0].id, { x: 30 + SNAP_RADIUS * 0.3, y: 30 })
+    expect(board.state.balls[0].attachedTo).toBe(player.id)
   })
 })
 

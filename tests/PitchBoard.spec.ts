@@ -135,7 +135,7 @@ describe('rendering', () => {
     const board = useBoard()
     const c = board.addCounter('red')
     board.moveCounter(c.id, { x: 30, y: 30 })
-    board.dropBall({ x: 30, y: 30 })
+    board.dropBall(board.state.balls[0].id, { x: 30, y: 30 })
     const wrapper = mountBoard()
     await wrapper.vm.$nextTick()
     expect(wrapper.find('[data-possession-ring]').exists()).toBe(true)
@@ -209,7 +209,7 @@ describe('dragging the ball', () => {
     await firePointer(wrapper.find('svg'), 'pointermove', clientFor(70, 40))
     await firePointer(wrapper.find('svg'), 'pointerup', clientFor(70, 40))
 
-    expect(board.state.ball.attachedTo).toBe(c.id)
+    expect(board.state.balls[0].attachedTo).toBe(c.id)
   })
 })
 
@@ -469,14 +469,14 @@ describe('tapping the ball without moving it', () => {
     const board = useBoard()
     const holder = board.addCounter('red')
     const neighbour = board.addCounter('blue')
-    board.dropBall({ ...holder.pos })
-    expect(board.state.ball.attachedTo).toBe(holder.id)
+    board.dropBall(board.state.balls[0].id, { ...holder.pos })
+    expect(board.state.balls[0].attachedTo).toBe(holder.id)
 
     const wrapper = mountBoard('select')
     await wrapper.vm.$nextTick()
 
     // The far edge of the ball's hit circle, on the side facing the neighbour.
-    const drawn = board.ballPosition()
+    const drawn = board.ballPosition(board.state.balls[0].id)
     const toNeighbour = {
       x: neighbour.pos.x - drawn.x,
       y: neighbour.pos.y - drawn.y,
@@ -490,7 +490,7 @@ describe('tapping the ball without moving it', () => {
     await firePointer(wrapper.find('[data-ball]'), 'pointerdown', clientFor(press.x, press.y))
     await firePointer(wrapper.find('svg'), 'pointerup', clientFor(press.x, press.y))
 
-    expect(board.state.ball.attachedTo).toBe(holder.id)
+    expect(board.state.balls[0].attachedTo).toBe(holder.id)
   })
 
   it('still drops the ball where a real drag releases it', async () => {
@@ -504,8 +504,8 @@ describe('tapping the ball without moving it', () => {
     await firePointer(wrapper.find('svg'), 'pointermove', clientFor(45, 30))
     await firePointer(wrapper.find('svg'), 'pointerup', clientFor(45, 30))
 
-    expect(board.state.ball.attachedTo).toBeNull()
-    expect(board.state.ball.pos.x).toBeCloseTo(45, 4)
+    expect(board.state.balls[0].attachedTo).toBeNull()
+    expect(board.state.balls[0].pos.x).toBeCloseTo(45, 4)
   })
 })
 
@@ -766,7 +766,7 @@ describe('appearance', () => {
 describe('hiding the ball', () => {
   it('takes the ball off the pitch', async () => {
     const board = useBoard()
-    board.toggleBallVisible()
+    board.toggleBallsVisible()
     const wrapper = mountBoard()
     await wrapper.vm.$nextTick()
     expect(wrapper.find('[data-ball]').exists()).toBe(false)
@@ -777,13 +777,13 @@ describe('hiding the ball', () => {
     const board = useBoard()
     const player = board.addCounter('red')
     board.moveCounter(player.id, { x: 30, y: 30 })
-    board.dropBall({ x: 30, y: 30 })
+    board.dropBall(board.state.balls[0].id, { x: 30, y: 30 })
 
     const wrapper = mountBoard()
     await wrapper.vm.$nextTick()
     expect(wrapper.find('[data-possession-ring]').exists()).toBe(true)
 
-    board.toggleBallVisible()
+    board.toggleBallsVisible()
     await wrapper.vm.$nextTick()
     expect(wrapper.find('[data-possession-ring]').exists()).toBe(false)
   })
@@ -792,9 +792,9 @@ describe('hiding the ball', () => {
     const board = useBoard()
     const player = board.addCounter('red')
     board.moveCounter(player.id, { x: 30, y: 30 })
-    board.dropBall({ x: 30, y: 30 })
-    board.toggleBallVisible()
-    board.toggleBallVisible()
+    board.dropBall(board.state.balls[0].id, { x: 30, y: 30 })
+    board.toggleBallsVisible()
+    board.toggleBallsVisible()
 
     const wrapper = mountBoard()
     await wrapper.vm.$nextTick()
