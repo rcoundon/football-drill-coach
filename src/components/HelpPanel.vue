@@ -129,7 +129,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         <p>
           Moving a player, drawing on the board, or dropping the ball only changes the phase
           you're currently on — earlier and later phases are untouched. Your squad, though, is
-          the same in every phase: adding, removing or renaming a player, cone or label reaches
+          the same in every phase: adding, removing or renaming a player, cone, label or ball
+          reaches
           the whole drill at once, so nobody can appear or disappear partway through it. Only
           where things stand, and what's drawn, differs from phase to phase — which is also why
           a drawing belongs to the phase it describes: the arrow showing a pass is there while
