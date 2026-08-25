@@ -180,12 +180,26 @@ describe('interpolateFrames', () => {
 })
 
 describe('gifSchedule', () => {
+  /**
+   * Derived from GIF_FPS rather than written out. These assertions were
+   * hardcoded to 80ms, so raising the sample rate broke three tests that were
+   * not about the rate at all — they were about reaching the end of the drill
+   * and holding a whole hundredth.
+   */
+  const STEP = 1000 / GIF_FPS
+
   it('samples the whole drill at the given rate', () => {
-    // 1000ms at 12.5fps is 80ms a sample: 0, 80, ... 960, then the last frame.
     const samples = gifSchedule([frame(), frame({ duration: 1000 })], GIF_FPS)
     expect(samples[0].atMs).toBe(0)
-    expect(samples[1].atMs).toBe(80)
+    expect(samples[1].atMs).toBe(STEP)
     expect(samples.at(-1)!.atMs).toBe(1000)
+  })
+
+  it('samples often enough that movement does not judder', () => {
+    // 25 a second. Below about 20 the middle of an eased move — where the most
+    // ground is covered per sample — visibly steps rather than travels, which
+    // is what a coach notices when a drill is shared.
+    expect(GIF_FPS).toBeGreaterThanOrEqual(20)
   })
 
   it('holds on the last frame so the loop does not snap', () => {
@@ -195,8 +209,8 @@ describe('gifSchedule', () => {
 
   it('gives every other sample the frame interval', () => {
     const samples = gifSchedule([frame(), frame({ duration: 1000 })], GIF_FPS)
-    expect(samples[0].delayMs).toBe(80)
-    expect(samples.at(-2)!.delayMs).toBe(80)
+    expect(samples[0].delayMs).toBe(STEP)
+    expect(samples.at(-2)!.delayMs).toBe(STEP)
   })
 
   it('uses delays GIF can actually express, in whole hundredths', () => {
@@ -217,7 +231,7 @@ describe('gifSchedule', () => {
   it('follows the durations rather than assuming they are equal', () => {
     const samples = gifSchedule([frame(), frame({ duration: 160 }), frame({ duration: 800 })], GIF_FPS)
     expect(samples.at(-1)!.atMs).toBe(960)
-    expect(samples).toHaveLength(Math.floor(960 / 80) + 1)
+    expect(samples).toHaveLength(Math.floor(960 / STEP) + 1)
   })
 })
 

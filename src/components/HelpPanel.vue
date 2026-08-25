@@ -41,7 +41,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       <section data-help-section="board" class="section">
         <h3>The board</h3>
         <p>
-          Press a colour under Players to drop a counter, then drag it into position. A new
+          Press a colour under Players to drop a counter, then drag it into position. Adding a new
           player switches you to Move, since dragging it somewhere is almost always the next
           thing you do.
         </p>
@@ -51,7 +51,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           Clearing the text removes the label again.
         </p>
         <p>
-          Cones mark out space rather than play in it. Tap the pitch with Cone to drop one,
+          Cones mark out space, tap the pitch with Cone to drop one,
           drag it with Move, and take it off with Erase. Text works the same way: tap to drop
           a label, then drag or double-press it to change what it says.
         </p>

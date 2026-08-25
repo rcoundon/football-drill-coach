@@ -114,11 +114,17 @@ function tweenAll<T extends { id: string; pos: Vec }>(from: T[], to: T[], e: num
 /**
  * How often the exported animation is sampled.
  *
- * 12.5 a second is 80ms, and GIF expresses delays in hundredths of a second,
- * so this lands on a whole one. Fast enough to read as movement, slow enough
- * that a ten-second drill is not hundreds of frames.
+ * 25 a second is 40ms, and GIF expresses delays in hundredths of a second, so
+ * this lands on a whole one.
+ *
+ * It was half this to begin with, on the theory that a long drill would
+ * otherwise run to hundreds of frames. Measuring killed that: a two-second
+ * drill exported at 14KB, so size was never the constraint, while 80ms
+ * between samples was visibly jumpy — worst in the middle of a move, which is
+ * exactly where the easing covers the most ground per frame and where a coach
+ * is looking. Doubling the rate halves that jump and costs kilobytes.
  */
-export const GIF_FPS = 12.5
+export const GIF_FPS = 25
 
 /** A beat on the last frame, so the loop does not snap back. */
 export const GIF_TAIL_MS = 500
