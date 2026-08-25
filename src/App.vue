@@ -56,7 +56,7 @@ const saveNameDraft = ref('')
 const savePromptMode = ref<'new' | 'fork'>('new')
 
 const savePromptTitle = computed(() =>
-  savePromptMode.value === 'fork' ? 'Save a copy as' : 'Name this pattern',
+  savePromptMode.value === 'fork' ? 'Save a copy as' : 'Name this drill',
 )
 
 /** Save: update the open pattern in place, or ask for a name if there is none. */
@@ -72,14 +72,14 @@ function openSavePrompt() {
     return
   }
   savePromptMode.value = 'new'
-  saveNameDraft.value = currentName.value || 'New pattern'
+  saveNameDraft.value = currentName.value || 'New drill'
   savePromptOpen.value = true
 }
 
 /** Save as…: fork the board into a new pattern under a new name. */
 function openSaveAsPrompt() {
   savePromptMode.value = 'fork'
-  saveNameDraft.value = currentName.value ? `${currentName.value} copy` : 'New pattern'
+  saveNameDraft.value = currentName.value ? `${currentName.value} copy` : 'New drill'
   savePromptOpen.value = true
 }
 

@@ -219,7 +219,7 @@ describe('the open pattern', () => {
   it('says so when nothing is open, so Save cannot look like an update', () => {
     const wrapper = mountToolbar()
     expect(wrapper.find('[data-current-pattern]').text()).toMatch(/unsaved/i)
-    expect(wrapper.find('[data-save]').attributes('title')).toMatch(/new pattern/i)
+    expect(wrapper.find('[data-save]').attributes('title')).toMatch(/new drill/i)
   })
 })
 
@@ -587,5 +587,32 @@ describe('when a rail is carrying the tools', () => {
 
   it('needs no More menu, because what is left already fits', () => {
     expect(mountRailed().find('[data-more]').exists()).toBe(false)
+  })
+})
+
+/**
+ * The board says "drill" everywhere a coach reads — Build the drill, Drill
+ * notes, all through the Help panel — but the row that saves one said
+ * "Pattern", which is the internal noun for the same object. A coach who had
+ * just been told to build a drill went looking for a drill and found a
+ * pattern, so the way to save their work read as something else entirely.
+ */
+describe('calling a drill a drill', () => {
+  it('names the group after what a coach is saving', () => {
+    const wrapper = mountToolbar()
+    expect(wrapper.text()).toContain('Drill')
+    expect(wrapper.text()).not.toContain('Pattern')
+  })
+
+  it('offers to save a new drill when nothing is open', () => {
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-save]').attributes('title')).toBe('Save as a new drill')
+  })
+
+  it('offers to update the drill that is open', () => {
+    const wrapper = mount(Toolbar, {
+      props: { tool: 'select' as ToolMode, drawColor: '#ffffff', patternName: 'Overlap' },
+    })
+    expect(wrapper.find('[data-save]').attributes('title')).toBe('Update “Overlap”')
   })
 })

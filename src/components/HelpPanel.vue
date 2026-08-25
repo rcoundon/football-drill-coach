@@ -159,9 +159,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       <section data-help-section="saving" class="section">
         <h3>Saving and sharing</h3>
         <p>
-          Save writes the pattern you have open back to itself; if the board has never been
-          saved, it asks for a name first. Save as… forks the board into a new pattern under a
-          new name, leaving the original as it was. Open lists every saved pattern, for loading,
+          Save writes the drill you have open back to itself; if the board has never been
+          saved, it asks for a name first. Save as… forks the board into a new drill under a
+          new name, leaving the original as it was. Open lists every saved drill, for loading,
           renaming or deleting.
         </p>
         <p>
@@ -171,14 +171,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           once there's more than one phase, since a single phase is what PNG is for.
         </p>
         <p>
-          Export writes every saved pattern to a single JSON file, for a backup or for moving
-          them to another machine. Import reads one back in — it never overwrites: a pattern
+          Export writes every saved drill to a single JSON file, for a backup or for moving
+          them to another machine. Import reads one back in — it never overwrites: a drill
           whose id already exists on this device arrives as a new one, with
           <em>(imported)</em> added to its name.
         </p>
         <p>
-          Everything — every saved pattern, and the board you're working on right now — lives
-          in this browser's own storage only. There's no account and no server, so a pattern
+          Everything — every saved drill, and the board you're working on right now — lives
+          in this browser's own storage only. There's no account and no server, so a drill
           you want on another device or another browser has to be moved there yourself, with
           Export and Import.
         </p>

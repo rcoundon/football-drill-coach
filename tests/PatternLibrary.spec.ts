@@ -132,3 +132,19 @@ describe('renaming', () => {
     expect(wrapper.emitted('rename')).toEqual([[{ id: saved.id, name: 'Counter press' }]])
   })
 })
+
+describe('calling a drill a drill', () => {
+  it('titles the library after what a coach saved', () => {
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    expect(wrapper.find('h2').text()).toBe('Saved drills')
+    expect(wrapper.attributes('aria-label') ?? wrapper.find('[role="dialog"]').attributes('aria-label')).toBe(
+      'Saved drills',
+    )
+  })
+
+  it('says what to do when there is nothing saved yet', () => {
+    localStorage.clear()
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    expect(wrapper.find('.empty').text()).toBe('Nothing saved yet. Build a drill and press Save.')
+  })
+})

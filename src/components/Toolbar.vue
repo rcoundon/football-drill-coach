@@ -10,7 +10,7 @@ const props = withDefaults(
   defineProps<{
     tool: ToolMode
     drawColor: string
-    /** The pattern currently open, or '' when the board has never been saved. */
+    /** The drill currently open, or '' when the board has never been saved. */
     patternName?: string
     /**
      * True when a ToolRail is showing the tools and player colours, so this
@@ -115,7 +115,7 @@ function resetBoard() {
 
 /** Says which of the two saves the button is about to perform. */
 const saveTitle = computed(() =>
-  props.patternName ? `Update “${props.patternName}”` : 'Save as a new pattern',
+  props.patternName ? `Update “${props.patternName}”` : 'Save as a new drill',
 )
 
 /** Names what the button would act on, so a coach can see before pressing. */
@@ -289,7 +289,7 @@ const heldLabel = computed(() =>
     </div>
 
     <div class="group">
-      <span class="group-label">Pattern</span>
+      <span class="group-label">Drill</span>
       <span data-current-pattern class="current" :class="{ 'is-unsaved': !patternName }">
         {{ patternName || 'Unsaved' }}
       </span>
