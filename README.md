@@ -1,10 +1,10 @@
 # Football Coach Tactics Board
 
 A browser tactics board for describing soccer/football drills. Drop coloured counters on
-a pitch, drag them into position, draw runs and passes, mark who has the ball, and save
-the pattern for a later session.
+a pitch, drag them into position, draw runs and passes, mark who has a ball, and save
+the drill for a later session.
 
-Everything runs in the browser. There is no server and no account, and patterns are
+Everything runs in the browser. There is no server and no account, and drills are
 stored in the browser's local storage.
 
 ## Running it
@@ -34,7 +34,7 @@ the text takes the label away again.
 
 | Tool | Key | What it does |
 | --- | --- | --- |
-| Move | `V` | Drag counters and the ball, and bend arrows |
+| Move | `V` | Drag counters and balls, and bend arrows |
 | Draw | `P` | Freehand pen |
 | Run | `R` | Solid arrow |
 | Pass | `S` | Dashed arrow |
@@ -85,8 +85,10 @@ it always has — the box is the only way into a group. A drawing joins the box
 only if one of the points it is made of falls inside, so a long arrow clipping
 the corner is left where it is.
 
-The ball stays out of groups. It is one object, already easy to drag, and it
-carries possession.
+A loose ball inside the box joins the group like anything else. A ball a
+player is carrying does not: it goes where its carrier goes, so it comes along
+only if they were in the box too. You cannot lasso a ball out of someone's
+feet.
 
 **Going back to a drawing.** Under **Move**, press any drawing to pick it up.
 It gets a pale halo and its handles appear — nothing else on the board does,
@@ -120,8 +122,9 @@ since those already act on Space themselves. A coach who has just tapped a
 chip and then presses Space gets that chip pressed again, not playback —
 worth knowing if the shortcut ever seems to do nothing.
 
-Players ease away and settle; the ball travels in a straight line and leaves
-the passer's boot as it goes, so a pass looks like a pass. A drawing belongs to
+Players ease away and settle. A struck ball travels in a straight line and
+leaves the passer's boot as it goes, so a pass looks like a pass — while a
+ball someone is running with stays on their boot, moving exactly as they do. A drawing belongs to
 the moment it describes, so the arrow showing a pass is on screen while the
 pass happens and gone once you rub it out on the next frame.
 
@@ -142,30 +145,39 @@ edit. Let go of the slider and it lands on the nearest frame.
 
 **Drill notes** sit beside the board on a wide screen and beneath it on a
 narrow one: setup, coaching points, progressions. They are saved with the
-pattern and come out in the PNG export in a band under the pitch, so a
+drill and come out in the PNG export in a band under the pitch, so a
 session plan pasted into a document carries its instructions with it —
 never printed over the pitch itself. **Notes** hides the panel, and hiding
 it keeps the notes out of the export too.
 
 **Labels** hides the on-pitch text without deleting it.
 
-**Ball** (`B`) takes the ball off the pitch and puts it back — a shape or
-pressing drill often has no ball in it. Hiding it also hides the possession
-ring, since nobody can be in possession of a ball that is not there, but the
-board remembers who was carrying it and returns it to them when you show it
-again. The setting is saved with the pattern.
+**Balls.** A drill can have up to eight: one per rondo grid, per queue, per
+lane. **+ Ball** puts another out, and **Erase** takes one off the way it takes
+off a cone. A drill with none at all is fine — a shape or pressing session has
+no ball in it.
 
-Cones are equipment rather than players: they carry no number, and the ball
+A player holds one ball at a time, so a ball dropped on someone who already
+has one stays free where you dropped it rather than taking theirs. Balls look
+alike, because footballs do: in a rondo it does not matter which is which.
+
+**Ball** (`B`) hides every ball at once, and the possession rings with them,
+since nobody can be in possession of a ball that is not there. It is not the
+same as removing them: the board remembers where each was and who had it, and
+hands them all back when you show them again. The setting is saved with the
+drill, and it applies to the whole drill rather than to one phase.
+
+Cones are equipment rather than players: they carry no number, and a ball
 never belongs to one, so a cone beside a player can't steal possession. Drag
 them with **Move** and remove them with **Erase**.
 
 **Clear players** takes everyone off and leaves your drawings and cones. **Clear drawings**
-does the reverse. **Reset** starts a fresh board for the next drill — it clears
-players, cones, ball and drawings, and drops back to a single frame, but keeps the pitch
-and orientation you are on, since that is almost always the pitch you want next. All
-three are undoable.
+does the reverse. **Reset** starts a fresh board for the next drill: it clears players,
+cones and drawings, drops back to a single phase, and leaves one ball out the way a fresh
+board has one. It keeps the pitch and orientation you are on, since that is almost always
+the pitch you want next. All three are undoable.
 
-Drop the ball on a player to give them possession — the player gets a white ring and the
+Drop a ball on a player to give them possession — the player gets a white ring and the
 ball travels with them. Drag it onto empty grass to release it.
 
 ## On a phone or tablet
@@ -183,23 +195,30 @@ Measured on a 1194px tablet: side by side, the rail and a notes column left
 the pitch 663x430; stacked, it gets 936x606.
 
 A fresh board on a portrait screen starts rotated, so the pitch fills the
-width instead of sitting in a thin band. A saved pattern is never
-overridden — rotation belongs to the drill, so a pattern saved landscape
+width instead of sitting in a thin band. A saved drill is never
+overridden — rotation belongs to the drill, so a drill saved landscape
 comes back landscape whatever you open it on.
 
-## Where patterns live
+## Where drills live
 
-Saved patterns are in this browser's local storage under `fct.patterns.v1`, and the board
-you are working on autosaves to `fct.draft.v1` so a refresh does not lose it.
+Saved drills are in this browser's local storage under `fct.patterns.v1`, and the board
+you are working on autosaves to `fct.draft.v1` so a refresh does not lose it. The keys
+still say "patterns" because renaming one would orphan every drill anyone has saved;
+only what you read on screen changed.
 
 Local storage is per-browser and per-device. Use **Export** to write a JSON file for
-backup or to move patterns to another machine, and **Import** to read one back. Importing
-never overwrites: a pattern whose id already exists arrives under a new id with
+backup or to move drills to another machine, and **Import** to read one back. Importing
+never overwrites: a drill whose id already exists arrives under a new id with
 `(imported)` appended to its name.
 
-A pattern saved before frames existed still opens: it comes back as a single frame with
-its drawings carried onto it, exactly as it looked when you saved it, so nothing already
-in your library needs redoing.
+Older drills still open. One saved before phases existed comes back as a single phase
+with its drawings carried onto it; one saved when a drill could only have a single ball
+comes back with that ball as the first of its list, keeping where it was and who had it.
+Either way it looks as it did when you saved it, so nothing in your library needs
+redoing.
+
+Drills are written in the current format the next time you save them, and a drill saved
+now will not open in an older build of the board.
 
 ## Coordinate system
 

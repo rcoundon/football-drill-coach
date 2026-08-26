@@ -673,13 +673,13 @@ describe('deleting a group', () => {
     const board = useBoard()
     const counter = board.addCounter('red')
     board.moveCounter(counter.id, { x: 30, y: 30 })
-    board.dropBall({ x: 30, y: 30 })
-    expect(board.state.ball.attachedTo).toBe(counter.id)
+    board.dropBall(board.state.balls[0].id, { x: 30, y: 30 })
+    expect(board.state.balls[0].attachedTo).toBe(counter.id)
 
     board.deleteGroup([{ kind: 'counter', id: counter.id }])
 
-    expect(board.state.ball.attachedTo).toBeNull()
-    expect(board.state.ball.visible).toBe(true)
+    expect(board.state.balls[0].attachedTo).toBeNull()
+    expect(board.state.ballsVisible).toBe(true)
   })
 
   it('does nothing, and costs no history, for an empty group', () => {
@@ -775,13 +775,13 @@ describe('duplicating a group', () => {
     const board = useBoard()
     const counter = board.addCounter('red')
     board.moveCounter(counter.id, { x: 30, y: 30 })
-    board.dropBall({ x: 30, y: 30 })
-    expect(board.state.ball.attachedTo).toBe(counter.id)
+    board.dropBall(board.state.balls[0].id, { x: 30, y: 30 })
+    expect(board.state.balls[0].attachedTo).toBe(counter.id)
 
     const [copy] = board.duplicateGroup([{ kind: 'counter', id: counter.id }], { x: 4, y: 4 })
 
-    expect(board.state.ball.attachedTo).toBe(counter.id)
-    expect(board.state.ball.attachedTo).not.toBe(copy.id)
+    expect(board.state.balls[0].attachedTo).toBe(counter.id)
+    expect(board.state.balls[0].attachedTo).not.toBe(copy.id)
   })
 
   it('is one undo entry, not one per member', () => {

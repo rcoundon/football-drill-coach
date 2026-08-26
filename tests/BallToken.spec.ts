@@ -67,8 +67,8 @@ describe('an attached ball does not cover the player holding it', () => {
     const board = useBoard()
     const first = board.addCounter('red')
     const gap = Math.hypot(
-      board.ballPosition().x - first.pos.x,
-      board.ballPosition().y - first.pos.y,
+      board.ballPosition(board.state.balls[0].id).x - first.pos.x,
+      board.ballPosition(board.state.balls[0].id).y - first.pos.y,
     )
     expect(gap).toBeGreaterThanOrEqual(COUNTER_RADIUS + BALL_HIT_RADIUS_FREE)
   })

@@ -428,12 +428,13 @@ function sampleSnapshot(): BoardSnapshot {
         counters: [{ id: 'a', color: 'red', label: '1', pos: { x: 10, y: 10 } }],
         markers: [],
         labels: [],
-        ball: { pos: { x: 5, y: 5 }, attachedTo: null, visible: true },
+        balls: [{ id: 'b1', pos: { x: 5, y: 5 }, attachedTo: null }],
         drawings: [],
       },
     ],
     currentFrame: 0,
     labelsVisible: true,
+    ballsVisible: true,
     notes: '',
     notesVisible: true,
     pitch: { type: 'full', rotated: false },
@@ -719,7 +720,7 @@ describe('the ball shortcut', () => {
 
     fire({ key: 'b' })
     await wrapper.vm.$nextTick()
-    expect(board.state.ball.visible).toBe(false)
+    expect(board.state.ballsVisible).toBe(false)
   })
 
   it('leaves the ball alone on Ctrl+B, which belongs to the browser', async () => {
@@ -729,7 +730,7 @@ describe('the ball shortcut', () => {
 
     fire({ key: 'b', ctrlKey: true })
     await wrapper.vm.$nextTick()
-    expect(board.state.ball.visible).toBe(true)
+    expect(board.state.ballsVisible).toBe(true)
   })
 })
 

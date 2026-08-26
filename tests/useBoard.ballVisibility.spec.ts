@@ -5,22 +5,22 @@ beforeEach(() => __resetBoardForTests())
 
 describe('ball visibility', () => {
   it('starts visible', () => {
-    expect(useBoard().state.ball.visible).toBe(true)
+    expect(useBoard().state.ballsVisible).toBe(true)
   })
 
   it('toggles off and back on', () => {
     const board = useBoard()
-    board.toggleBallVisible()
-    expect(board.state.ball.visible).toBe(false)
-    board.toggleBallVisible()
-    expect(board.state.ball.visible).toBe(true)
+    board.toggleBallsVisible()
+    expect(board.state.ballsVisible).toBe(false)
+    board.toggleBallsVisible()
+    expect(board.state.ballsVisible).toBe(true)
   })
 
   it('is undoable', () => {
     const board = useBoard()
-    board.toggleBallVisible()
+    board.toggleBallsVisible()
     board.undo()
-    expect(board.state.ball.visible).toBe(true)
+    expect(board.state.ballsVisible).toBe(true)
   })
 
   /**
@@ -32,20 +32,20 @@ describe('ball visibility', () => {
     const board = useBoard()
     const player = board.addCounter('red')
     board.moveCounter(player.id, { x: 30, y: 30 })
-    board.dropBall({ x: 30, y: 30 })
-    expect(board.state.ball.attachedTo).toBe(player.id)
+    board.dropBall(board.state.balls[0].id, { x: 30, y: 30 })
+    expect(board.state.balls[0].attachedTo).toBe(player.id)
 
-    board.toggleBallVisible()
-    expect(board.state.ball.attachedTo).toBe(player.id)
+    board.toggleBallsVisible()
+    expect(board.state.balls[0].attachedTo).toBe(player.id)
 
-    board.toggleBallVisible()
-    expect(board.state.ball.attachedTo).toBe(player.id)
+    board.toggleBallsVisible()
+    expect(board.state.balls[0].attachedTo).toBe(player.id)
   })
 
   it('comes back visible after a reset', () => {
     const board = useBoard()
-    board.toggleBallVisible()
+    board.toggleBallsVisible()
     board.resetBoard()
-    expect(board.state.ball.visible).toBe(true)
+    expect(board.state.ballsVisible).toBe(true)
   })
 })

@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import type { CounterColor, ToolMode } from '../types'
 import { COUNTER_COLORS } from '../geometry'
-import { useBoard } from '../composables/useBoard'
+import { MAX_BALLS, useBoard } from '../composables/useBoard'
 import { useViewport } from '../composables/useViewport'
 import { DRAW_COLORS, DRAW_COLOR_NAMES, PITCHES, SWATCHES, TOOLS } from './controls'
 
@@ -68,6 +68,17 @@ const menuOpen = ref(false)
 /** Why Undo, Redo, Clear players, Clear drawings and Reset refuse mid-move. */
 const lockedTitle = 'Nothing can change while the drill is playing or mid-move'
 
+/** A drill may have eight balls. Past that the pitch stops being readable. */
+const atBallCap = computed(() => board.state.balls.length >= MAX_BALLS)
+
+const addBallTitle = computed(() => {
+  if (!board.state.ballsVisible) return 'Show the balls before putting another one out'
+  if (atBallCap.value) return `A drill can have ${MAX_BALLS} balls at most`
+  if (board.isDerived.value) return lockedTitle
+  return 'Put another ball out, on every phase'
+})
+
+
 /**
  * True while a drawing sits on some frame, current or not.
  *
@@ -78,9 +89,9 @@ const lockedTitle = 'Nothing can change while the drill is playing or mid-move'
  */
 const hasAnyDrawings = computed(() => board.state.frames.some((frame) => frame.drawings.length > 0))
 
-/** True while a ball is attached to someone on some frame, current or not. */
+/** True while any ball is attached to someone on some phase, current or not. */
 const hasAttachedBall = computed(() =>
-  board.state.frames.some((frame) => frame.ball.attachedTo !== null),
+  board.state.frames.some((frame) => frame.balls.some((b) => b.attachedTo !== null)),
 )
 
 /**
@@ -96,7 +107,11 @@ const isBoardEmpty = computed(
     board.state.labels.length === 0 &&
     board.state.notes === '' &&
     !hasAnyDrawings.value &&
-    !hasAttachedBall.value,
+    !hasAttachedBall.value &&
+    // A fresh board comes with one ball out, so that alone is nothing to
+    // clear. Any other number means the coach put balls out or took the last
+    // one off, and either way there is something for Reset to undo.
+    board.state.balls.length === 1,
 )
 
 function resetBoard() {
@@ -275,10 +290,21 @@ const heldLabel = computed(() =>
       >Notes</button>
       <button
         data-toggle-ball
-        :class="['chip', { 'is-active': board.state.ball.visible }]"
-        :title="board.state.ball.visible ? 'Take the ball off the pitch' : 'Put the ball back on the pitch'"
-        @click="board.toggleBallVisible()"
+        :class="['chip', { 'is-active': board.state.ballsVisible }]"
+        :title="board.state.ballsVisible ? 'Take the balls off the pitch' : 'Put the balls back on the pitch'"
+        @click="board.toggleBallsVisible()"
       >Ball</button>
+      <!--
+        Beside the toggle that hides them, because both are about what balls
+        the drill has out. Erase takes one off again, the way it does a cone.
+      -->
+      <button
+        data-add-ball
+        class="chip"
+        :disabled="atBallCap || !board.state.ballsVisible || board.isDerived.value"
+        :title="addBallTitle"
+        @click="board.addBall()"
+      >+ Ball</button>
       <button
         data-reset
         class="chip"

@@ -22,8 +22,8 @@ function marker(id: string, x: number, y: number): Marker {
   return { id, pos: { x, y } }
 }
 
-function ball(x: number, y: number, attachedTo: string | null = null): Ball {
-  return { pos: { x, y }, attachedTo, visible: true }
+function ball(x: number, y: number, attachedTo: string | null = null, id = 'b1'): Ball {
+  return { id, pos: { x, y }, attachedTo }
 }
 
 function frame(partial: Partial<Frame> = {}): Frame {
@@ -31,7 +31,7 @@ function frame(partial: Partial<Frame> = {}): Frame {
     counters: [],
     markers: [],
     labels: [],
-    ball: ball(50, 30),
+    balls: [ball(50, 30)],
     drawings: [],
     ...partial,
   }
@@ -120,16 +120,17 @@ describe('timelineOf', () => {
 
 describe('ballPositionIn', () => {
   it('is the ball’s own position when nobody is carrying it', () => {
-    expect(ballPositionIn(frame({ ball: ball(20, 30) }))).toEqual({ x: 20, y: 30 })
+    expect(ballPositionIn(frame({ balls: [ball(20, 30)] }), frame({ balls: [ball(20, 30)] }).balls[0])).toEqual({ x: 20, y: 30 })
   })
 
   it('is one offset from the holder when someone is', () => {
-    const f = frame({ counters: [counter('c1', 40, 25)], ball: ball(0, 0, 'c1') })
-    expect(ballPositionIn(f)).toEqual({ x: 40 + BALL_OFFSET.x, y: 25 + BALL_OFFSET.y })
+    const f = frame({ counters: [counter('c1', 40, 25)], balls: [ball(0, 0, 'c1')] })
+    expect(ballPositionIn(f, f.balls[0])).toEqual({ x: 40 + BALL_OFFSET.x, y: 25 + BALL_OFFSET.y })
   })
 
   it('falls back to its own position when the holder is gone', () => {
-    expect(ballPositionIn(frame({ ball: ball(20, 30, 'missing') }))).toEqual({ x: 20, y: 30 })
+    const f = frame({ balls: [ball(20, 30, 'missing')] })
+    expect(ballPositionIn(f, f.balls[0])).toEqual({ x: 20, y: 30 })
   })
 })
 
@@ -164,12 +165,12 @@ describe('interpolateFrames', () => {
   })
 
   it('flies the ball linearly and lets go of it on the way', () => {
-    const a = frame({ counters: [counter('c1', 0, 0), counter('c2', 40, 0)], ball: ball(0, 0, 'c1') })
-    const b = frame({ counters: [counter('c1', 0, 0), counter('c2', 40, 0)], ball: ball(0, 0, 'c2') })
+    const a = frame({ counters: [counter('c1', 0, 0), counter('c2', 40, 0)], balls: [ball(0, 0, 'c1')] })
+    const b = frame({ counters: [counter('c1', 0, 0), counter('c2', 40, 0)], balls: [ball(0, 0, 'c2')] })
     const view = interpolateFrames(a, b, 0.25)
-    expect(view.ball.attachedTo).toBeNull()
+    expect(view.balls[0].attachedTo).toBeNull()
     // Linear, not eased: a struck ball does not accelerate.
-    expect(view.ball.pos.x).toBeCloseTo(BALL_OFFSET.x + 10, 10)
+    expect(view.balls[0].pos.x).toBeCloseTo(BALL_OFFSET.x + 10, 10)
   })
 
   it('keeps the source frame’s drawings for the whole move', () => {
@@ -244,8 +245,8 @@ describe('gifSchedule', () => {
  */
 describe('a ball being carried', () => {
   const carried = (from: Vec, to: Vec) => ({
-    a: frame({ counters: [counter('c1', from.x, from.y)], ball: ball(0, 0, 'c1') }),
-    b: frame({ counters: [counter('c1', to.x, to.y)], ball: ball(0, 0, 'c1') }),
+    a: frame({ counters: [counter('c1', from.x, from.y)], balls: [ball(0, 0, 'c1')] }),
+    b: frame({ counters: [counter('c1', to.x, to.y)], balls: [ball(0, 0, 'c1')] }),
   })
 
   it('stays on the carrier’s boot the whole way', () => {
@@ -255,33 +256,69 @@ describe('a ball being carried', () => {
     // pass against a ball that drifts.
     const view = interpolateFrames(a, b, 0.25)
     const holder = view.counters[0]
-    expect(view.ball.pos.x).toBeCloseTo(holder.pos.x + BALL_OFFSET.x, 10)
-    expect(view.ball.pos.y).toBeCloseTo(holder.pos.y + BALL_OFFSET.y, 10)
+    expect(view.balls[0].pos.x).toBeCloseTo(holder.pos.x + BALL_OFFSET.x, 10)
+    expect(view.balls[0].pos.y).toBeCloseTo(holder.pos.y + BALL_OFFSET.y, 10)
   })
 
   it('is still in that player’s possession while they run', () => {
     const { a, b } = carried({ x: 0, y: 0 }, { x: 40, y: 0 })
-    expect(interpolateFrames(a, b, 0.25).ball.attachedTo).toBe('c1')
+    expect(interpolateFrames(a, b, 0.25).balls[0].attachedTo).toBe('c1')
   })
 
   it('is let go the moment the ball changes hands', () => {
     const a = frame({
       counters: [counter('c1', 0, 0), counter('c2', 40, 0)],
-      ball: ball(0, 0, 'c1'),
+      balls: [ball(0, 0, 'c1')],
     })
     const b = frame({
       counters: [counter('c1', 0, 0), counter('c2', 40, 0)],
-      ball: ball(0, 0, 'c2'),
+      balls: [ball(0, 0, 'c2')],
     })
     const view = interpolateFrames(a, b, 0.25)
-    expect(view.ball.attachedTo).toBeNull()
+    expect(view.balls[0].attachedTo).toBeNull()
     // And travels at its own constant speed, not the players'.
-    expect(view.ball.pos.x).toBeCloseTo(BALL_OFFSET.x + 10, 10)
+    expect(view.balls[0].pos.x).toBeCloseTo(BALL_OFFSET.x + 10, 10)
   })
 
   it('is let go when it is played into space', () => {
-    const a = frame({ counters: [counter('c1', 0, 0)], ball: ball(0, 0, 'c1') })
-    const b = frame({ counters: [counter('c1', 0, 0)], ball: ball(60, 20) })
-    expect(interpolateFrames(a, b, 0.25).ball.attachedTo).toBeNull()
+    const a = frame({ counters: [counter('c1', 0, 0)], balls: [ball(0, 0, 'c1')] })
+    const b = frame({ counters: [counter('c1', 0, 0)], balls: [ball(60, 20)] })
+    expect(interpolateFrames(a, b, 0.25).balls[0].attachedTo).toBeNull()
+  })
+})
+
+/**
+ * The whole change rests on matching a ball in one phase to the SAME ball in
+ * the next, by id. Every fixture above happens to hold one ball in the same
+ * slot in both frames, so matching by index would pass all of them — which
+ * means the load-bearing decision was asserted by nothing. These two put the
+ * balls in a different order, where index and id disagree.
+ */
+describe('balls are matched by id, not by where they sit in the list', () => {
+  it('follows each ball to its own destination when the order differs', () => {
+    const a = frame({ balls: [ball(0, 0, null, 'b1'), ball(100, 0, null, 'b2')] })
+    const b = frame({ balls: [ball(100, 40, null, 'b2'), ball(0, 40, null, 'b1')] })
+
+    const view = interpolateFrames(a, b, 0.5)
+    const shown = Object.fromEntries(view.balls.map((x) => [x.id, x.pos]))
+
+    // b1 travels 0,0 -> 0,40 and b2 travels 100,0 -> 100,40. Matching by
+    // index would have them crossing the pitch instead.
+    expect(shown.b1).toEqual({ x: 0, y: 20 })
+    expect(shown.b2).toEqual({ x: 100, y: 20 })
+  })
+
+  it('follows the right carrier when two balls swap places in the list', () => {
+    const counters = [counter('c1', 0, 0), counter('c2', 60, 0)]
+    const a = frame({ counters, balls: [ball(0, 0, 'c1', 'b1'), ball(0, 0, 'c2', 'b2')] })
+    const b = frame({
+      counters: [counter('c1', 0, 50), counter('c2', 60, 50)],
+      balls: [ball(0, 0, 'c2', 'b2'), ball(0, 0, 'c1', 'b1')],
+    })
+
+    const view = interpolateFrames(a, b, 0.25)
+    const held = Object.fromEntries(view.balls.map((x) => [x.id, x.attachedTo]))
+    expect(held.b1).toBe('c1')
+    expect(held.b2).toBe('c2')
   })
 })

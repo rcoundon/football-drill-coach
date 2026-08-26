@@ -56,11 +56,23 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           a label, then drag or double-press it to change what it says.
         </p>
         <p>
-          Drop the ball on a player to give them possession — they get a white ring and the
-          ball travels with them from then on. Drag the ball onto open grass to let it go.
-          Hiding the ball (the Ball button, or <kbd>B</kbd>) takes the possession ring with it,
-          since nobody can hold a ball that isn't there, but the board remembers who was
-          carrying it and hands it straight back when you show the ball again.
+          Drop a ball on a player to give them possession — they get a white ring and the ball
+          travels with them from then on. Drag it onto open grass to let it go. A player holds
+          one ball at a time, so a ball dropped on someone who already has one stays free where
+          you dropped it rather than taking theirs.
+        </p>
+        <p>
+          A drill can have up to eight balls: one per rondo grid, per queue, per lane.
+          <strong>+ Ball</strong> puts another out, and Erase takes one off the way it takes off
+          a cone. A drill with none at all is fine — a shape or pressing session has no ball in
+          it. Balls look alike, because footballs do: in a rondo it does not matter which is
+          which.
+        </p>
+        <p>
+          The Ball button (or <kbd>B</kbd>) hides every ball at once, and takes the possession
+          rings with them, since nobody can hold a ball that isn't there. It is not the same as
+          removing them: the board remembers where each one was and who had it, and hands them
+          all back when you show them again.
         </p>
       </section>
 
@@ -107,8 +119,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         </p>
         <p>
           A plain press on grass, <kbd>Escape</kbd>, or switching tool puts the group down
-          again. The ball never joins a group — it's one object, already easy to drag on its
-          own, and it carries possession.
+          again. A loose ball inside the box joins the group like anything else, but a ball
+          a player is carrying does not — it goes where its carrier goes, so it comes along
+          only if they were in the box too. You cannot lasso a ball out of someone's feet.
         </p>
       </section>
 
@@ -117,19 +130,20 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         <p>
           A drill is not one picture — it's a sequence a team is walked through. Build it as a
           set of phases, each one the board at a single point in the drill: where everyone
-          stands, what's drawn, who has the ball. Play it back and the board slides everything
+          stands, what's drawn, who has a ball. Play it back and the board slides everything
           from one phase to the next, so a coach can show the movement rather than talk over a
           still image.
         </p>
         <p>
           <strong>+ Add a phase</strong> adds one, an exact copy of the phase you're on — same
-          players, same positions, same ball — so you're moving things from where they already
+          players, same positions, same balls — so you're moving things from where they already
           are rather than starting again from nothing.
         </p>
         <p>
-          Moving a player, drawing on the board, or dropping the ball only changes the phase
+          Moving a player, drawing on the board, or dropping a ball only changes the phase
           you're currently on — earlier and later phases are untouched. Your squad, though, is
-          the same in every phase: adding, removing or renaming a player, cone or label reaches
+          the same in every phase: adding, removing or renaming a player, cone, label or ball
+          reaches
           the whole drill at once, so nobody can appear or disappear partway through it. Only
           where things stand, and what's drawn, differs from phase to phase — which is also why
           a drawing belongs to the phase it describes: the arrow showing a pass is there while
@@ -196,7 +210,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             <tr><th>Key</th><th>What it does</th></tr>
           </thead>
           <tbody>
-            <tr><td><kbd>V</kbd></td><td>Move — drag players, cones, labels and the ball; bend and reshape drawings</td></tr>
+            <tr><td><kbd>V</kbd></td><td>Move — drag players, cones, labels and balls; bend and reshape drawings</td></tr>
             <tr><td><kbd>P</kbd></td><td>Draw — freehand pen</td></tr>
             <tr><td><kbd>R</kbd></td><td>Run — solid arrow</td></tr>
             <tr><td><kbd>S</kbd></td><td>Pass — dashed arrow</td></tr>
@@ -204,7 +218,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             <tr><td><kbd>C</kbd></td><td>Cone</td></tr>
             <tr><td><kbd>T</kbd></td><td>Text</td></tr>
             <tr><td><kbd>E</kbd></td><td>Erase</td></tr>
-            <tr><td><kbd>B</kbd></td><td>Show or hide the ball</td></tr>
+            <tr><td><kbd>B</kbd></td><td>Show or hide every ball</td></tr>
             <tr><td><kbd>Space</kbd></td><td>Play or pause the drill (see above)</td></tr>
             <tr><td><kbd>Ctrl+Z</kbd> / <kbd>Cmd+Z</kbd></td><td>Undo</td></tr>
             <tr><td><kbd>Ctrl+Shift+Z</kbd> / <kbd>Cmd+Shift+Z</kbd></td><td>Redo</td></tr>

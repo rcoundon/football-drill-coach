@@ -96,8 +96,8 @@ describe('labels and the rest of the board', () => {
   it('never takes possession of the ball', () => {
     const board = useBoard()
     board.addLabel({ x: 30, y: 30 }, 'Here')
-    board.dropBall({ x: 30, y: 30 })
-    expect(board.state.ball.attachedTo).toBeNull()
+    board.dropBall(board.state.balls[0].id, { x: 30, y: 30 })
+    expect(board.state.balls[0].attachedTo).toBeNull()
   })
 
   it('survives Clear players and Clear drawings', () => {

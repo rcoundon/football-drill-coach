@@ -14,12 +14,13 @@ function snap(): BoardSnapshot {
         counters: [{ id: 'a', color: 'red', label: '1', pos: { x: 10, y: 10 } }],
         markers: [],
         labels: [],
-        ball: { pos: { x: 5, y: 5 }, attachedTo: null, visible: true },
+        balls: [{ id: 'b1', pos: { x: 5, y: 5 }, attachedTo: null }],
         drawings: [],
       },
     ],
     currentFrame: 0,
     labelsVisible: true,
+    ballsVisible: true,
     notes: '',
     notesVisible: true,
     pitch: { type: 'full', rotated: false },
@@ -50,7 +51,7 @@ describe('savePattern and listPatterns', () => {
     const store = useStorage()
     const saved = store.savePattern('Drill', snap())
     expect(saved.frames).toHaveLength(1)
-    expect(saved.version).toBe(2)
+    expect(saved.version).toBe(3)
   })
 
   it('keeps drawings on the frame that owns them, not the pattern', () => {
@@ -148,7 +149,7 @@ describe('corrupt storage', () => {
     raw.push({
       ...good,
       id: 'bad-counter',
-      frames: [{ counters: [42], ball: good.frames[0].ball }],
+      frames: [{ counters: [42], balls: good.frames[0].balls }],
     })
     localStorage.setItem(PATTERNS_KEY, JSON.stringify(raw))
     const listed = store.listPatterns()
@@ -263,7 +264,7 @@ describe('parsePattern', () => {
   it('rejects an unknown schema version', () => {
     const store = useStorage()
     const saved = store.savePattern('Drill', snap())
-    const future = { ...saved, version: 3 }
+    const future = { ...saved, version: 4 }
     expect(() => parsePattern(future)).toThrow(/different version/i)
   })
 
@@ -358,15 +359,32 @@ describe('draft autosave', () => {
    */
   describe('rejects a draft that would break the board', () => {
     const cases: [string, unknown][] = [
-      ['no ball', withFrame({ ball: undefined })],
-      ['a ball with no position', withFrame({ ball: { attachedTo: null } })],
-      ['a ball attached to a number', withFrame({ ball: { pos: { x: 1, y: 1 }, attachedTo: 7 } })],
+      // These used to override `ball`, which a frame no longer has — so the
+      // damage sat beside a perfectly good `balls` list and was ignored,
+      // and three tests that read as rejections quietly asserted nothing.
+      ['balls that are not a list', withFrame({ balls: 'nope' })],
+      ['a ball with no position', withFrame({ balls: [{ id: 'b1', attachedTo: null }] })],
+      [
+        'a ball attached to a number',
+        withFrame({ balls: [{ id: 'b1', pos: { x: 1, y: 1 }, attachedTo: 7 }] }),
+      ],
+      ['one damaged ball among good ones', withFrame({ balls: [{ id: 'b1', pos: { x: 1, y: 1 }, attachedTo: null }, { id: 'b2' }] })],
+      // The pre-version-3 shape is still read, so a damaged one is still refused.
+      ['a damaged ball in the older single-ball shape', withFrame({ balls: undefined, ball: { attachedTo: null } })],
+      ['neither a list of balls nor an older single one', withFrame({ balls: undefined, ball: undefined })],
       ['no drawings', withFrame({ drawings: undefined })],
       ['a damaged drawing', withFrame({ drawings: ['oops'] })],
       ['a damaged counter', withFrame({ counters: [42] })],
       ['no pitch type', { ...snap(), pitch: { rotated: false } }],
       ['a non-boolean rotation', { ...snap(), pitch: { type: 'full', rotated: 'yes' } }],
     ]
+
+    it('keeps a draft with no balls at all — a shape drill has none', () => {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(withFrame({ balls: [] })))
+      const draft = useStorage().loadDraft()
+      expect(draft).not.toBeNull()
+      expect(draft!.frames[0].balls).toEqual([])
+    })
 
     for (const [label, draft] of cases) {
       it(`returns null for a draft with ${label}`, () => {
@@ -613,35 +631,50 @@ describe('cones', () => {
 })
 
 
+/**
+ * These three used to read the flag off the ball itself. It is a drill-wide
+ * setting now — which is what "hide them all" means, and what stops hiding on
+ * one phase leaving the balls showing on the next. The intents are unchanged:
+ * hidden round-trips as hidden, and a drill saved before the flag existed
+ * reads as showing its balls.
+ */
 describe('ball visibility', () => {
-  it('round-trips a hidden ball', () => {
+  it('round-trips hidden balls', () => {
     const store = useStorage()
-    const hidden = { ...snap(), frames: [{ ...snap().frames[0], ball: { ...snap().frames[0].ball, visible: false } }] }
-    const saved = store.savePattern('Shape drill', hidden)
-    expect(store.patternToSnapshot(saved).frames[0].ball.visible).toBe(false)
+    const saved = store.savePattern('Shape drill', { ...snap(), ballsVisible: false })
+    expect(store.patternToSnapshot(saved).ballsVisible).toBe(false)
   })
 
-  /**
-   * Patterns saved before the ball could be hidden have no visible flag,
-   * and every one of them had a ball on the pitch.
-   */
-  it('treats a pattern saved without the flag as having a visible ball', () => {
+  it('treats a drill saved without the flag as showing its balls', () => {
     const store = useStorage()
     const saved = store.savePattern('Older drill', snap())
     const legacy = structuredClone(saved) as Record<string, unknown>
-    delete ((legacy.frames as Record<string, unknown>[])[0].ball as Record<string, unknown>).visible
+    delete legacy.ballsVisible
 
     expect(() => parsePattern(legacy)).not.toThrow()
-    expect(store.patternToSnapshot(parsePattern(legacy)).frames[0].ball.visible).toBe(true)
+    expect(store.patternToSnapshot(parsePattern(legacy)).ballsVisible).toBe(true)
+  })
+
+  it('reads an older drill’s answer off the ball it kept it on', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Older drill', snap())
+    const legacy = structuredClone(saved) as Record<string, unknown>
+    delete legacy.ballsVisible
+    const frames = legacy.frames as Record<string, unknown>[]
+    // The pre-version-3 shape: one ball on the frame, carrying the flag.
+    frames[0].ball = { pos: { x: 50, y: 30 }, attachedTo: null, visible: false }
+    delete frames[0].balls
+
+    expect(store.patternToSnapshot(parsePattern(legacy)).ballsVisible).toBe(false)
   })
 
   it('treats a draft saved without the flag the same way', () => {
     const store = useStorage()
     store.saveDraft(snap())
     const raw = JSON.parse(localStorage.getItem(DRAFT_KEY)!)
-    delete raw.frames[0].ball.visible
+    delete raw.ballsVisible
     localStorage.setItem(DRAFT_KEY, JSON.stringify(raw))
-    expect(store.loadDraft()?.frames[0].ball.visible).toBe(true)
+    expect(store.loadDraft()?.ballsVisible).toBe(true)
   })
 })
 
@@ -654,6 +687,7 @@ describe('pitch labels', () => {
       ...snap(),
       frames: [{ ...snap().frames[0], labels: [label] }],
       labelsVisible: false,
+      ballsVisible: true,
     })
     const restored = store.patternToSnapshot(saved)
     expect(restored.frames[0].labels).toEqual([label])
@@ -702,7 +736,7 @@ describe('opening a pattern saved before playback existed', () => {
           counters: [{ id: 'c1', color: 'red', label: '', pos: { x: 10, y: 10 } }],
           markers: [],
           labels: [],
-          ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+          balls: [{ id: 'b1', pos: { x: 50, y: 30 }, attachedTo: null }],
         },
       ],
       createdAt: '2026-01-01T00:00:00.000Z',
@@ -720,7 +754,7 @@ describe('opening a pattern saved before playback existed', () => {
     expect(snap.currentFrame).toBe(0)
   })
 
-  it('is written back as version 2 with the drawings on the frame', () => {
+  it('is written back at the current version, with the drawings on the frame', () => {
     const storage = useStorage()
     const saved = storage.savePattern('Drill', {
       frames: [
@@ -728,18 +762,19 @@ describe('opening a pattern saved before playback existed', () => {
           counters: [],
           markers: [],
           labels: [],
-          ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+          balls: [{ id: 'b1', pos: { x: 50, y: 30 }, attachedTo: null }],
           drawings: [{ id: 'd1', kind: 'line', color: '#fff', from: { x: 0, y: 0 }, to: { x: 9, y: 9 } }],
         },
       ],
       currentFrame: 0,
       labelsVisible: true,
+      ballsVisible: true,
       notes: '',
       notesVisible: true,
       pitch: { type: 'blank', rotated: false },
     })
 
-    expect(saved.version).toBe(2)
+    expect(saved.version).toBe(3)
     expect(saved.drawings).toBeUndefined()
     expect(saved.frames[0].drawings).toHaveLength(1)
   })
@@ -752,7 +787,7 @@ describe('a multi-frame pattern round-trips', () => {
       counters: [],
       markers: [],
       labels: [],
-      ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+      balls: [{ id: 'b1', pos: { x: 50, y: 30 }, attachedTo: null }],
       drawings: [],
       ...(duration === undefined ? {} : { duration }),
     })
@@ -760,6 +795,7 @@ describe('a multi-frame pattern round-trips', () => {
       frames: [frame(), frame(400), frame(600)],
       currentFrame: 2,
       labelsVisible: true,
+      ballsVisible: true,
       notes: '',
       notesVisible: true,
       pitch: { type: 'blank', rotated: false },
@@ -777,13 +813,14 @@ describe('a multi-frame pattern round-trips', () => {
       counters: [],
       markers: [],
       labels: [],
-      ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+      balls: [{ id: 'b1', pos: { x: 50, y: 30 }, attachedTo: null }],
       drawings: [],
     })
     const saved = storage.savePattern('Drill', {
       frames: [frame(), frame()],
       currentFrame: 1,
       labelsVisible: true,
+      ballsVisible: true,
       notes: '',
       notesVisible: true,
       pitch: { type: 'blank', rotated: false },
@@ -801,9 +838,10 @@ describe('restoring a draft saved before playback existed', () => {
         markers: [],
         labels: [],
         labelsVisible: true,
+        ballsVisible: true,
         notes: 'old',
         notesVisible: true,
-        ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+        balls: [{ id: 'b1', pos: { x: 50, y: 30 }, attachedTo: null }],
         drawings: [{ id: 'd1', kind: 'line', color: '#fff', from: { x: 0, y: 0 }, to: { x: 9, y: 9 } }],
         pitch: { type: 'blank', rotated: false },
       }),
@@ -826,20 +864,21 @@ describe('restoring a draft saved before playback existed', () => {
           counters: [],
           markers: [],
           labels: [],
-          ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+          balls: [{ id: 'b1', pos: { x: 50, y: 30 }, attachedTo: null }],
           drawings: [],
         },
         {
           counters: [],
           markers: [],
           labels: [],
-          ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+          balls: [{ id: 'b1', pos: { x: 50, y: 30 }, attachedTo: null }],
           drawings: [],
           duration: 250,
         },
       ],
       currentFrame: 1,
       labelsVisible: true,
+      ballsVisible: true,
       notes: '',
       notesVisible: true,
       pitch: { type: 'blank', rotated: false },
@@ -870,7 +909,7 @@ describe('restoring a draft saved before playback existed', () => {
         counters: 'not an array',
         markers: [],
         labels: [],
-        ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+        balls: [{ id: 'b1', pos: { x: 50, y: 30 }, attachedTo: null }],
         drawings: [],
         pitch: { type: 'blank', rotated: false },
       }),
@@ -891,7 +930,7 @@ describe('restoring a draft saved before playback existed', () => {
         counters: [],
         markers: [],
         labels: [],
-        ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+        balls: [{ id: 'b1', pos: { x: 50, y: 30 }, attachedTo: null }],
         drawings: [],
       }),
     )
@@ -928,7 +967,7 @@ describe('restoring a draft saved before playback existed', () => {
         counters: [],
         markers: [],
         labels: [],
-        ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+        balls: [{ id: 'b1', pos: { x: 50, y: 30 }, attachedTo: null }],
         drawings: 'nope',
         pitch: { type: 'blank', rotated: false },
       }),
@@ -951,20 +990,21 @@ describe('restoring a draft saved before playback existed', () => {
           counters: [],
           markers: [],
           labels: [],
-          ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+          balls: [{ id: 'b1', pos: { x: 50, y: 30 }, attachedTo: null }],
           drawings: [],
         },
         {
           counters: [],
           markers: [],
           labels: [],
-          ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+          balls: [{ id: 'b1', pos: { x: 50, y: 30 }, attachedTo: null }],
           drawings: [],
           duration,
         },
       ],
       currentFrame: 1,
       labelsVisible: true,
+      ballsVisible: true,
       notes: '',
       notesVisible: true,
       pitch: { type: 'blank', rotated: false },
@@ -1015,5 +1055,221 @@ describe('drill notes', () => {
     const broken = structuredClone(saved) as Record<string, unknown>
     broken.notes = 42
     expect(() => parsePattern(broken)).toThrow(/notes/i)
+  })
+})
+
+/**
+ * A drill used to have exactly one ball, held as `frame.ball`, and its
+ * visibility rode along on that object. Both change together in version 3:
+ * a frame holds a list of balls, and whether they are shown is a drill-wide
+ * setting like the labels and the notes.
+ */
+describe('opening a drill saved when there was only one ball', () => {
+  const oneBallFrame = (visible = true) => ({
+    counters: [{ id: 'c1', color: 'red', label: '', pos: { x: 10, y: 10 } }],
+    markers: [],
+    labels: [],
+    ball: { pos: { x: 40, y: 20 }, attachedTo: 'c1', visible },
+    drawings: [],
+  })
+
+  const v2 = (visible = true) => ({
+    id: 'p-old',
+    name: 'One ball drill',
+    version: 2,
+    pitch: { type: 'full', rotated: false },
+    frames: [oneBallFrame(visible), oneBallFrame(visible)],
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  })
+
+  it('makes its one ball the first of a list, keeping where it was and who had it', () => {
+    localStorage.setItem('fct.patterns.v1', JSON.stringify([v2()]))
+    const snap = useStorage().patternToSnapshot(useStorage().listPatterns()[0])
+
+    expect(snap.frames[0].balls).toHaveLength(1)
+    expect(snap.frames[0].balls[0].pos).toEqual({ x: 40, y: 20 })
+    expect(snap.frames[0].balls[0].attachedTo).toBe('c1')
+  })
+
+  it('gives that ball an id, so playback can follow it between phases', () => {
+    localStorage.setItem('fct.patterns.v1', JSON.stringify([v2()]))
+    const snap = useStorage().patternToSnapshot(useStorage().listPatterns()[0])
+
+    const first = snap.frames[0].balls[0].id
+    expect(first).toBeTruthy()
+    // The same ball in both phases, or a tween has nothing to match up.
+    expect(snap.frames[1].balls[0].id).toBe(first)
+  })
+
+  it('lifts its visibility out to the drill, where it belongs', () => {
+    localStorage.setItem('fct.patterns.v1', JSON.stringify([v2(false)]))
+    const snap = useStorage().patternToSnapshot(useStorage().listPatterns()[0])
+
+    expect(snap.ballsVisible).toBe(false)
+    expect(snap.frames[0].balls[0]).not.toHaveProperty('visible')
+  })
+
+  it('is written back as version 3, with the balls on the phase', () => {
+    const storage = useStorage()
+    const saved = storage.savePattern('Rondo', {
+      frames: [
+        {
+          counters: [],
+          markers: [],
+          labels: [],
+          balls: [
+            { id: 'b1', pos: { x: 10, y: 10 }, attachedTo: null },
+            { id: 'b2', pos: { x: 30, y: 30 }, attachedTo: null },
+          ],
+          drawings: [],
+        },
+      ],
+      currentFrame: 0,
+      labelsVisible: true,
+      ballsVisible: true,
+      notes: '',
+      notesVisible: true,
+      pitch: { type: 'blank', rotated: false },
+    })
+
+    expect(saved.version).toBe(3)
+    expect(saved.frames[0].balls).toHaveLength(2)
+    expect(saved.ballsVisible).toBe(true)
+  })
+
+  it('round-trips several balls without losing one or muddling their carriers', () => {
+    const storage = useStorage()
+    const saved = storage.savePattern('Two lanes', {
+      frames: [
+        {
+          counters: [{ id: 'c1', color: 'red', label: '', pos: { x: 5, y: 5 } }],
+          markers: [],
+          labels: [],
+          balls: [
+            { id: 'b1', pos: { x: 10, y: 10 }, attachedTo: 'c1' },
+            { id: 'b2', pos: { x: 30, y: 30 }, attachedTo: null },
+          ],
+          drawings: [],
+        },
+      ],
+      currentFrame: 0,
+      labelsVisible: true,
+      ballsVisible: false,
+      notes: '',
+      notesVisible: true,
+      pitch: { type: 'blank', rotated: false },
+    })
+
+    const back = storage.patternToSnapshot(saved)
+    expect(back.frames[0].balls.map((b) => b.id)).toEqual(['b1', 'b2'])
+    expect(back.frames[0].balls[0].attachedTo).toBe('c1')
+    expect(back.frames[0].balls[1].attachedTo).toBeNull()
+    expect(back.ballsVisible).toBe(false)
+  })
+
+  it('still throws away a draft whose balls are damaged', () => {
+    localStorage.setItem(
+      'fct.draft.v1',
+      JSON.stringify({
+        frames: [{ counters: [], markers: [], labels: [], balls: 'not an array', drawings: [] }],
+        currentFrame: 0,
+        pitch: { type: 'blank', rotated: false },
+      }),
+    )
+    expect(useStorage().loadDraft()).toBeNull()
+  })
+})
+
+/**
+ * Every other thing on the board is rejected without an id; balls were not,
+ * and the whole change rests on them having one. An imported drill with
+ * id-less balls got as far as `removeBall(undefined)`, which filters on
+ * `b.id !== undefined` and takes off every id-less ball at once — erasing one
+ * would have erased several.
+ */
+describe('a ball without an id is damage', () => {
+  const withBalls = (balls: unknown) => ({ ...snap(), frames: [{ ...snap().frames[0], balls }] })
+
+  it('is refused in a draft', () => {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(withBalls([{ pos: { x: 1, y: 1 }, attachedTo: null }])))
+    expect(useStorage().loadDraft()).toBeNull()
+  })
+
+  it('is refused in a saved drill', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Imported', snap())
+    const damaged = structuredClone(saved) as Record<string, unknown>
+    ;(damaged.frames as Record<string, unknown>[])[0].balls = [{ pos: { x: 1, y: 1 }, attachedTo: null }]
+    expect(() => parsePattern(damaged)).toThrow(/ball/i)
+  })
+
+  it('but the older single-ball shape is still read, since migration mints its id', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Older drill', snap())
+    const legacy = structuredClone(saved) as Record<string, unknown>
+    const frames = legacy.frames as Record<string, unknown>[]
+    delete frames[0].balls
+    frames[0].ball = { pos: { x: 40, y: 20 }, attachedTo: null }
+
+    expect(() => parsePattern(legacy)).not.toThrow()
+    expect(store.patternToSnapshot(parsePattern(legacy)).frames[0].balls[0].id).toBeTruthy()
+  })
+})
+
+/**
+ * Two balls sharing an id is the same class of damage as a ball with none:
+ * playback matches by id, and `removeBall` filters on it, so erasing one
+ * would take the other off with it.
+ */
+describe('balls sharing an id are damage', () => {
+  const twoBalls = (ids: [string, string]) => [
+    { id: ids[0], pos: { x: 10, y: 10 }, attachedTo: null },
+    { id: ids[1], pos: { x: 30, y: 30 }, attachedTo: null },
+  ]
+
+  it('is refused in a saved drill', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Two lanes', snap())
+    const damaged = structuredClone(saved) as Record<string, unknown>
+    ;(damaged.frames as Record<string, unknown>[])[0].balls = twoBalls(['b1', 'b1'])
+    expect(() => parsePattern(damaged)).toThrow(/ball/i)
+  })
+
+  it('is refused in a draft', () => {
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({ ...snap(), frames: [{ ...snap().frames[0], balls: twoBalls(['b1', 'b1']) }] }),
+    )
+    expect(useStorage().loadDraft()).toBeNull()
+  })
+
+  it('but two different ids are fine', () => {
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({ ...snap(), frames: [{ ...snap().frames[0], balls: twoBalls(['b1', 'b2']) }] }),
+    )
+    expect(useStorage().loadDraft()?.frames[0].balls).toHaveLength(2)
+  })
+})
+
+describe('a draft whose balls list is damaged', () => {
+  it('is refused even when an older single ball sits beside it', () => {
+    // The branch used to fall back to the legacy ball whenever `balls` was
+    // not an array, so garbage in `balls` was excused by a good `ball`.
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({
+        ...snap(),
+        frames: [
+          {
+            ...snap().frames[0],
+            balls: 'nope',
+            ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+          },
+        ],
+      }),
+    )
+    expect(useStorage().loadDraft()).toBeNull()
   })
 })

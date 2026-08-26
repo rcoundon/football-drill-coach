@@ -12,7 +12,7 @@ describe('useBoard singleton', () => {
     const { state } = useBoard()
     expect(state.counters).toEqual([])
     expect(state.drawings).toEqual([])
-    expect(state.ball.attachedTo).toBeNull()
+    expect(state.balls[0].attachedTo).toBeNull()
     expect(state.pitch).toEqual({ type: 'blank', rotated: false })
   })
 
@@ -165,12 +165,13 @@ describe('loadSnapshot', () => {
           counters: [{ id: 'a', color: 'red', label: '1', pos: { x: 10, y: 10 } }],
           markers: [],
           labels: [],
-          ball: { pos: { x: 5, y: 5 }, attachedTo: null, visible: true },
+          balls: [{ id: 'b1', pos: { x: 5, y: 5 }, attachedTo: null }],
           drawings: [],
         },
       ],
       currentFrame: 0,
       labelsVisible: true,
+      ballsVisible: true,
       notes: '',
       notesVisible: true,
       pitch: { type: 'full', rotated: true },
@@ -187,12 +188,13 @@ describe('loadSnapshot', () => {
           counters: [{ id: 'a', color: 'red' as const, label: '1', pos: { x: 10, y: 10 } }],
           markers: [],
           labels: [],
-          ball: { pos: { x: 5, y: 5 }, attachedTo: null, visible: true },
+          balls: [{ id: 'b1', pos: { x: 5, y: 5 }, attachedTo: null }],
           drawings: [],
         },
       ],
       currentFrame: 0,
       labelsVisible: true,
+      ballsVisible: true,
       notes: '',
       notesVisible: true,
       pitch: { type: 'full' as const, rotated: false },
@@ -208,7 +210,7 @@ describe('resetBoard', () => {
     const board = useBoard()
     const c = board.addCounter('red')
     board.moveCounter(c.id, { x: 20, y: 20 })
-    board.dropBall({ x: 20, y: 20 })
+    board.dropBall(board.state.balls[0].id, { x: 20, y: 20 })
     const line = board.startLine({ x: 5, y: 5 }, '#fff')
     board.updateSegment(line, { x: 60, y: 5 })
     board.finishDrawing(line)
@@ -217,15 +219,15 @@ describe('resetBoard', () => {
 
     expect(board.state.counters).toEqual([])
     expect(board.state.drawings).toEqual([])
-    expect(board.state.ball.attachedTo).toBeNull()
+    expect(board.state.balls[0].attachedTo).toBeNull()
   })
 
   it('puts the ball back where a fresh board starts it', () => {
     const board = useBoard()
-    const fresh = { ...board.state.ball.pos }
-    board.moveBall({ x: 90, y: 10 })
+    const fresh = { ...board.state.balls[0].pos }
+    board.moveBall(board.state.balls[0].id, { x: 90, y: 10 })
     board.resetBoard()
-    expect(board.state.ball.pos).toEqual(fresh)
+    expect(board.state.balls[0].pos).toEqual(fresh)
   })
 
   /**
@@ -272,21 +274,21 @@ describe('clearCounters', () => {
     const board = useBoard()
     const c = board.addCounter('red')
     board.moveCounter(c.id, { x: 30, y: 20 })
-    board.dropBall({ x: 30, y: 20 })
-    const riding = board.ballPosition()
+    board.dropBall(board.state.balls[0].id, { x: 30, y: 20 })
+    const riding = board.ballPosition(board.state.balls[0].id)
 
     board.clearCounters()
 
-    expect(board.state.ball.attachedTo).toBeNull()
-    expect(board.state.ball.pos).toEqual(riding)
+    expect(board.state.balls[0].attachedTo).toBeNull()
+    expect(board.state.balls[0].pos).toEqual(riding)
   })
 
   it('leaves a free ball exactly where it was', () => {
     const board = useBoard()
     board.addCounter('red')
-    board.dropBall({ x: 80, y: 40 })
+    board.dropBall(board.state.balls[0].id, { x: 80, y: 40 })
     board.clearCounters()
-    expect(board.state.ball.pos).toEqual({ x: 80, y: 40 })
+    expect(board.state.balls[0].pos).toEqual({ x: 80, y: 40 })
   })
 
   it('is undoable', () => {

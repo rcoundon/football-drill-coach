@@ -1,5 +1,6 @@
 import { computed, reactive, ref, toRaw } from 'vue'
 import type {
+  Ball,
   Counter,
   CounterColor,
   Drawing,
@@ -45,6 +46,18 @@ export const COUNTER_RADIUS = 2.4
  */
 export const COUNTER_SPACING = 5.5
 
+/**
+ * How many balls a drill may have.
+ *
+ * Enough for any drill anyone has described — a ball per rondo grid, per
+ * queue, per lane — and few enough that the pitch stays readable and the cap
+ * can be a plain number rather than a policy.
+ */
+export const MAX_BALLS = 8
+
+/** Centre-to-centre spacing between balls dropped one after another. */
+const BALL_SPACING = 4
+
 /** Minimum spacing between recorded freehand points, in pitch units. */
 /** Room for a setup, coaching points and progressions, without unbounded paste. */
 export const MAX_NOTES_LENGTH = 4000
@@ -65,6 +78,12 @@ export type BoardSnapshot = {
   frames: Frame[]
   currentFrame: number
   labelsVisible: boolean
+  /**
+   * Whether the balls are on the pitch at all. Drill-wide, beside the other
+   * two visibility settings: it used to ride on the ball itself, which put it
+   * on the frame, so hiding the ball on one phase left it showing on the next.
+   */
+  ballsVisible: boolean
   notes: string
   notesVisible: boolean
   pitch: { type: PitchType; rotated: boolean }
@@ -86,12 +105,11 @@ function emptyFrame(): Frame {
     counters: [],
     markers: [],
     labels: [],
-    // Not the pitch centre: that is where the first counter lands, and the
-    // ball's hit circle would sit right on top of the counter's body, so the
-    // coach's first drag would grab the ball instead of the player. Just
-    // below the centre circle, which is clear of the centre on every pitch
-    // type and well inside the half pitch's 25..75 band.
-    ball: { pos: { x: PITCH_W / 2, y: PITCH_H / 2 + 10 }, attachedTo: null, visible: true },
+    // The board has always opened with a ball out. Not the pitch centre:
+    // that is where the first counter lands, and the ball's hit circle would
+    // sit on the counter's body, so the coach's first drag would grab the
+    // ball instead of the player.
+    balls: [{ id: 'ball-1', pos: { x: PITCH_W / 2, y: PITCH_H / 2 + 10 }, attachedTo: null }],
     drawings: [],
   }
 }
@@ -101,13 +119,14 @@ function emptySnapshot(): BoardSnapshot {
     frames: [emptyFrame()],
     currentFrame: 0,
     labelsVisible: true,
+    ballsVisible: true,
     notes: '',
     notesVisible: true,
     pitch: { type: 'blank', rotated: false },
   }
 }
 
-const FRAME_FIELDS = ['counters', 'markers', 'labels', 'ball', 'drawings'] as const
+const FRAME_FIELDS = ['counters', 'markers', 'labels', 'balls', 'drawings'] as const
 
 /**
  * Add the five accessors onto the current frame.
@@ -176,7 +195,10 @@ const view = computed<FrameView>(() => {
   return interpolateFrames(frame, state.frames[index + 1], t)
 })
 
-const viewBallPosition = computed(() => ballPositionIn(view.value))
+/** Where each ball on screen is drawn, keyed by its id. */
+const viewBallPositions = computed(() =>
+  view.value.balls.map((ball) => ({ id: ball.id, pos: ballPositionIn(view.value, ball) })),
+)
 
 /**
  * Set for the duration of a GIF export.
@@ -242,6 +264,7 @@ function snapshot(): BoardSnapshot {
     frames: raw.frames,
     currentFrame: raw.currentFrame,
     labelsVisible: raw.labelsVisible,
+    ballsVisible: raw.ballsVisible,
     notes: raw.notes,
     notesVisible: raw.notesVisible,
     pitch: raw.pitch,
@@ -258,6 +281,7 @@ function apply(snap: BoardSnapshot): void {
   state.frames = frames
   state.currentFrame = Math.max(0, Math.min(copy.currentFrame ?? 0, frames.length - 1))
   state.labelsVisible = copy.labelsVisible ?? true
+  state.ballsVisible = copy.ballsVisible ?? true
   state.notes = copy.notes ?? ''
   state.notesVisible = copy.notesVisible ?? true
   state.pitch = copy.pitch
@@ -461,9 +485,13 @@ function clearCounters(): void {
   if (state.counters.length === 0) return
   commit()
   for (const frame of allFrames()) {
-    if (frame.ball.attachedTo) {
-      frame.ball.pos = ballPositionIn(frame)
-      frame.ball.attachedTo = null
+    // Every ball someone was carrying is set down where it was being carried,
+    // rather than removed: the drill still has its balls, they just no longer
+    // belong to anyone.
+    for (const ball of frame.balls) {
+      if (!ball.attachedTo) continue
+      ball.pos = ballRestPositionIn(frame, ball)
+      ball.attachedTo = null
     }
     frame.counters = []
   }
@@ -801,25 +829,110 @@ function deleteCounter(id: string): void {
   commit()
   for (const frame of allFrames()) {
     const victim = frame.counters.find((c) => c.id === id)
-    if (victim && frame.ball.attachedTo === id) {
-      frame.ball.pos = { ...victim.pos }
-      frame.ball.attachedTo = null
+    if (victim) {
+      for (const ball of frame.balls) {
+        if (ball.attachedTo !== id) continue
+        ball.pos = { ...victim.pos }
+        ball.attachedTo = null
+      }
     }
     frame.counters = rawFilter(frame.counters, (c) => c.id !== id)
   }
 }
 
 /** Drag-time move. Detaches from any holder; does not commit. */
-/** Show or hide the ball, keeping who was carrying it either way. */
-function toggleBallVisible(): void {
+/**
+ * Show or hide every ball, keeping who was carrying what either way.
+ *
+ * Drill-wide, like the labels and the notes. It used to write through the
+ * frame accessor, so hiding the ball on one phase left it showing on the next
+ * — a bug nobody met, because it predates phases and there was only one ball.
+ */
+function toggleBallsVisible(): void {
   commit()
-  state.ball.visible = !state.ball.visible
+  state.ballsVisible = !state.ballsVisible
 }
 
-function moveBall(pos: Vec): void {
+function ballById(id: string): Ball | undefined {
+  return state.balls.find((b) => b.id === id)
+}
+
+/**
+ * Where the next ball goes.
+ *
+ * Stepped along from the one before rather than dropped on top of it, so a
+ * coach can see they got a second ball. Clamped, so a drill already using the
+ * right touchline does not put the next one off the pitch.
+ */
+function nextBallPosition(): Vec {
+  const last = state.balls[state.balls.length - 1]
+  if (!last) return { x: PITCH_W / 2, y: PITCH_H / 2 + 10 }
+
+  const isFree = (p: Vec) => state.balls.every((b) => b.pos.x !== p.x || b.pos.y !== p.y)
+
+  /*
+   * Stepping once from the last ball is not enough on its own. Clamping means
+   * a ball on the touchline puts every one after it on the same unreachable
+   * spot, and stepping blindly can land exactly on some OTHER ball, since the
+   * last one added is not necessarily the nearest. So try outwards in both
+   * directions, then downwards, and take the first spot nothing occupies.
+   */
+  for (let step = 1; step <= MAX_BALLS; step++) {
+    for (const candidate of [
+      { x: last.pos.x + BALL_SPACING * step, y: last.pos.y },
+      { x: last.pos.x - BALL_SPACING * step, y: last.pos.y },
+      { x: last.pos.x, y: last.pos.y + BALL_SPACING * step },
+      { x: last.pos.x, y: last.pos.y - BALL_SPACING * step },
+    ]) {
+      const at = clampToPitch(candidate)
+      if (isFree(at)) return at
+    }
+  }
+
+  // A pitch this crowded has nowhere clear left; stacking beats refusing to
+  // add, the same trade `nextCounterPosition` makes.
+  return clampToPitch({ x: last.pos.x + BALL_SPACING, y: last.pos.y })
+}
+
+/**
+ * Put another ball out, free, on every phase.
+ *
+ * A ball is cast, like a player: it exists for the whole drill, and only where
+ * it stands differs from phase to phase. Returns null at the cap so a caller
+ * can tell the difference between "added" and "there are already eight".
+ */
+function addBall(): Ball | null {
+  if (locked()) return null
+  if (state.balls.length >= MAX_BALLS) return null
+  commit()
+  const ball: Ball = { id: newId(), pos: nextBallPosition(), attachedTo: null }
+  for (const frame of allFrames()) frame.balls.push(clone(ball))
+  return ballById(ball.id) ?? null
+}
+
+/**
+ * Take a ball off every phase.
+ *
+ * Unlike a frame there is no floor at one: a shape or pressing drill has no
+ * ball in it at all, and the visibility toggle is for hiding balls a drill
+ * still has rather than for pretending it has none.
+ */
+function removeBall(id: string): void {
   if (locked()) return
-  state.ball.attachedTo = null
-  state.ball.pos = clampToPitch(pos)
+  if (!ballById(id)) return
+  commit()
+  for (const frame of allFrames()) {
+    frame.balls = rawFilter(frame.balls, (b) => b.id !== id)
+  }
+}
+
+/** Drag-time move of one ball. Detaches it from any holder; does not commit. */
+function moveBall(id: string, pos: Vec): void {
+  if (locked()) return
+  const ball = ballById(id)
+  if (!ball) return
+  ball.attachedTo = null
+  ball.pos = clampToPitch(pos)
 }
 
 /** Where this counter's ball would be drawn if it had possession. */
@@ -843,14 +956,31 @@ function ballDistanceTo(counter: Counter, at: Vec): number {
 }
 
 /** Pointer-up. Resolves possession; does not commit. */
-function dropBall(pos: Vec): void {
+/**
+ * Pointer-up on one ball. Resolves possession; does not commit.
+ *
+ * A player already carrying a ball is passed over, so a ball dropped on
+ * occupied feet stays free where it landed rather than displacing theirs.
+ * Swapping was considered and rejected: balls are interchangeable and look
+ * alike, so either way the coach sees one ball attached and one free nearby —
+ * swapping only changes which ball is which internally, which surfaces in
+ * playback alone.
+ */
+function dropBall(id: string, pos: Vec): void {
   if (locked()) return
+  const ball = ballById(id)
+  if (!ball) return
   const at = clampToPitch(pos)
-  state.ball.pos = at
+  ball.pos = at
+
+  const taken = new Set(
+    state.balls.filter((b) => b.id !== id && b.attachedTo).map((b) => b.attachedTo as string),
+  )
 
   let nearest: Counter | undefined
   let nearestDistance = Infinity
   for (const counter of state.counters) {
+    if (taken.has(counter.id)) continue
     const d = ballDistanceTo(counter, at)
     if (d < nearestDistance) {
       nearestDistance = d
@@ -858,16 +988,28 @@ function dropBall(pos: Vec): void {
     }
   }
 
-  state.ball.attachedTo = nearest && nearestDistance <= SNAP_RADIUS ? nearest.id : null
+  ball.attachedTo = nearest && nearestDistance <= SNAP_RADIUS ? nearest.id : null
 }
 
 /** Where the ball should actually be drawn. */
-function ballPosition(): Vec {
-  if (state.ball.attachedTo) {
-    const holder = counterById(state.ball.attachedTo)
+/** Where one ball should actually be drawn, in a given frame. */
+function ballRestPositionIn(frame: Frame, ball: Ball): Vec {
+  if (ball.attachedTo) {
+    const holder = frame.counters.find((c) => c.id === ball.attachedTo)
     if (holder) return ballRestPosition(holder)
   }
-  return state.ball.pos
+  return ball.pos
+}
+
+/** Where one ball should actually be drawn on the frame being edited. */
+function ballPosition(id: string): Vec {
+  const ball = ballById(id)
+  if (!ball) return { x: 0, y: 0 }
+  if (ball.attachedTo) {
+    const holder = counterById(ball.attachedTo)
+    if (holder) return ballRestPosition(holder)
+  }
+  return ball.pos
 }
 
 function drawingById(id: string): Drawing | undefined {
@@ -1023,7 +1165,9 @@ function pointsOfRef(ref: SelectionRef): Vec[] | null {
       ? counterById(ref.id)
       : ref.kind === 'marker'
         ? markerById(ref.id)
-        : labelById(ref.id)
+        : ref.kind === 'ball'
+          ? ballById(ref.id)
+          : labelById(ref.id)
   return token ? [token.pos] : null
 }
 
@@ -1077,6 +1221,10 @@ function pointsOfRefIn(frame: Frame, ref: SelectionRef): Vec[] | null {
     const label = frame.labels.find((l) => l.id === ref.id)
     return label ? [label.pos] : null
   }
+  if (ref.kind === 'ball') {
+    const ball = frame.balls.find((b) => b.id === ref.id)
+    return ball ? [ball.pos] : null
+  }
   const drawing = frame.drawings.find((d) => d.id === ref.id)
   return drawing ? pointsOf(drawing) : null
 }
@@ -1100,19 +1248,23 @@ function deleteGroup(refs: SelectionRef[]): void {
     marker: new Set<string>(),
     label: new Set<string>(),
     drawing: new Set<string>(),
+    ball: new Set<string>(),
   }
   for (const ref of refs) ids[ref.kind].add(ref.id)
 
   commit()
 
   for (const frame of allFrames()) {
-    if (frame.ball.attachedTo && ids.counter.has(frame.ball.attachedTo)) {
-      frame.ball.pos = ballPositionIn(frame)
-      frame.ball.attachedTo = null
+    for (const ball of frame.balls) {
+      if (!ball.attachedTo || !ids.counter.has(ball.attachedTo)) continue
+      ball.pos = ballRestPositionIn(frame, ball)
+      ball.attachedTo = null
     }
     frame.counters = rawFilter(frame.counters, (c) => !ids.counter.has(c.id))
     frame.markers = rawFilter(frame.markers, (m) => !ids.marker.has(m.id))
     frame.labels = rawFilter(frame.labels, (l) => !ids.label.has(l.id))
+    // A ball is cast, like a player: removed from the whole drill, not one phase.
+    frame.balls = rawFilter(frame.balls, (b) => !ids.ball.has(b.id))
   }
 
   // Drawings belong to the moment, so only this one loses them.
@@ -1138,17 +1290,31 @@ function duplicateGroup(refs: SelectionRef[], offset: Vec): SelectionRef[] {
   const live = refs.filter((ref) => pointsOfRef(ref) !== null)
   if (live.length === 0) return []
 
+  /*
+   * Balls are capped, so only as many as there is room for are copied. Worked
+   * out before any frame is touched, because the answer has to be the same for
+   * every phase — a cap applied per phase would leave a ball on some and not
+   * others, which is exactly what the cast rule exists to prevent.
+   *
+   * And before `commit`, so a copy that turns out to be entirely refused does
+   * not leave an undo entry for work that never happened.
+   */
+  const room = MAX_BALLS - state.balls.length
+  let ballsSoFar = 0
+  const copyable = live.filter((ref) => ref.kind !== 'ball' || ballsSoFar++ < room)
+  if (copyable.length === 0) return []
+
   commit()
 
   // One new id per original, shared by that original's copy on every frame,
   // so the copies are one player rather than one per moment.
-  const copies: SelectionRef[] = live.map((ref) => ({ kind: ref.kind, id: newId() }))
+  const copies: SelectionRef[] = copyable.map((ref) => ({ kind: ref.kind, id: newId() }))
 
   allFrames().forEach((frame, index) => {
     const isCurrent = index === state.currentFrame
     const made: SelectionRef[] = []
 
-    live.forEach((ref, i) => {
+    copyable.forEach((ref, i) => {
       const copyId = copies[i].id
       if (ref.kind === 'counter') {
         const original = frame.counters.find((c) => c.id === ref.id)
@@ -1172,6 +1338,15 @@ function duplicateGroup(refs: SelectionRef[], offset: Vec): SelectionRef[] {
         const copy = clone(toRaw(original))
         copy.id = copyId
         frame.labels.push(copy)
+      } else if (ref.kind === 'ball') {
+        const original = frame.balls.find((b) => b.id === ref.id)
+        if (!original) return
+        const copy = clone(toRaw(original))
+        copy.id = copyId
+        // Free, whatever the original was doing. A drill has the carriers it
+        // has, and copying a shape is not a reason to grow another.
+        copy.attachedTo = null
+        frame.balls.push(copy)
       } else {
         // Drawings belong to the moment, so only this one gets a copy.
         if (!isCurrent) return
@@ -1265,7 +1440,7 @@ const board = {
   playback,
   timeline,
   view,
-  viewBallPosition,
+  viewBallPositions,
   isDerived,
   play,
   pause,
@@ -1307,9 +1482,12 @@ const board = {
   moveMarker,
   deleteMarker,
   moveBall,
-  toggleBallVisible,
+  toggleBallsVisible,
   dropBall,
   ballPosition,
+  ballById,
+  addBall,
+  removeBall,
   startPen,
   extendPen,
   startArrow,
