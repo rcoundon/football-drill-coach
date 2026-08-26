@@ -301,7 +301,7 @@ largest component in the app and the only part of this work that edits code
 already carrying the coach's daily use.
 
 **Then sessions and tags**, which is everything else here. It depends on the
-extraction only through `renderFrameToPng`.
+extraction only through `renderFrameToDataUrl`.
 
 ## Errors
 
