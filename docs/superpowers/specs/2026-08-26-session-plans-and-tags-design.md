@@ -32,6 +32,10 @@ Settled with the owner before any code:
   spaced between them.
 - **Tags filter both the library and the drill picker.** The picker is where
   a fifty-drill library actually hurts.
+- **No backward compatibility.** The app is still in development and no saved
+  data outside this repository matters, as when the ball became a list.
+- **The `BoardView` extraction lands first**, on its own, before anything is
+  built on it.
 
 ### Why the warning is not the whole answer
 
@@ -59,12 +63,12 @@ drill.
 tags?: string[]
 ```
 
-Optional, additive, and therefore **no schema version bump**. The two bumps
-this format has had — drawings moving onto frames in v2, one ball becoming a
-list in v3 — both moved data that already existed and needed a migration on
-the way in. Tags need none: absent reads as empty, which is what a pattern
-saved before tags genuinely has. This follows `notes` and `labelsVisible`,
-which were added the same way.
+Optional because most drills have none, not for compatibility: absent reads
+as empty. **No schema version bump.** The two bumps this format has had —
+drawings moving onto frames in v2, one ball becoming a list in v3 — both
+moved data that already existed and so needed a migration on the way in.
+Tags need no migration, so a bump would record a change that changes nothing
+about how a pattern is read.
 
 `parsePattern` gains a check that a present `tags` is an array of strings and
 rejects anything else, to the same standard every other field is held to.
@@ -139,8 +143,14 @@ session of entirely missing drills.
 
 So the export file becomes an object holding both lists, and the import
 threads its old-id to new-id remapping through the incoming sessions' entries
-before writing them. A bare array — the shape currently on coaches' disks —
-is still read as patterns only.
+before writing them.
+
+The bare array this file used to be is **not** read back. Nothing outside this
+repository has an exported file, and carrying a second accepted shape through
+the validator forever to rescue data that does not exist is a cost with no
+payer. The remapping itself stays: it guards a collision between two live
+libraries, which is a thing that will happen on the coach's second device
+whatever the file format is.
 
 ## Rendering drills that are not open
 
@@ -262,6 +272,24 @@ GIF export already reports. It does not use `board.beginExport()`: the GIF
 export locks the board because it drives the live playhead, and the session
 export never touches the live board at all. The coach can keep working while
 a session renders, and a failure halfway through cannot strand their board.
+
+## Sequencing
+
+This is two pieces of work, and they land in order.
+
+**First, the `BoardView` extraction on its own.** It changes no behaviour, so
+its proof is that `PitchBoard`'s existing tests pass untouched, along with
+the drawing, selection and playback suites around it. Landing it alone means
+that if a board stops rendering correctly, there is exactly one commit it can
+have come from — rather than a diff that also carries a new dependency, a new
+storage key and two new panels.
+
+It is also the piece most likely to surface something unforeseen: it is the
+largest component in the app and the only part of this work that edits code
+already carrying the coach's daily use.
+
+**Then sessions and tags**, which is everything else here. It depends on the
+extraction only through `renderFrameToPng`.
 
 ## Errors
 
