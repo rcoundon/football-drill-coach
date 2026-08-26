@@ -220,3 +220,45 @@ describe('rough edges found by walking the board', () => {
     expect(b.pos).not.toEqual(a.pos)
   })
 })
+
+describe('where a new ball lands', () => {
+  /** One step forward from the last ball, which is where it tries first. */
+  const STEP = 4
+
+  it('never lands on a ball that is already there', () => {
+    // Stepping only from the LAST ball is not enough: with balls scattered,
+    // one step forward can land exactly on a different one.
+    const first = board.state.balls[0]
+    board.moveBall(first.id, { x: 50, y: 30 })
+    const second = board.addBall()!
+    board.moveBall(second.id, { x: 50 - STEP, y: 30 }) // one step behind the first
+
+    // The last ball is now at 46, so a step forward lands exactly on 50.
+    const third = board.addBall()!
+    const others = board.state.balls.filter((b) => b.id !== third.id).map((b) => b.pos)
+    expect(others).not.toContainEqual(third.pos)
+  })
+
+  it('finds a spot even when the step either way is taken', () => {
+    const first = board.state.balls[0]
+    board.moveBall(first.id, { x: 50, y: 30 })
+    const ahead = board.addBall()!
+    board.moveBall(ahead.id, { x: 50 + STEP, y: 30 })
+    const behind = board.addBall()!
+    board.moveBall(behind.id, { x: 50 - STEP, y: 30 })
+    const last = board.addBall()!
+    board.moveBall(last.id, { x: 50, y: 30 + STEP })
+
+    // Whatever it tries first, it must end up somewhere nothing else is.
+    const next = board.addBall()!
+    const taken = board.state.balls.filter((b) => b.id !== next.id).map((b) => b.pos)
+    expect(taken).not.toContainEqual(next.pos)
+  })
+
+  it('still puts the first ball back in the middle', () => {
+    board.removeBall(board.state.balls[0].id)
+    expect(board.state.balls).toHaveLength(0)
+    const only = board.addBall()!
+    expect(only.pos.x).toBeCloseTo(50, 5)
+  })
+})

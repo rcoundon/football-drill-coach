@@ -85,9 +85,10 @@ it always has — the box is the only way into a group. A drawing joins the box
 only if one of the points it is made of falls inside, so a long arrow clipping
 the corner is left where it is.
 
-A loose ball inside the box joins the group like anything else. One a player
-is carrying does not: it goes where its carrier goes, so it comes along only
-if they were in the box too. You cannot lasso a ball out of someone's feet.
+A loose ball inside the box joins the group like anything else. A ball a
+player is carrying does not: it goes where its carrier goes, so it comes along
+only if they were in the box too. You cannot lasso a ball out of someone's
+feet.
 
 **Going back to a drawing.** Under **Move**, press any drawing to pick it up.
 It gets a pale halo and its handles appear — nothing else on the board does,

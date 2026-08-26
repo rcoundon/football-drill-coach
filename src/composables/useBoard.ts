@@ -867,12 +867,31 @@ function ballById(id: string): Ball | undefined {
 function nextBallPosition(): Vec {
   const last = state.balls[state.balls.length - 1]
   if (!last) return { x: PITCH_W / 2, y: PITCH_H / 2 + 10 }
-  const stepped = clampToPitch({ x: last.pos.x + BALL_SPACING, y: last.pos.y })
-  // Clamping alone is not enough: once a ball sits on the right touchline
-  // every one after it lands on exactly the same spot, and only the topmost
-  // can be grabbed. Step back the other way when there is no room forward.
-  if (stepped.x !== last.pos.x) return stepped
-  return clampToPitch({ x: last.pos.x - BALL_SPACING, y: last.pos.y })
+
+  const isFree = (p: Vec) => state.balls.every((b) => b.pos.x !== p.x || b.pos.y !== p.y)
+
+  /*
+   * Stepping once from the last ball is not enough on its own. Clamping means
+   * a ball on the touchline puts every one after it on the same unreachable
+   * spot, and stepping blindly can land exactly on some OTHER ball, since the
+   * last one added is not necessarily the nearest. So try outwards in both
+   * directions, then downwards, and take the first spot nothing occupies.
+   */
+  for (let step = 1; step <= MAX_BALLS; step++) {
+    for (const candidate of [
+      { x: last.pos.x + BALL_SPACING * step, y: last.pos.y },
+      { x: last.pos.x - BALL_SPACING * step, y: last.pos.y },
+      { x: last.pos.x, y: last.pos.y + BALL_SPACING * step },
+      { x: last.pos.x, y: last.pos.y - BALL_SPACING * step },
+    ]) {
+      const at = clampToPitch(candidate)
+      if (isFree(at)) return at
+    }
+  }
+
+  // A pitch this crowded has nowhere clear left; stacking beats refusing to
+  // add, the same trade `nextCounterPosition` makes.
+  return clampToPitch({ x: last.pos.x + BALL_SPACING, y: last.pos.y })
 }
 
 /**

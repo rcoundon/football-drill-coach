@@ -2511,3 +2511,49 @@ describe('more than one ball', () => {
     expect(board.state.balls).toHaveLength(1)
   })
 })
+
+describe('a ball in a gathered group', () => {
+  it('carries the whole group when dragged, like any other member', async () => {
+    const board = useBoard()
+    const counter = board.addCounter('red')
+    board.moveCounter(counter.id, { x: 20, y: 20 })
+    const ball = board.state.balls[0]
+    board.moveBall(ball.id, { x: 26, y: 20 })
+
+    const wrapper = mountBoard()
+    await nextTick()
+    // Box both of them up.
+    firePointer(wrapper.find('svg'), 'pointerdown', clientFor(10, 10))
+    firePointer(wrapper.find('svg'), 'pointermove', clientFor(40, 40))
+    firePointer(wrapper.find('svg'), 'pointerup', clientFor(40, 40))
+    await nextTick()
+    expect(wrapper.emitted('selectionSize')?.at(-1)).toEqual([2])
+
+    // Dragging the ball must take the player with it, not leave them behind.
+    await firePointer(wrapper.findAll('[data-ball]')[0], 'pointerdown', clientFor(26, 20))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(36, 20))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(36, 20))
+
+    expect(board.counterById(counter.id)!.pos.x).toBeCloseTo(30, 4)
+  })
+
+  it('draws no halo for a ball once the balls are hidden', async () => {
+    const board = useBoard()
+    const ball = board.state.balls[0]
+    board.moveBall(ball.id, { x: 26, y: 20 })
+
+    const wrapper = mountBoard()
+    await nextTick()
+    firePointer(wrapper.find('svg'), 'pointerdown', clientFor(10, 10))
+    firePointer(wrapper.find('svg'), 'pointermove', clientFor(40, 40))
+    firePointer(wrapper.find('svg'), 'pointerup', clientFor(40, 40))
+    await nextTick()
+    const ringed = wrapper.findAll('[data-selected-token]').length
+    expect(ringed).toBeGreaterThan(0)
+
+    board.toggleBallsVisible()
+    await nextTick()
+    // A halo floating over grass where no ball is drawn is worse than none.
+    expect(wrapper.findAll('[data-selected-token]')).toHaveLength(ringed - 1)
+  })
+})

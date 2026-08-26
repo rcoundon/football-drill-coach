@@ -1216,3 +1216,60 @@ describe('a ball without an id is damage', () => {
     expect(store.patternToSnapshot(parsePattern(legacy)).frames[0].balls[0].id).toBeTruthy()
   })
 })
+
+/**
+ * Two balls sharing an id is the same class of damage as a ball with none:
+ * playback matches by id, and `removeBall` filters on it, so erasing one
+ * would take the other off with it.
+ */
+describe('balls sharing an id are damage', () => {
+  const twoBalls = (ids: [string, string]) => [
+    { id: ids[0], pos: { x: 10, y: 10 }, attachedTo: null },
+    { id: ids[1], pos: { x: 30, y: 30 }, attachedTo: null },
+  ]
+
+  it('is refused in a saved drill', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Two lanes', snap())
+    const damaged = structuredClone(saved) as Record<string, unknown>
+    ;(damaged.frames as Record<string, unknown>[])[0].balls = twoBalls(['b1', 'b1'])
+    expect(() => parsePattern(damaged)).toThrow(/ball/i)
+  })
+
+  it('is refused in a draft', () => {
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({ ...snap(), frames: [{ ...snap().frames[0], balls: twoBalls(['b1', 'b1']) }] }),
+    )
+    expect(useStorage().loadDraft()).toBeNull()
+  })
+
+  it('but two different ids are fine', () => {
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({ ...snap(), frames: [{ ...snap().frames[0], balls: twoBalls(['b1', 'b2']) }] }),
+    )
+    expect(useStorage().loadDraft()?.frames[0].balls).toHaveLength(2)
+  })
+})
+
+describe('a draft whose balls list is damaged', () => {
+  it('is refused even when an older single ball sits beside it', () => {
+    // The branch used to fall back to the legacy ball whenever `balls` was
+    // not an array, so garbage in `balls` was excused by a good `ball`.
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({
+        ...snap(),
+        frames: [
+          {
+            ...snap().frames[0],
+            balls: 'nope',
+            ball: { pos: { x: 50, y: 30 }, attachedTo: null, visible: true },
+          },
+        ],
+      }),
+    )
+    expect(useStorage().loadDraft()).toBeNull()
+  })
+})

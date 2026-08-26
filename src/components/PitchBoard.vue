@@ -407,6 +407,12 @@ function onBallGrab(id: string, event: PointerEvent) {
   if (props.tool !== 'select') return
   if (dragIsLive()) return
   event.stopPropagation()
+
+  // A ball in a gathered group carries the whole group, like every other
+  // member. Only a free ball can be in one, so there is no carried ball to
+  // drag a player around by.
+  if (grabsGroup('ball', id, event)) return
+
   capture(event)
   board.commit()
   drag.value = {
@@ -754,6 +760,17 @@ const selectedTokens = computed(() => {
   if (props.tool !== 'select') return []
   return selection.value.flatMap((ref) => {
     if (ref.kind === 'drawing') return []
+    /*
+     * A ball that is not on screen gets no halo. A selection outlives the
+     * Ball toggle and a phase change, so a ball can be selected and then
+     * hidden, or become carried — and a carried ball is drawn at its
+     * carrier's feet rather than at its own stored position. Either way the
+     * halo would float over empty grass with nothing under it.
+     */
+    if (ref.kind === 'ball') {
+      const ball = board.ballById(ref.id)
+      if (!ball || !board.state.ballsVisible || ball.attachedTo !== null) return []
+    }
     const token =
       ref.kind === 'counter'
         ? board.counterById(ref.id)

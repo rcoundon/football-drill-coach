@@ -119,9 +119,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         </p>
         <p>
           A plain press on grass, <kbd>Escape</kbd>, or switching tool puts the group down
-          again. A loose ball inside the box joins the group like anything else, but one a
-          player is carrying does not — it goes where its carrier goes, so it comes along only
-          if they were in the box too. You cannot lasso a ball out of someone's feet.
+          again. A loose ball inside the box joins the group like anything else, but a ball
+          a player is carrying does not — it goes where its carrier goes, so it comes along
+          only if they were in the box too. You cannot lasso a ball out of someone's feet.
         </p>
       </section>
 

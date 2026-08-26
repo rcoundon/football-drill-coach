@@ -95,6 +95,24 @@ function isValidBall(value: unknown): boolean {
   return isValidLegacyBall(value) && isObject(value) && typeof value.id === 'string'
 }
 
+/**
+ * A version 3 ball list: every entry valid, and no two sharing an id.
+ *
+ * Duplicate ids are the same class of damage as a missing one. Playback
+ * matches balls by id and `removeBall` filters on it, so two balls answering
+ * to the same id would tween as one and vanish together when either is erased.
+ *
+ * The count is deliberately NOT checked against MAX_BALLS. A drill carrying
+ * more than the interface would let a coach make still works — the cap only
+ * stops them adding another — and refusing to open it would hide their drill
+ * to prevent nothing.
+ */
+function isValidBallList(value: unknown[]): boolean {
+  if (!value.every(isValidBall)) return false
+  const ids = value.map((ball) => (ball as { id: string }).id)
+  return new Set(ids).size === ids.length
+}
+
 function isValidLegacyBall(value: unknown): boolean {
   return (
     isObject(value) &&
@@ -206,9 +224,14 @@ export function parsePattern(value: unknown): Pattern {
     if (!frame.counters.every(isValidCounter)) {
       throw new Error('That pattern has a damaged player position.')
     }
-    const ballsAreAList = Array.isArray(frame.balls)
-    const ballsToCheck: unknown[] = ballsAreAList ? (frame.balls as unknown[]) : [frame.ball]
-    if (!ballsToCheck.every(ballsAreAList ? isValidBall : isValidLegacyBall)) {
+    // The older single ball is only consulted when there is no list at all.
+    // Keying on the shape being an array instead let a good legacy `ball`
+    // excuse a `balls` field that was outright garbage.
+    const ballsOk =
+      frame.balls === undefined
+        ? isValidLegacyBall(frame.ball)
+        : Array.isArray(frame.balls) && isValidBallList(frame.balls)
+    if (!ballsOk) {
       throw new Error('That pattern has a damaged ball position.')
     }
     if (!markersOf(frame).every(isValidMarker)) {
@@ -519,10 +542,12 @@ function isValidFrame(value: unknown): boolean {
     markersOf(value).every(isValidMarker) &&
     labelsOf(value).every(isValidLabel) &&
     // Either shape: a list from version 3, a single ball before it. Only the
-    // list is held to having ids — a legacy ball gets one when it migrates.
-    (Array.isArray(value.balls)
-      ? value.balls.every(isValidBall)
-      : isValidLegacyBall(value.ball)) &&
+    // list is held to having ids — a legacy ball gets one when it migrates —
+    // and the legacy one is consulted only when there is no list at all, so a
+    // good `ball` cannot excuse a `balls` field that is garbage.
+    (value.balls === undefined
+      ? isValidLegacyBall(value.ball)
+      : Array.isArray(value.balls) && isValidBallList(value.balls)) &&
     Array.isArray(value.drawings) &&
     value.drawings.every(isValidDrawing) &&
     // Optional — the first frame of a draft has none — but a present value
