@@ -168,12 +168,24 @@ tweened view during playback, rather than `state.*`. So `BoardView` takes a
 frame-shaped object, `PitchBoard` hands it the tweened view, and the exporter
 hands it a stored frame. Playback needs no special case.
 
-Selection rings paint underneath the tokens, so they cannot sit outside
-`BoardView` without breaking that order. They arrive as an optional `haloes`
-prop defaulting to empty: one file owns the z-order, and the exporter passes
-nothing. Handles, the marquee and every pointer handler stay in `PitchBoard`.
+Selection rings paint underneath the tokens and handles paint over them, so
+neither can sit outside `BoardView` without breaking that order. `BoardView`
+gives them two named slots, `under-tokens` and `over-tokens`, and keeps the
+z-order in the one file that draws it. `PitchBoard` fills both; the exporter
+fills neither, so an exported board carries no furniture by construction
+rather than by remembering to strip it.
 
-`renderFrameToPng(pattern, frameIndex)` mounts `BoardView` into a detached
+Slots rather than a `haloes` prop because the furniture is markup, not data:
+the rings, the bend and end handles and the marquee are four different shapes
+with their own components, and a prop would mean `BoardView` importing all of
+them to render things it has no business knowing about.
+
+`BoardView` owns the `<svg>` element, exposing it for the exporter and for
+`PitchBoard`, whose pointer handlers reach it through ordinary attribute
+fallthrough onto that single root. Every handler, the drag state and the
+selection model stay in `PitchBoard`.
+
+`renderFrameToDataUrl(pattern, frameIndex)` mounts `BoardView` into a detached
 element with `createApp`, passes its SVG to the existing `svgToPngBlob`, and
 unmounts. A detached node rasterises identically to a live one because
 `boardDataUrl` serialises a clone and reads the `viewBox` attribute — there
