@@ -12,13 +12,7 @@ import type {
   Vec,
 } from '../types'
 import { BALL_OFFSET, PITCH_H, PITCH_W, clampToPitch, distance, snapToAxis } from '../geometry'
-import {
-  MAX_FRAME_MS,
-  MIN_FRAME_MS,
-  ballPositionIn,
-  interpolateFrames,
-  timelineOf,
-} from '../animation'
+import { MAX_FRAME_MS, MIN_FRAME_MS, interpolateFrames, timelineOf } from '../animation'
 import type { FrameView } from '../animation'
 
 export { BALL_OFFSET } from '../geometry'
@@ -194,11 +188,6 @@ const view = computed<FrameView>(() => {
   if (t === 0 || index + 1 >= state.frames.length) return frame
   return interpolateFrames(frame, state.frames[index + 1], t)
 })
-
-/** Where each ball on screen is drawn, keyed by its id. */
-const viewBallPositions = computed(() =>
-  view.value.balls.map((ball) => ({ id: ball.id, pos: ballPositionIn(view.value, ball) })),
-)
 
 /**
  * Set for the duration of a GIF export.
@@ -1440,7 +1429,6 @@ const board = {
   playback,
   timeline,
   view,
-  viewBallPositions,
   isDerived,
   play,
   pause,
