@@ -1035,6 +1035,14 @@ function onPointerUp(event: PointerEvent) {
     </template>
 
     <template #over-tokens>
+      <!--
+        Handles go in a slot, above the tokens, rather than beside their
+        drawings: an arrow nearly always ends ON a player, so handle and
+        counter cover the same spot, and whichever is painted later takes the
+        press there. A handle only exists for a drawing the coach deliberately
+        picked up, so at that moment it is what they are reaching for — a
+        press on bare grass still falls through to the player underneath.
+      -->
       <BendHandle
         v-for="arrow in bendHandles"
         :key="`bend-${arrow.id}`"

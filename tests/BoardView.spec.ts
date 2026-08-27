@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import BoardView from '../src/components/BoardView.vue'
 import { BALL_OFFSET, PITCH_H, PITCH_W } from '../src/geometry'
 import type { FrameView } from '../src/animation'
+import { useBoard, __resetBoardForTests } from '../src/composables/useBoard'
 
 function frame(over: Partial<FrameView> = {}): FrameView {
   return { counters: [], markers: [], labels: [], balls: [], drawings: [], ...over }
@@ -40,12 +41,13 @@ describe('BoardView', () => {
     expect(wrapper.findAll('[data-drawing]')).toHaveLength(1)
   })
 
-  it('needs no board state: two views of different frames disagree', () => {
-    const one = mountView({ counters: [{ id: 'c1', color: 'red', label: '1', pos: { x: 10, y: 10 } }] })
-    const two = mountView({ counters: [] })
+  it('needs no board state: a live board with a counter on it draws nothing on an empty frame', () => {
+    __resetBoardForTests()
+    useBoard().addCounter('red')
 
-    expect(one.findAll('[data-counter]')).toHaveLength(1)
-    expect(two.findAll('[data-counter]')).toHaveLength(0)
+    const wrapper = mountView({ counters: [] })
+
+    expect(wrapper.findAll('[data-counter]')).toHaveLength(0)
   })
 
   it('hides labels when told to, without losing them', async () => {
@@ -80,6 +82,18 @@ describe('BoardView', () => {
     expect(ball.attributes('transform')).toContain(String(10 + BALL_OFFSET.y))
   })
 
+  it('shows a possession ring on the counter carrying the ball, and drops it when balls are hidden', async () => {
+    const wrapper = mountView({
+      counters: [{ id: 'c1', color: 'red', label: '1', pos: { x: 10, y: 10 } }],
+      balls: [{ id: 'b1', pos: { x: 90, y: 60 }, attachedTo: 'c1' }],
+    })
+
+    expect(wrapper.find('[data-counter]').find('[data-possession-ring]').exists()).toBe(true)
+
+    await wrapper.setProps({ ballsVisible: false })
+    expect(wrapper.find('[data-counter]').find('[data-possession-ring]').exists()).toBe(false)
+  })
+
   it('rotates the board without the pieces knowing', async () => {
     const wrapper = mountView()
 
@@ -105,10 +119,6 @@ describe('BoardView', () => {
   })
 
   it('paints what is under the tokens beneath them, and what is over above', () => {
-    const wrapper = mountView({
-      counters: [{ id: 'c1', color: 'red', label: '1', pos: { x: 10, y: 10 } }],
-    }, {})
-
     const withSlots = mount(BoardView, {
       props: {
         frame: frame({ counters: [{ id: 'c1', color: 'red', label: '1', pos: { x: 10, y: 10 } }] }),
@@ -129,9 +139,7 @@ describe('BoardView', () => {
         : 'other',
     )
 
-    expect(order.indexOf('under')).toBeLessThan(order.indexOf('counter'))
-    expect(order.indexOf('over')).toBeGreaterThan(order.indexOf('counter'))
-    expect(wrapper.findAll('[data-under]')).toHaveLength(0)
+    expect(order.filter((o) => o !== 'other')).toEqual(['under', 'counter', 'over'])
   })
 
   it('exposes its svg element so it can be rasterised', () => {
