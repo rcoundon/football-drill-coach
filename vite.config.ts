@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
@@ -7,12 +7,15 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     /*
-     * Anchored at the project root, so a git worktree checked out inside it
-     * is not swept up. Without this, `.worktrees/<branch>/tests` is globbed
-     * alongside this checkout's own: every spec runs twice, the copies fail
-     * against the wrong dependency tree, and the suite reports failures that
-     * have nothing to do with the code being tested.
+     * A git worktree checked out inside the project — .worktrees/<branch> —
+     * carries a full copy of the tests, and vitest's default patterns sweep
+     * them up alongside this checkout's own: every spec runs twice and the
+     * copies fail against the wrong dependency tree.
+     *
+     * Excluded rather than narrowing `include` to `tests/**`, which would fix
+     * this run while silently dropping any future spec that lands elsewhere —
+     * a suite reporting green for a test it never collected.
      */
-    include: ['tests/**/*.spec.ts'],
+    exclude: [...configDefaults.exclude, '.worktrees/**'],
   },
 })

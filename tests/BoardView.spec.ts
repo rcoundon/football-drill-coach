@@ -72,14 +72,17 @@ describe('BoardView', () => {
   })
 
   it("draws a carried ball at its carrier's feet, not at its stored position", () => {
+    // Asymmetric on purpose: BALL_OFFSET is the same in x and y, so a carrier
+    // at (10, 10) would make both assertions the identical string and pass an
+    // axis swap or a dropped y offset.
     const wrapper = mountView({
-      counters: [{ id: 'c1', color: 'red', label: '1', pos: { x: 10, y: 10 } }],
+      counters: [{ id: 'c1', color: 'red', label: '1', pos: { x: 10, y: 20 } }],
       balls: [{ id: 'b1', pos: { x: 90, y: 60 }, attachedTo: 'c1' }],
     })
 
     const ball = wrapper.find('[data-ball]')
     expect(ball.attributes('transform')).toContain(String(10 + BALL_OFFSET.x))
-    expect(ball.attributes('transform')).toContain(String(10 + BALL_OFFSET.y))
+    expect(ball.attributes('transform')).toContain(String(20 + BALL_OFFSET.y))
   })
 
   it('shows a possession ring on the counter carrying the ball, and drops it when balls are hidden', async () => {

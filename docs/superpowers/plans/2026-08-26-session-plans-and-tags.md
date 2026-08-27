@@ -974,8 +974,8 @@ Create `tests/useStorage.bundle.spec.ts`:
 
 ```ts
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useStorage } from '../src/composables/useStorage'
-import { useSessions } from '../src/composables/useSessions'
+import { PATTERNS_KEY, useStorage } from '../src/composables/useStorage'
+import { SESSIONS_KEY, useSessions } from '../src/composables/useSessions'
 import { __resetBoardForTests, useBoard } from '../src/composables/useBoard'
 
 const storage = useStorage()
@@ -1030,6 +1030,30 @@ describe('bundle export and import', () => {
 
   it('refuses a bare array, which is not a bundle', () => {
     expect(() => storage.importBundle('[]')).toThrow(/not a saved bundle/i)
+  })
+
+  it('writes nothing when the sessions store cannot be read', () => {
+    const { json } = bundleOfOneSession()
+    const patternsBefore = localStorage.getItem(PATTERNS_KEY)
+    localStorage.setItem(SESSIONS_KEY, '{not json')
+
+    expect(() => storage.importBundle(json)).toThrow(/sessions could not be read/i)
+
+    // Both stores untouched: the check runs before either write, so a bad
+    // sessions store cannot leave patterns imported and sessions destroyed.
+    expect(localStorage.getItem(SESSIONS_KEY)).toBe('{not json')
+    expect(localStorage.getItem(PATTERNS_KEY)).toBe(patternsBefore)
+  })
+
+  it('re-ids the second of two sessions sharing an id within one file', () => {
+    const { json } = bundleOfOneSession()
+    const raw = JSON.parse(json)
+    raw.sessions.push({ ...raw.sessions[0] })
+    localStorage.clear()
+
+    const { sessions: added } = storage.importBundle(JSON.stringify(raw))
+
+    expect(new Set(added.map((s) => s.id)).size).toBe(2)
   })
 
   it('refuses invalid JSON with a readable reason', () => {
@@ -1103,20 +1127,47 @@ function importBundle(json: string): { patterns: Pattern[]; sessions: Session[] 
     added.push({ ...pattern, id: fresh, name: `${pattern.name} (imported)` })
   }
 
-  writeLibrary([...patterns, ...added], damaged)
-
+  // The sessions store is read BEFORE either write, so an unreadable one
+  // aborts the whole import rather than leaving patterns written and sessions
+  // destroyed. Nothing has been written at this point, so throwing is clean.
   const sessionRead = readCollection(SESSIONS_KEY, parseSession)
-  const sessionIds = new Set(sessionRead.items.map((s) => s.id))
-  const addedSessions = incomingSessions.map((session) => ({
-    ...session,
-    id: sessionIds.has(session.id) ? makeId() : session.id,
-    entries: session.entries.map((entry) => ({
-      ...entry,
-      patternId: remap.get(entry.patternId) ?? entry.patternId,
-    })),
-  }))
+  if (sessionRead.unreadable) {
+    throw new Error(
+      'Your saved sessions could not be read, so importing now would overwrite them. Export or clear your saved sessions first, then try again.',
+    )
+  }
 
-  writeCollection(SESSIONS_KEY, [...sessionRead.items, ...addedSessions], sessionRead.damaged)
+  if (!recordWrite(writeLibrary([...patterns, ...added], damaged), damaged)) {
+    throw new Error('The imported drills could not be saved to this browser.')
+  }
+
+  const sessionIds = new Set(sessionRead.items.map((s) => s.id))
+  const addedSessions = incomingSessions.map((session) => {
+    // Tracked incrementally, exactly as the pattern loop above tracks
+    // `seenIds`: a collision can be with the stored sessions OR with an
+    // earlier session in this same file, and two sessions sharing an id
+    // would render under duplicate keys and have rename and delete hit
+    // whichever one `find` returned first.
+    const id = sessionIds.has(session.id) ? makeId() : session.id
+    sessionIds.add(id)
+    return {
+      ...session,
+      id,
+      entries: session.entries.map((entry) => ({
+        ...entry,
+        patternId: remap.get(entry.patternId) ?? entry.patternId,
+      })),
+    }
+  })
+
+  if (
+    !recordWrite(
+      writeCollection(SESSIONS_KEY, [...sessionRead.items, ...addedSessions], sessionRead.damaged),
+      sessionRead.damaged,
+    )
+  ) {
+    throw new Error('The imported sessions could not be saved to this browser.')
+  }
 
   return { patterns: added, sessions: addedSessions }
 }
@@ -1994,10 +2045,16 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import SessionLibrary from '../src/components/SessionLibrary.vue'
 import { useSessions } from '../src/composables/useSessions'
+import { useStorage } from '../src/composables/useStorage'
+import { __resetBoardForTests, useBoard } from '../src/composables/useBoard'
 
 const sessions = useSessions()
+const storage = useStorage()
 
-beforeEach(() => localStorage.clear())
+beforeEach(() => {
+  localStorage.clear()
+  __resetBoardForTests()
+})
 
 describe('SessionLibrary', () => {
   it('says so when there is nothing saved', () => {
@@ -2038,6 +2095,22 @@ describe('SessionLibrary', () => {
     expect(sessions.listSessions()[0].name).toBe('Wednesday')
   })
 
+  it('leaves a drill that is gone out of the session total', () => {
+    const pattern = storage.savePattern('Rondo', useBoard().snapshot())
+    const created = sessions.createSession('Tuesday')
+    sessions.saveSession({
+      ...created,
+      entries: [sessions.newEntry(pattern.id, 12), sessions.newEntry('gone', 20)],
+    })
+
+    const wrapper = mount(SessionLibrary, { props: { open: true } })
+
+    // The panel and the PDF must agree: both leave out a drill that will not
+    // be run. Showing 32 here and 12 on the page is the discrepancy.
+    expect(wrapper.find('[data-session]').text()).toContain('12 min')
+    expect(wrapper.find('[data-session]').text()).not.toContain('32 min')
+  })
+
   it('asks before deleting', async () => {
     sessions.createSession('Tuesday')
     const wrapper = mount(SessionLibrary, { props: { open: true } })
@@ -2065,11 +2138,13 @@ Create `src/components/SessionLibrary.vue`, following `PatternLibrary.vue`'s sha
 import { computed, ref, toRaw, watch } from 'vue'
 import type { Session } from '../types'
 import { useSessions } from '../composables/useSessions'
+import { useStorage } from '../composables/useStorage'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: []; open: [session: Session] }>()
 
 const sessions = useSessions()
+const storage = useStorage()
 
 const list = ref<Session[]>([])
 const newName = ref('')
@@ -2077,8 +2152,12 @@ const confirmingId = ref<string | null>(null)
 const renamingId = ref<string | null>(null)
 const renameDraft = ref('')
 
+/** Which drills still exist, so a session's total can leave out those that do not. */
+const knownPatternIds = ref<Set<string>>(new Set())
+
 function refresh() {
   list.value = sessions.listSessions()
+  knownPatternIds.value = new Set(storage.listPatterns().map((p) => p.id))
 }
 
 watch(() => props.open, (open) => { if (open) refresh() }, { immediate: true })
@@ -2116,8 +2195,15 @@ function confirmDelete(id: string) {
   refresh()
 }
 
+/**
+ * The same total the plan panel and the PDF show, through the same function.
+ *
+ * A drill that is no longer in the library contributes nothing — it will not
+ * be run and it is not in the document — so summing every entry here would
+ * have this list promise a session length the PDF then contradicts.
+ */
 function totalOf(session: Session): number {
-  return session.entries.reduce((sum, entry) => sum + entry.minutes, 0)
+  return sessions.totalMinutes(session, knownPatternIds.value)
 }
 </script>
 

@@ -75,6 +75,13 @@ defineExpose({ svgEl })
 </script>
 
 <template>
+  <!--
+    One root, and attributes inherit onto it. PitchBoard's pointer handlers
+    reach this svg by fallthrough alone, so `inheritAttrs: false` or a second
+    root element here would silently kill every interaction on the board —
+    the drawing knows nothing about the dragging, but it does have to stay
+    reachable by it.
+  -->
   <svg ref="svgEl" class="board" :viewBox="viewBox" xmlns="http://www.w3.org/2000/svg">
     <g :transform="boardTransform">
       <rect :x="0" :y="0" :width="PITCH_W" :height="PITCH_H" fill="#2e7d32" />
