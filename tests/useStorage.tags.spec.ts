@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useStorage, normaliseTags, matchesTags, PATTERNS_KEY } from '../src/composables/useStorage'
 import { __resetBoardForTests, useBoard } from '../src/composables/useBoard'
-import type { Pattern } from '../src/types'
 
 const storage = useStorage()
 
@@ -52,7 +51,7 @@ describe('tags on a pattern', () => {
   })
 
   it('refuses a pattern whose tags are not strings', () => {
-    const saved = save('Rondo')
+    save('Rondo')
     const raw = JSON.parse(localStorage.getItem(PATTERNS_KEY)!)
     raw[0].tags = [1, 2]
     localStorage.setItem(PATTERNS_KEY, JSON.stringify(raw))
@@ -61,7 +60,6 @@ describe('tags on a pattern', () => {
     // returns the rest.
     expect(storage.listPatterns()).toHaveLength(0)
     expect(storage.lastError.value).toContain('could not be read')
-    expect(saved.id).toBeTruthy()
   })
 
   it('leaves a rename alone', () => {
@@ -80,14 +78,33 @@ describe('tags on a pattern', () => {
     expect(again.tags).toEqual(['rondo', 'warm up'])
     expect(storage.listPatterns()[0].tags).toEqual(['rondo', 'warm up'])
   })
+
+  /**
+   * A fork passes no id — that is what makes it a fork — so it needs the
+   * source id given separately, or it has no way to find the tags to carry.
+   * A copy of a rondo is still a rondo; refiling it by hand is the exact
+   * problem tags exist to solve.
+   */
+  it('a fork carries the original drill’s tags', () => {
+    const first = save('Rondo')
+    storage.setTags(first.id, ['rondo', 'warm up'])
+
+    const forked = storage.savePattern('Rondo copy', useBoard().snapshot(), undefined, first.id)
+
+    expect(forked.tags).toEqual(['rondo', 'warm up'])
+    expect(storage.listPatterns().find((p) => p.id === first.id)?.tags).toEqual(['rondo', 'warm up'])
+  })
 })
 
 /**
  * `matchesTags` only reads `tags`, so a bare object is enough to exercise it —
- * no need to round-trip through the board or localStorage.
+ * no need to round-trip through the board or localStorage. Its parameter type
+ * is `Pick<Pattern, 'tags'>` rather than `Pattern`, so this needs no cast: a
+ * rename of `Pattern.tags` would break this fixture directly instead of
+ * being papered over.
  */
-function withTags(tags?: string[]): Pattern {
-  return { tags } as Pattern
+function withTags(tags?: string[]): { tags?: string[] } {
+  return { tags }
 }
 
 describe('matchesTags', () => {

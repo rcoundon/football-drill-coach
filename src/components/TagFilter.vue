@@ -26,6 +26,7 @@ function toggle(tag: string) {
       data-tag-chip
       class="chip"
       :class="{ 'chip--on': selected.includes(tag) }"
+      :aria-pressed="selected.includes(tag)"
       @click="toggle(tag)"
     >
       {{ tag }}

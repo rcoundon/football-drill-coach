@@ -64,8 +64,12 @@ export function normaliseTags(input: string[]): string[] {
  * Whether a drill carries every one of the coach's chosen tags. Lives here
  * rather than in a component so the filter row and the library panel share
  * one definition of what "matches" means.
+ *
+ * Takes only `tags`, not a whole `Pattern`, because that is all it reads —
+ * the honest signature means a rename of `Pattern.tags` cannot slip past a
+ * call site that only ever built `{ tags }`.
  */
-export function matchesTags(pattern: Pattern, selected: string[]): boolean {
+export function matchesTags(pattern: Pick<Pattern, 'tags'>, selected: string[]): boolean {
   return selected.every((tag) => (pattern.tags ?? []).includes(tag))
 }
 
@@ -469,7 +473,12 @@ function toPattern(name: string, snap: BoardSnapshot, id: string, createdAt: str
   }
 }
 
-function savePattern(name: string, snap: BoardSnapshot, id?: string): Pattern {
+/**
+ * `forkFromId` is separate from `id`: a fork deliberately saves under a
+ * fresh id (so `id` is undefined, and `existing` below is too) while still
+ * needing to know which drill it was copied from, to carry its tags across.
+ */
+function savePattern(name: string, snap: BoardSnapshot, id?: string, forkFromId?: string): Pattern {
   lastError.value = null
   const { patterns, unreadable, damaged } = readLibrary()
 
@@ -481,9 +490,12 @@ function savePattern(name: string, snap: BoardSnapshot, id?: string): Pattern {
 
   const existing = id ? patterns.find((p) => p.id === id) : undefined
   const pattern = toPattern(name, snap, existing?.id ?? id ?? makeId(), existing?.createdAt ?? nowIso())
-  // Saving the board over a drill must not silently untag it. A brand new
-  // drill has none, which is what `toPattern` already gave it.
-  pattern.tags = existing?.tags ?? []
+  // Saving the board over a drill must not silently untag it, and neither
+  // must forking one: a copy of a rondo is still a rondo, and having to
+  // refile a fork by hand is the exact problem tags exist to solve. A
+  // brand new drill has none, which is what `toPattern` already gave it.
+  const forkSource = forkFromId ? patterns.find((p) => p.id === forkFromId) : undefined
+  pattern.tags = existing?.tags ?? forkSource?.tags ?? []
 
   const index = patterns.findIndex((p) => p.id === pattern.id)
   if (index === -1) patterns.push(pattern)
@@ -542,7 +554,15 @@ function setTags(id: string, tags: string[]): void {
   }
 }
 
-/** Every tag in use, sorted. The filter row's order is the app's business. */
+/**
+ * Every tag in use, sorted. The filter row's order is the app's business.
+ *
+ * Does not check `readLibrary().unreadable` itself and report it the way
+ * `listPatterns` does: every caller today calls `listPatterns()` first, on
+ * the same read, so that error already surfaced. Reads unreadable as "no
+ * tags" rather than duplicating the check — add it back if a caller ever
+ * calls this without calling `listPatterns()` first.
+ */
 function allTags(): string[] {
   const tags = new Set<string>()
   for (const pattern of readLibrary().patterns) {
@@ -711,7 +731,14 @@ function importPatterns(json: string): Pattern[] {
     )
   }
 
-  const incoming = raw.map((entry) => parsePattern(entry))
+  // parsePattern only checks tags are strings, not that they are normalised —
+  // a hand-edited file can carry ["Rondo", "rondo "], which would otherwise
+  // land as two chips in the filter row for what the coach meant as one tag.
+  // Import is where untrusted data enters the library, so it is normalised
+  // here, the same way `setTags` normalises a tag typed by hand.
+  const incoming = raw.map((entry) => parsePattern(entry)).map((pattern) =>
+    pattern.tags === undefined ? pattern : { ...pattern, tags: normaliseTags(pattern.tags) },
+  )
 
   // Tracked incrementally: a collision can be with the existing library OR
   // with an earlier entry in this same file. Either way the id must be

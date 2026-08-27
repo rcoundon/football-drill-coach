@@ -86,8 +86,13 @@ function askDelete(id: string) {
 
 function confirmDelete(id: string) {
   storage.deletePattern(id)
-  emit('delete', id)
   confirmingId.value = null
+  // deletePattern writes nothing when the library is unreadable, and a write
+  // can fail on quota, so success is not something to claim on faith: refresh()
+  // starts with lastError cleared, which would erase the error banner that is
+  // the only thing telling the coach the delete did not happen.
+  if (!storage.lastWriteSucceeded.value) return
+  emit('delete', id)
   refresh()
 }
 
@@ -98,11 +103,15 @@ function startRename(pattern: Pattern) {
 
 function saveRename(id: string) {
   const name = renameDraft.value.trim()
-  if (name) {
-    storage.renamePattern(id, name)
-    emit('rename', { id, name })
-  }
   renamingId.value = null
+  if (!name) return
+  storage.renamePattern(id, name)
+  // renamePattern writes nothing when the library is unreadable, and a write
+  // can fail on quota, so success is not something to claim on faith: refresh()
+  // starts with lastError cleared, which would erase the error banner that is
+  // the only thing telling the coach the rename did not happen.
+  if (!storage.lastWriteSucceeded.value) return
+  emit('rename', { id, name })
   refresh()
 }
 
@@ -118,6 +127,11 @@ function startTagging(pattern: Pattern) {
 function saveTags(id: string) {
   storage.setTags(id, tagDraft.value.split(','))
   taggingId.value = null
+  // setTags writes nothing when the library is unreadable, and a write can
+  // fail on quota, so success is not something to claim on faith: refresh()
+  // starts with lastError cleared, which would erase the error banner that
+  // is the only thing telling the coach the tags were not saved.
+  if (!storage.lastWriteSucceeded.value) return
   refresh()
 }
 </script>
@@ -182,7 +196,7 @@ function saveTags(id: string) {
 .head h2 { margin: 0; font-size: 1.1rem; }
 .empty { opacity: 0.7; }
 .list { list-style: none; margin: 0.75rem 0 0; padding: 0; display: grid; gap: 0.4rem; }
-.row { display: flex; gap: 0.4rem; align-items: center; background: #37474f; padding: 0.45rem 0.6rem; border-radius: 0.4rem; }
+.row { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; background: #37474f; padding: 0.45rem 0.6rem; border-radius: 0.4rem; }
 .name { flex: 1; }
 .date { opacity: 0.6; font-size: 0.8rem; }
 .input { flex: 1; padding: 0.35rem; border-radius: 0.3rem; border: 1px solid #ffffff40; background: #263238; color: inherit; }

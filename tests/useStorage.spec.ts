@@ -182,6 +182,14 @@ describe('corrupt storage', () => {
     expect(store.lastError.value).toMatch(/could not be read/i)
   })
 
+  it('refuses to set tags over an unreadable library, leaving the bad bytes intact', () => {
+    localStorage.setItem(PATTERNS_KEY, '{not json at all')
+    const store = useStorage()
+    store.setTags('some-id', ['rondo'])
+    expect(localStorage.getItem(PATTERNS_KEY)).toBe('{not json at all')
+    expect(store.lastError.value).toMatch(/could not be read/i)
+  })
+
   it('still saves normally when the library merely has a skippable malformed entry', () => {
     const store = useStorage()
     const good = store.savePattern('Good', snap())
@@ -242,6 +250,22 @@ describe('corrupt storage', () => {
     const ids = stored.map((p: { id: string }) => p.id)
     expect(ids).toContain('junk')
     expect(stored.find((p: { id: string }) => p.id === good.id).name).toBe('Better name')
+    expect(store.lastError.value).toMatch(/could not be read/i)
+  })
+
+  it('preserves a damaged row when setting tags on another pattern', () => {
+    const store = useStorage()
+    const good = store.savePattern('Good', snap())
+    const raw = JSON.parse(localStorage.getItem(PATTERNS_KEY)!)
+    raw.push({ id: 'junk', name: 'Bad' })
+    localStorage.setItem(PATTERNS_KEY, JSON.stringify(raw))
+
+    store.setTags(good.id, ['rondo'])
+
+    const stored = JSON.parse(localStorage.getItem(PATTERNS_KEY)!)
+    const ids = stored.map((p: { id: string }) => p.id)
+    expect(ids).toContain('junk')
+    expect(stored.find((p: { id: string }) => p.id === good.id).tags).toEqual(['rondo'])
     expect(store.lastError.value).toMatch(/could not be read/i)
   })
 
@@ -453,6 +477,19 @@ describe('import and export', () => {
     const listed = store.listPatterns()
     expect(listed).toHaveLength(2)
     expect(new Set(listed.map((p) => p.id)).size).toBe(2)
+  })
+
+  it('normalises tags on import, so a hand-edited file cannot duplicate a chip', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Drill', snap())
+    const messy = { ...saved, tags: [' Rondo ', 'rondo', 'WARM UP'] }
+    const json = JSON.stringify([messy])
+    localStorage.clear()
+
+    const imported = store.importPatterns(json)
+
+    expect(imported[0].tags).toEqual(['rondo', 'warm up'])
+    expect(store.listPatterns()[0].tags).toEqual(['rondo', 'warm up'])
   })
 
   it('refuses to import over an unreadable library, leaving the bad bytes intact', () => {

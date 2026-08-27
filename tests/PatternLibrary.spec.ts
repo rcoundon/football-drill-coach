@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import PatternLibrary from '../src/components/PatternLibrary.vue'
 import { useStorage } from '../src/composables/useStorage'
@@ -8,6 +8,19 @@ beforeEach(() => {
   localStorage.clear()
   __resetBoardForTests()
 })
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
+/** Same idiom `useStorage.spec.ts` uses to make the next write fail. */
+function failNextWrite() {
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
+    const error = new Error('quota') as Error & { name: string }
+    error.name = 'QuotaExceededError'
+    throw error
+  })
+}
 
 function seed(name: string) {
   return useStorage().savePattern(name, {
@@ -104,6 +117,25 @@ describe('deleting', () => {
 
     expect(wrapper.emitted('delete')).toEqual([[saved.id]])
   })
+
+  /**
+   * refresh() starts with lastError cleared, so calling it unconditionally
+   * after a failed delete erased the only thing telling the coach it did
+   * not happen — and the drill silently stayed on the board.
+   */
+  it('tells the coach when a delete fails, rather than swallowing the error', async () => {
+    const saved = seed('Press trigger')
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    await wrapper.find('[data-delete]').trigger('click')
+
+    failNextWrite()
+    await wrapper.find('[data-confirm-delete]').trigger('click')
+
+    expect(useStorage().lastError.value).toMatch(/out of space/i)
+    expect(wrapper.emitted('delete')).toBeUndefined()
+    const listed = useStorage().listPatterns()
+    expect(listed.map((p) => p.id)).toContain(saved.id)
+  })
 })
 
 describe('renaming', () => {
@@ -131,6 +163,27 @@ describe('renaming', () => {
     await wrapper.find('[data-rename-save]').trigger('click')
 
     expect(wrapper.emitted('rename')).toEqual([[{ id: saved.id, name: 'Counter press' }]])
+  })
+
+  /**
+   * refresh() starts with lastError cleared, so calling it unconditionally
+   * after a failed rename erased the only thing telling the coach it did
+   * not happen. The row still shows the old name — the one case of these
+   * three where the coach has any sign at all something is wrong, but the
+   * error banner should say so too.
+   */
+  it('tells the coach when a rename fails, rather than swallowing the error', async () => {
+    seed('Press trigger')
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    await wrapper.find('[data-rename]').trigger('click')
+    await wrapper.find('[data-rename-input]').setValue('Counter press')
+
+    failNextWrite()
+    await wrapper.find('[data-rename-save]').trigger('click')
+
+    expect(useStorage().lastError.value).toMatch(/out of space/i)
+    expect(wrapper.emitted('rename')).toBeUndefined()
+    expect(useStorage().listPatterns()[0].name).toBe('Press trigger')
   })
 })
 
@@ -177,6 +230,28 @@ describe('tags', () => {
     await wrapper.find('[data-tags-save]').trigger('click')
 
     expect(useStorage().listPatterns()[0].tags).toEqual(['rondo', 'warm up'])
+  })
+
+  /**
+   * setTags sets lastError to the quota message and leaves the write
+   * unsucceeded — but refresh() calls listPatterns(), whose first line
+   * clears lastError. On a full-but-readable library the coach pressed
+   * Save, the editor closed, the tags were unchanged, and nothing was
+   * reported. Tags are the worst of the three save-time failures in this
+   * panel: unlike a rename, they are not shown on the row at all, so
+   * without the error banner there is no sign anything went wrong.
+   */
+  it('tells the coach when saving tags fails, rather than swallowing the error', async () => {
+    seed('Rondo')
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    await wrapper.find('[data-tags]').trigger('click')
+    await wrapper.find('[data-tags-input]').setValue('rondo')
+
+    failNextWrite()
+    await wrapper.find('[data-tags-save]').trigger('click')
+
+    expect(useStorage().lastError.value).toMatch(/out of space/i)
+    expect(useStorage().listPatterns()[0].tags ?? []).toEqual([])
   })
 
   /**

@@ -86,9 +86,13 @@ function openSaveAsPrompt() {
 function confirmSave() {
   const name = saveNameDraft.value.trim()
   if (!name) return
-  // A fork deliberately passes no id, so savePattern mints a new one.
-  const id = savePromptMode.value === 'fork' ? undefined : currentPatternId.value ?? undefined
-  const saved = storage.savePattern(name, board.snapshot(), id)
+  const isFork = savePromptMode.value === 'fork'
+  // A fork deliberately passes no id, so savePattern mints a new one — but it
+  // still passes the source pattern's id separately, so the copy carries that
+  // drill's tags across rather than starting untagged.
+  const id = isFork ? undefined : currentPatternId.value ?? undefined
+  const forkFromId = isFork ? currentPatternId.value ?? undefined : undefined
+  const saved = storage.savePattern(name, board.snapshot(), id, forkFromId)
   savePromptOpen.value = false
   // A pattern that was never written is not the pattern that is open.
   if (!storage.lastWriteSucceeded.value) return

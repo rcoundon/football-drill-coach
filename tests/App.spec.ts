@@ -548,6 +548,28 @@ describe('Save as…', () => {
     expect(wrapper.find('[data-current-pattern]').text()).toContain('Counter press')
   })
 
+  /**
+   * Save as… used to pass no id at all, so the fork had nothing to carry
+   * tags forward from and always landed untagged. A copy of a rondo is
+   * still a rondo, and refiling a fork by hand is the exact problem tags
+   * exist to solve.
+   */
+  it('carries the original drill’s tags onto the fork', async () => {
+    const store = useStorage()
+    const original = store.savePattern('Press trigger', sampleSnapshot())
+    store.setTags(original.id, ['rondo', 'warm up'])
+    wrapper = mountApp()
+
+    await openLibraryAndLoad(wrapper)
+    await wrapper.find('[data-save-as]').trigger('click')
+    await wrapper.find('#pattern-name').setValue('Counter press')
+    await wrapper.find('[data-confirm-save]').trigger('click')
+    await nextTick()
+
+    const fork = store.listPatterns().find((p) => p.id !== original.id)!
+    expect(fork.tags).toEqual(['rondo', 'warm up'])
+  })
+
   it('offers the open pattern name as the starting point rather than a placeholder', async () => {
     useStorage().savePattern('Press trigger', sampleSnapshot())
     wrapper = mountApp()
