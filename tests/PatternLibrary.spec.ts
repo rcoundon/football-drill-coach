@@ -178,4 +178,71 @@ describe('tags', () => {
 
     expect(useStorage().listPatterns()[0].tags).toEqual(['rondo', 'warm up'])
   })
+
+  /**
+   * With one chip selected, AND and OR agree — this is the case that would
+   * pass even if `matchesTags` used `.some`. Only a drill carrying BOTH
+   * chosen tags stays, while a drill with just one of them (u12) drops out.
+   */
+  it('keeps only the drill carrying every one of two chosen tags', async () => {
+    const a = seed('Rondo')
+    const b = seed('Pressing trap')
+    const c = seed('Warm up jog')
+    useStorage().setTags(a.id, ['rondo', 'u12'])
+    useStorage().setTags(b.id, ['pressing', 'u12'])
+    useStorage().setTags(c.id, ['rondo', 'u9'])
+
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    const chips = wrapper.findAll('[data-tag-chip]')
+    await chips.find((chip) => chip.text() === 'rondo')!.trigger('click')
+    await wrapper.findAll('[data-tag-chip]').find((chip) => chip.text() === 'u12')!.trigger('click')
+
+    expect(wrapper.findAll('[data-pattern]')).toHaveLength(1)
+    expect(wrapper.find('[data-pattern]').text()).toContain('Rondo')
+  })
+
+  /**
+   * Each tag alone matches a different drill, so an OR filter would show
+   * both. AND requires both tags on the same drill, and neither has that —
+   * the honest answer is nothing, and the panel says so distinctly from an
+   * empty library.
+   */
+  it('shows nothing, with its own message, when two chosen tags never land on the same drill', async () => {
+    const a = seed('Rondo')
+    const b = seed('Pressing trap')
+    useStorage().setTags(a.id, ['rondo'])
+    useStorage().setTags(b.id, ['pressing'])
+
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    const chips = wrapper.findAll('[data-tag-chip]')
+    await chips.find((chip) => chip.text() === 'rondo')!.trigger('click')
+    await wrapper.findAll('[data-tag-chip]').find((chip) => chip.text() === 'pressing')!.trigger('click')
+
+    expect(wrapper.findAll('[data-pattern]')).toHaveLength(0)
+    expect(wrapper.find('[data-no-matches]').exists()).toBe(true)
+    expect(wrapper.find('[data-no-matches]').text()).toBe('No drills match these tags.')
+    expect(wrapper.text()).not.toMatch(/nothing saved yet/i)
+  })
+
+  /**
+   * The panel stays mounted across close/reopen, so a chip the coach chose
+   * can outlive the tag it represents. Without pruning, editing the tag off
+   * the last drill that had it leaves the list permanently empty with no
+   * chip left to click to clear the selection.
+   */
+  it('drops a chosen tag from the filter once no drill carries it, so the list is not stuck empty', async () => {
+    const saved = seed('Rondo')
+    useStorage().setTags(saved.id, ['rondo'])
+
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    await wrapper.find('[data-tag-chip]').trigger('click')
+    expect(wrapper.findAll('[data-pattern]')).toHaveLength(1)
+
+    await wrapper.find('[data-tags]').trigger('click')
+    await wrapper.find('[data-tags-input]').setValue('')
+    await wrapper.find('[data-tags-save]').trigger('click')
+
+    expect(wrapper.findAll('[data-tag-chip]')).toHaveLength(0)
+    expect(wrapper.findAll('[data-pattern]')).toHaveLength(1)
+  })
 })

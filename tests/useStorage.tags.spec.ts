@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useStorage, normaliseTags, PATTERNS_KEY } from '../src/composables/useStorage'
+import { useStorage, normaliseTags, matchesTags, PATTERNS_KEY } from '../src/composables/useStorage'
 import { __resetBoardForTests, useBoard } from '../src/composables/useBoard'
+import type { Pattern } from '../src/types'
 
 const storage = useStorage()
 
@@ -78,5 +79,40 @@ describe('tags on a pattern', () => {
 
     expect(again.tags).toEqual(['rondo', 'warm up'])
     expect(storage.listPatterns()[0].tags).toEqual(['rondo', 'warm up'])
+  })
+})
+
+/**
+ * `matchesTags` only reads `tags`, so a bare object is enough to exercise it —
+ * no need to round-trip through the board or localStorage.
+ */
+function withTags(tags?: string[]): Pattern {
+  return { tags } as Pattern
+}
+
+describe('matchesTags', () => {
+  it('matches every drill when nothing is selected, tagged or not', () => {
+    expect(matchesTags(withTags(['rondo']), [])).toBe(true)
+    expect(matchesTags(withTags(undefined), [])).toBe(true)
+  })
+
+  it('matches a drill carrying the one chosen tag', () => {
+    expect(matchesTags(withTags(['rondo', 'u12']), ['rondo'])).toBe(true)
+  })
+
+  it('rejects a drill missing the one chosen tag', () => {
+    expect(matchesTags(withTags(['pressing']), ['rondo'])).toBe(false)
+  })
+
+  it('matches a drill carrying both chosen tags', () => {
+    expect(matchesTags(withTags(['rondo', 'u12', 'warm up']), ['rondo', 'u12'])).toBe(true)
+  })
+
+  it('rejects a drill missing one of two chosen tags', () => {
+    expect(matchesTags(withTags(['rondo']), ['rondo', 'u12'])).toBe(false)
+  })
+
+  it('treats a drill with no tags as matching only an empty selection', () => {
+    expect(matchesTags(withTags(undefined), ['rondo'])).toBe(false)
   })
 })

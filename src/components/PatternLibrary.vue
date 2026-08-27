@@ -40,6 +40,11 @@ const availableTags = ref<string[]>([])
 function refresh() {
   patterns.value = storage.listPatterns()
   availableTags.value = storage.allTags()
+  // A tag can disappear from the library entirely — the coach untags the
+  // last drill that carried it — while the panel stays mounted underneath.
+  // Without this, its chip vanishes from the filter row but the selection
+  // survives, leaving a permanently empty list with no chip left to clear.
+  selectedTags.value = selectedTags.value.filter((tag) => availableTags.value.includes(tag))
 }
 
 watch(() => props.open, (open) => { if (open) refresh() }, { immediate: true })
@@ -49,7 +54,9 @@ const shown = computed(() =>
   patterns.value.filter((pattern) => matchesTags(pattern, selectedTags.value)),
 )
 
-const isEmpty = computed(() => shown.value.length === 0)
+const isEmpty = computed(() => patterns.value.length === 0)
+/** The library has drills, but none carry every tag the coach chose. */
+const noMatches = computed(() => !isEmpty.value && shown.value.length === 0)
 
 /**
  * Report what the coach chose; App puts it on the board.
@@ -126,6 +133,7 @@ function saveTags(id: string) {
       <TagFilter :tags="availableTags" :selected="selectedTags" @update="selectedTags = $event" />
 
       <p v-if="isEmpty" class="empty">Nothing saved yet. Build a drill and press Save.</p>
+      <p v-else-if="noMatches" data-no-matches class="empty">No drills match these tags.</p>
 
       <ul v-else class="list">
         <li v-for="pattern in shown" :key="pattern.id" data-pattern class="row">
