@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useBoard, __resetBoardForTests } from '../src/composables/useBoard'
+import { ballPositionIn } from '../src/animation'
 import { BALL_OFFSET } from '../src/geometry'
 
 const board = useBoard()
@@ -384,7 +385,7 @@ describe('the ball in the view', () => {
     board.scrubTo(250)
     const shown = board.view.value.counters.find((c) => c.id === id)!
     expect(board.view.value.balls[0].attachedTo).toBe(id)
-    const drawn = board.viewBallPositions.value[0].pos
+    const drawn = ballPositionIn(board.view.value, board.view.value.balls[0])
     expect(drawn.x).toBeCloseTo(shown.pos.x + BALL_OFFSET.x, 10)
     expect(drawn.x).toBeGreaterThan(10)
     expect(drawn.x).toBeLessThan(50)
