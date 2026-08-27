@@ -70,4 +70,13 @@ describe('tags on a pattern', () => {
 
     expect(storage.listPatterns()[0].tags).toEqual(['rondo'])
   })
+
+  it('saving the board over a tagged drill keeps its tags', () => {
+    const first = save('Rondo')
+    storage.setTags(first.id, ['rondo', 'warm up'])
+    const again = storage.savePattern('Rondo', useBoard().snapshot(), first.id)
+
+    expect(again.tags).toEqual(['rondo', 'warm up'])
+    expect(storage.listPatterns()[0].tags).toEqual(['rondo', 'warm up'])
+  })
 })
