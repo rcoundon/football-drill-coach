@@ -31,14 +31,9 @@ export const STALE_DRAG_MS = 10_000
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { ArrowDrawing, SegmentDrawing, SelectionRef, ToolMode, Vec } from '../types'
-import { PITCH_H, PITCH_W, bendFor, clampToPitch, clientToPitch, distance, viewBoxOf } from '../geometry'
+import { bendFor, clampToPitch, clientToPitch, distance } from '../geometry'
 import { useBoard } from '../composables/useBoard'
-import PitchMarkings from './PitchMarkings.vue'
-import PlayerCounter from './PlayerCounter.vue'
-import BallToken from './BallToken.vue'
-import ConeMarker from './ConeMarker.vue'
-import PitchLabel from './PitchLabel.vue'
-import DrawingLayer from './DrawingLayer.vue'
+import BoardView from './BoardView.vue'
 import BendHandle from './BendHandle.vue'
 import EndHandle from './EndHandle.vue'
 
@@ -56,7 +51,15 @@ const emit = defineEmits<{
 }>()
 
 const board = useBoard()
-const svgEl = ref<SVGSVGElement | null>(null)
+const boardView = ref<InstanceType<typeof BoardView> | null>(null)
+
+/**
+ * The svg belongs to BoardView now. Everything here that needs it — pointer
+ * capture, and turning a client point into a pitch point — reads it through
+ * the child, and so does the PNG export, which App reaches by way of the
+ * `svgEl` this still exposes.
+ */
+const svgEl = computed<SVGSVGElement | null>(() => boardView.value?.svgEl ?? null)
 
 defineExpose({ svgEl, deleteSelected, duplicateSelected, clearSelection })
 
@@ -201,13 +204,6 @@ function noteTravel(active: Drag, at: Vec): void {
   }
 }
 
-const viewBox = computed(() => viewBoxOf(board.state.pitch.rotated))
-
-/** The rotation is applied once, here, so nothing downstream knows about it. */
-const boardTransform = computed(() =>
-  board.state.pitch.rotated ? `translate(${PITCH_H} 0) rotate(90)` : '',
-)
-
 /*
  * Rendering reads `board.view`; editing reads and writes `board.state`.
  *
@@ -217,17 +213,6 @@ const boardTransform = computed(() =>
  * that presses are refused while the view is a blend anyway.
  */
 const view = computed(() => board.view.value)
-
-/**
- * Every ball on screen: where it is drawn, and whether it is riding on a
- * counter that still exists.
- */
-const shownBalls = computed(() =>
-  board.viewBallPositions.value.map(({ id, pos }) => {
-    const holder = view.value.balls.find((b) => b.id === id)?.attachedTo ?? null
-    return { id, pos, attached: holder !== null && view.value.counters.some((c) => c.id === holder) }
-  }),
-)
 
 function toPitch(event: PointerEvent) {
   const rect = svgEl.value!.getBoundingClientRect()
@@ -1014,24 +999,24 @@ function onPointerUp(event: PointerEvent) {
 </script>
 
 <template>
-  <svg
-    ref="svgEl"
-    class="board"
-    :viewBox="viewBox"
-    xmlns="http://www.w3.org/2000/svg"
+  <BoardView
+    ref="boardView"
+    :frame="view"
+    :pitch="board.state.pitch"
+    :labels-visible="board.state.labelsVisible"
+    :balls-visible="board.state.ballsVisible"
+    :selected-drawing-ids="selectedDrawingIds"
+    @grab-counter="onCounterGrab"
+    @grab-marker="onMarkerGrab"
+    @grab-label="onLabelGrab"
+    @grab-ball="onBallGrab"
+    @hit-drawing="onDrawingHit"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
     @pointercancel="onPointerCancel"
   >
-    <g :transform="boardTransform">
-      <rect :x="0" :y="0" :width="PITCH_W" :height="PITCH_H" fill="#2e7d32" />
-      <PitchMarkings :type="board.state.pitch.type" />
-      <DrawingLayer
-        :drawings="view.drawings"
-        :selected-ids="selectedDrawingIds"
-        @hit="onDrawingHit"
-      />
+    <template #under-tokens>
       <!--
         Rings for everything held that is not a drawing, painted under the
         pieces themselves so a ring reads as a halo rather than as part of
@@ -1047,43 +1032,9 @@ function onPointerUp(event: PointerEvent) {
         fill="#ffffff"
         fill-opacity="0.28"
       />
-      <ConeMarker
-        v-for="marker in view.markers"
-        :key="marker.id"
-        :marker="marker"
-        :rotated="board.state.pitch.rotated"
-        @grab="onMarkerGrab(marker.id, $event)"
-      />
-      <PlayerCounter
-        v-for="counter in view.counters"
-        :key="counter.id"
-        :counter="counter"
-        :rotated="board.state.pitch.rotated"
-        :has-ball="board.state.ballsVisible && view.balls.some((b) => b.attachedTo === counter.id)"
-        @grab="onCounterGrab(counter.id, $event)"
-      />
-      <PitchLabel
-        v-for="label in board.state.labelsVisible ? view.labels : []"
-        :key="label.id"
-        :label="label"
-        :rotated="board.state.pitch.rotated"
-        @grab="onLabelGrab(label.id, $event)"
-      />
-      <BallToken
-        v-for="ball in board.state.ballsVisible ? shownBalls : []"
-        :key="ball.id"
-        :pos="ball.pos"
-        :attached="ball.attached"
-        @grab="onBallGrab(ball.id, $event)"
-      />
-      <!--
-        Painted over the tokens, unlike everything else that can be grabbed.
-        An arrow nearly always starts or ends ON a player, so a handle and a
-        player often cover the same spot and the one painted later takes the
-        press. Handles only exist for a drawing the coach deliberately chose,
-        so when the two overlap the handle is what they are reaching for; a
-        press on bare grass puts the drawing down and gives the player back.
-      -->
+    </template>
+
+    <template #over-tokens>
       <BendHandle
         v-for="arrow in bendHandles"
         :key="`bend-${arrow.id}`"
@@ -1117,17 +1068,6 @@ function onPointerUp(event: PointerEvent) {
         stroke-width="0.3"
         stroke-dasharray="1.5 1.2"
       />
-    </g>
-  </svg>
+    </template>
+  </BoardView>
 </template>
-
-<style scoped>
-.board {
-  /* Without this, a drag on a tablet scrolls the page instead of the counter. */
-  touch-action: none;
-  width: 100%;
-  height: 100%;
-  display: block;
-  background: #1b5e20;
-}
-</style>
