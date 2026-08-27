@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, toRaw, watch } from 'vue'
 import type { Pattern } from '../types'
-import { useStorage } from '../composables/useStorage'
+import { matchesTags, useStorage } from '../composables/useStorage'
+import TagFilter from './TagFilter.vue'
 
 const props = defineProps<{ open: boolean }>()
 /**
@@ -23,14 +24,32 @@ const patterns = ref<Pattern[]>([])
 const confirmingId = ref<string | null>(null)
 const renamingId = ref<string | null>(null)
 const renameDraft = ref('')
+const selectedTags = ref<string[]>([])
+const taggingId = ref<string | null>(null)
+const tagDraft = ref('')
+
+/**
+ * Held in a ref refreshed beside the list, not computed.
+ *
+ * `allTags` reads localStorage, which Vue cannot track — a computed over it
+ * would be evaluated once and cached forever, so a tag added through this very
+ * panel would not reach the filter row until the panel was remounted.
+ */
+const availableTags = ref<string[]>([])
 
 function refresh() {
   patterns.value = storage.listPatterns()
+  availableTags.value = storage.allTags()
 }
 
 watch(() => props.open, (open) => { if (open) refresh() }, { immediate: true })
 
-const isEmpty = computed(() => patterns.value.length === 0)
+/** Every chosen tag must be on the drill: chips narrow, they do not widen. */
+const shown = computed(() =>
+  patterns.value.filter((pattern) => matchesTags(pattern, selectedTags.value)),
+)
+
+const isEmpty = computed(() => shown.value.length === 0)
 
 /**
  * Report what the coach chose; App puts it on the board.
@@ -83,6 +102,17 @@ function saveRename(id: string) {
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString()
 }
+
+function startTagging(pattern: Pattern) {
+  taggingId.value = pattern.id
+  tagDraft.value = (pattern.tags ?? []).join(', ')
+}
+
+function saveTags(id: string) {
+  storage.setTags(id, tagDraft.value.split(','))
+  taggingId.value = null
+  refresh()
+}
 </script>
 
 <template>
@@ -93,10 +123,12 @@ function formatDate(iso: string): string {
         <button class="chip" @click="emit('close')">Close</button>
       </header>
 
+      <TagFilter :tags="availableTags" :selected="selectedTags" @update="selectedTags = $event" />
+
       <p v-if="isEmpty" class="empty">Nothing saved yet. Build a drill and press Save.</p>
 
       <ul v-else class="list">
-        <li v-for="pattern in patterns" :key="pattern.id" data-pattern class="row">
+        <li v-for="pattern in shown" :key="pattern.id" data-pattern class="row">
           <template v-if="renamingId === pattern.id">
             <input v-model="renameDraft" data-rename-input class="input" />
             <button data-rename-save class="chip" @click="saveRename(pattern.id)">Save</button>
@@ -109,11 +141,18 @@ function formatDate(iso: string): string {
             <button class="chip" @click="confirmingId = null">Cancel</button>
           </template>
 
+          <template v-else-if="taggingId === pattern.id">
+            <input v-model="tagDraft" data-tags-input class="input" placeholder="rondo, warm up" />
+            <button data-tags-save class="chip" @click="saveTags(pattern.id)">Save</button>
+            <button class="chip" @click="taggingId = null">Cancel</button>
+          </template>
+
           <template v-else>
             <span class="name">{{ pattern.name }}</span>
             <span class="date">{{ formatDate(pattern.updatedAt) }}</span>
             <button data-load class="chip" @click="load(pattern)">Load</button>
             <button data-rename class="chip" @click="startRename(pattern)">Rename</button>
+            <button data-tags class="chip" @click="startTagging(pattern)">Tags</button>
             <button data-delete class="chip" @click="askDelete(pattern.id)">Delete</button>
           </template>
         </li>

@@ -61,6 +61,15 @@ export function normaliseTags(input: string[]): string[] {
 }
 
 /**
+ * Whether a drill carries every one of the coach's chosen tags. Lives here
+ * rather than in a component so the filter row and the library panel share
+ * one definition of what "matches" means.
+ */
+export function matchesTags(pattern: Pattern, selected: string[]): boolean {
+  return selected.every((tag) => (pattern.tags ?? []).includes(tag))
+}
+
+/**
  * The ball could not be hidden until after version 1 shipped, and every
  * pattern written before that had one on the pitch. A missing flag
  * therefore means visible, not invalid.

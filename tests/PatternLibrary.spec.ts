@@ -149,3 +149,33 @@ describe('calling a drill a drill', () => {
     expect(wrapper.find('.empty').text()).toBe('Nothing saved yet. Build a drill and press Save.')
   })
 })
+
+describe('tags', () => {
+  it('narrows the list to drills carrying every chosen tag', async () => {
+    const a = seed('Rondo')
+    const b = seed('Pressing trap')
+    useStorage().setTags(a.id, ['rondo', 'u12'])
+    useStorage().setTags(b.id, ['pressing', 'u12'])
+
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    expect(wrapper.findAll('[data-pattern]')).toHaveLength(2)
+
+    const chips = wrapper.findAll('[data-tag-chip]')
+    const rondo = chips.find((c) => c.text() === 'rondo')!
+    await rondo.trigger('click')
+
+    expect(wrapper.findAll('[data-pattern]')).toHaveLength(1)
+    expect(wrapper.find('[data-pattern]').text()).toContain('Rondo')
+  })
+
+  it('edits a drill’s tags', async () => {
+    seed('Rondo')
+
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    await wrapper.find('[data-tags]').trigger('click')
+    await wrapper.find('[data-tags-input]').setValue('Rondo, warm up')
+    await wrapper.find('[data-tags-save]').trigger('click')
+
+    expect(useStorage().listPatterns()[0].tags).toEqual(['rondo', 'warm up'])
+  })
+})
