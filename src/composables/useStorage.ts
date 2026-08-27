@@ -45,6 +45,22 @@ function isValidCounter(value: unknown): boolean {
 }
 
 /**
+ * Tags as they are stored: trimmed, lowercased, deduplicated, empties gone.
+ *
+ * Order is the coach's, not alphabetical — they typed it in the order they
+ * think about the drill. `allTags` sorts for the filter row, where the order
+ * is the app's business rather than theirs.
+ */
+export function normaliseTags(input: string[]): string[] {
+  const out: string[] = []
+  for (const raw of input) {
+    const tag = raw.trim().toLowerCase()
+    if (tag && !out.includes(tag)) out.push(tag)
+  }
+  return out
+}
+
+/**
  * The ball could not be hidden until after version 1 shipped, and every
  * pattern written before that had one on the pitch. A missing flag
  * therefore means visible, not invalid.
@@ -204,6 +220,12 @@ export function parsePattern(value: unknown): Pattern {
 
   if (value.notes !== undefined && typeof value.notes !== 'string') {
     throw new Error('That pattern has damaged notes.')
+  }
+
+  if (value.tags !== undefined) {
+    if (!Array.isArray(value.tags) || !value.tags.every((t) => typeof t === 'string')) {
+      throw new Error('That pattern has damaged tags.')
+    }
   }
 
   if (!Array.isArray(value.frames) || value.frames.length === 0) {
@@ -432,6 +454,7 @@ function toPattern(name: string, snap: BoardSnapshot, id: string, createdAt: str
     ballsVisible: copy.ballsVisible ?? true,
     notes: copy.notes ?? '',
     notesVisible: copy.notesVisible ?? true,
+    tags: [],
     createdAt,
     updatedAt: nowIso(),
   }
@@ -449,6 +472,9 @@ function savePattern(name: string, snap: BoardSnapshot, id?: string): Pattern {
 
   const existing = id ? patterns.find((p) => p.id === id) : undefined
   const pattern = toPattern(name, snap, existing?.id ?? id ?? makeId(), existing?.createdAt ?? nowIso())
+  // Saving the board over a drill must not silently untag it. A brand new
+  // drill has none, which is what `toPattern` already gave it.
+  pattern.tags = existing?.tags ?? []
 
   const index = patterns.findIndex((p) => p.id === pattern.id)
   if (index === -1) patterns.push(pattern)
@@ -488,6 +514,32 @@ function renamePattern(id: string, name: string): void {
   if (recordWrite(writeLibrary(patterns, damaged), damaged)) {
     lastError.value = damagedMessage(damaged.length)
   }
+}
+
+function setTags(id: string, tags: string[]): void {
+  lastError.value = null
+  const { patterns, unreadable, damaged } = readLibrary()
+  if (unreadable) {
+    lastError.value = UNREADABLE_LIBRARY_MESSAGE
+    lastWriteSucceeded.value = false
+    return
+  }
+  const pattern = patterns.find((p) => p.id === id)
+  if (!pattern) return
+  pattern.tags = normaliseTags(tags)
+  pattern.updatedAt = nowIso()
+  if (recordWrite(writeLibrary(patterns, damaged), damaged)) {
+    lastError.value = damagedMessage(damaged.length)
+  }
+}
+
+/** Every tag in use, sorted. The filter row's order is the app's business. */
+function allTags(): string[] {
+  const tags = new Set<string>()
+  for (const pattern of readLibrary().patterns) {
+    for (const tag of pattern.tags ?? []) tags.add(tag)
+  }
+  return [...tags].sort()
 }
 
 function patternToSnapshot(pattern: Pattern): BoardSnapshot {
@@ -678,6 +730,8 @@ const storage = {
   savePattern,
   deletePattern,
   renamePattern,
+  setTags,
+  allTags,
   patternToSnapshot,
   saveDraft,
   loadDraft,

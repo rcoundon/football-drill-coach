@@ -165,6 +165,16 @@ export type Pattern = {
    */
   notes?: string
   notesVisible?: boolean
+  /**
+   * How the coach files this drill: "rondo", "pressing", "u12". Optional
+   * because most drills have none, and absent reads as empty.
+   *
+   * Held lowercase and deduplicated by `normaliseTags` on the way in. A tag
+   * is a label rather than free text, and `Rondo` and `rondo` sitting in the
+   * filter row as two chips is a bug whose cause is invisible to the person
+   * looking at it.
+   */
+  tags?: string[]
   frames: Frame[]
   createdAt: string
   updatedAt: string
