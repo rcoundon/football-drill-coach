@@ -199,6 +199,14 @@ width instead of sitting in a thin band. A saved drill is never
 overridden — rotation belongs to the drill, so a drill saved landscape
 comes back landscape whatever you open it on.
 
+**Tags.** Open a saved drill's **Tags** button to give it words to be found by later —
+comma-separated, so `rondo, warm up` gives it two. They are stored trimmed, lowercased
+and deduplicated, so `Rondo` and `rondo ` are the same tag. The row of chips above the
+list narrows it: press a chip to require it, press another to require both, so "rondo"
+and "u12" together find the one drill that is both — a coach with fifty drills wants
+"rondos" apart from "pressing" without losing either. Save a copy as… carries a drill's
+tags onto the fork, since a copy of a rondo is still a rondo.
+
 ## Where drills live
 
 Saved drills are in this browser's local storage under `fct.patterns.v1`, and the board

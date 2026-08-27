@@ -1864,7 +1864,7 @@ git commit -m "feat: build a session as one PDF"
 - Produces:
   - `TagFilter` props: `{ tags: string[]; selected: string[] }`
   - `TagFilter` emits: `update: [selected: string[]]`
-  - `matchesTags(pattern: Pattern, selected: string[]): boolean` exported from `src/components/TagFilter.vue`'s sibling — put it in `src/composables/useStorage.ts` beside `normaliseTags` to keep components free of logic
+  - `matchesTags(pattern: Pick<Pattern, 'tags'>, selected: string[]): boolean` in `src/composables/useStorage.ts` beside `normaliseTags`, so no component carries the predicate. `Pick` rather than the whole `Pattern` because it reads nothing else, which also lets a test hand it a bare `{ tags }`. Both the library's `shown` and, later, the session picker's `pickable` call it — one spelling of "carries every chosen tag", or the two drift and the picker quietly answers a different question from the panel beside it.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2015,9 +2015,7 @@ const availableTags = ref<string[]>([])
 
 /** Every chosen tag must be on the drill: chips narrow, they do not widen. */
 const shown = computed(() =>
-  patterns.value.filter((pattern) =>
-    selectedTags.value.every((tag) => (pattern.tags ?? []).includes(tag)),
-  ),
+  patterns.value.filter((pattern) => matchesTags(pattern, selectedTags.value)),
 )
 
 function startTagging(pattern: Pattern) {
@@ -2491,7 +2489,7 @@ Create `src/components/SessionPlan.vue`:
 import { computed, ref, watch } from 'vue'
 import type { Pattern, Session } from '../types'
 import { useSessions } from '../composables/useSessions'
-import { useStorage } from '../composables/useStorage'
+import { matchesTags, useStorage } from '../composables/useStorage'
 import TagFilter from './TagFilter.vue'
 
 const props = defineProps<{ session: Session | null }>()
@@ -2535,13 +2533,21 @@ const total = computed(() =>
 /**
  * A ref rather than a computed, for the reason given in PatternLibrary:
  * `allTags` reads localStorage, which Vue cannot track.
+ *
+ * This is the SECOND panel needing the same four moving parts — the ref, the
+ * gather on refresh, the pruning of a selection whose tag stopped existing,
+ * and the filtered list. Two consumers is the point at which a
+ * `useTagFilter(patterns)` composable earns itself; one was not, which is why
+ * the tags branch deliberately did not extract it. Extract it here rather
+ * than writing the second copy by hand.
  */
 const availableTags = ref<string[]>([])
 
+// The same predicate the library filters by, not a second copy of it. Two
+// spellings of "carries every chosen tag" would drift, and the picker would
+// quietly answer a different question from the panel beside it.
 const pickable = computed(() =>
-  patterns.value.filter((pattern) =>
-    pickerTags.value.every((tag) => (pattern.tags ?? []).includes(tag)),
-  ),
+  patterns.value.filter((pattern) => matchesTags(pattern, pickerTags.value)),
 )
 
 /** Every edit writes through. There is no Save button to forget to press. */

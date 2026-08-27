@@ -196,6 +196,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           you want on another device or another browser has to be moved there yourself, with
           Export and Import.
         </p>
+        <p>
+          <strong>Tags</strong> files a drill under whatever words you give it — comma-separated,
+          so "rondo, warm up" gives it two. They sort the library rather than search it: the
+          row of chips above the list narrows it to drills carrying every chip you've pressed,
+          which is how "rondo" and "u12" together find the one drill that is both. Save a copy
+          as… carries a drill's tags onto the copy, since a copy of a rondo is still a rondo.
+        </p>
       </section>
 
       <section data-help-section="shortcuts" class="section">
