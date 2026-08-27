@@ -171,16 +171,21 @@ In `parsePattern`, after the `notes` check:
   }
 ```
 
-In `toPattern`, carry them through a save:
+`toPattern` builds from a `BoardSnapshot`, which carries no tags — the board
+knows where the players stand, not how the drill is filed — so a pattern it
+builds starts with none:
 
 ```ts
-    tags: normaliseTags(copy.tags ?? []),
+    tags: [],
 ```
 
-`BoardSnapshot` does not carry tags, so `toPattern` needs the existing pattern's tags when saving over one. Change `savePattern` to pass them:
+Tags therefore survive a save because `savePattern` carries the existing
+pattern's forward, not because `toPattern` found them:
 
 ```ts
   const pattern = toPattern(name, snap, existing?.id ?? id ?? makeId(), existing?.createdAt ?? nowIso())
+  // Saving the board over a drill must not silently untag it. A brand new
+  // drill has none, which is what `toPattern` already gave it.
   pattern.tags = existing?.tags ?? []
 ```
 
@@ -380,15 +385,19 @@ export function damagedMessage(count: number): string {
 }
 
 export function readCollection<T>(key: string, parse: (value: unknown) => T): CollectionRead<T> {
+  const text = localStorage.getItem(key)
+  // A key that was never written is an empty collection. A key holding the
+  // literal `null` is not: something wrote it, and treating it as absent
+  // would let the next write paint over whatever went wrong.
+  if (text === null) return { items: [], unreadable: false, damaged: [] }
+
   let raw: unknown
   try {
-    const text = localStorage.getItem(key)
-    raw = text === null ? null : JSON.parse(text)
+    raw = JSON.parse(text)
   } catch {
     return { items: [], unreadable: true, damaged: [] }
   }
 
-  if (raw === null) return { items: [], unreadable: false, damaged: [] }
   if (!Array.isArray(raw)) return { items: [], unreadable: true, damaged: [] }
 
   const items: T[] = []
@@ -746,10 +755,13 @@ function mutate(change: (sessions: Session[]) => void): boolean {
     return false
   }
   change(items)
-  if (recordWrite(writeCollection(SESSIONS_KEY, items, damaged), damaged)) {
+  const ok = writeCollection(SESSIONS_KEY, items, damaged)
+  if (recordWrite(ok, damaged)) {
     lastError.value = `${damaged.length} saved session(s) could not be read. They have been left untouched so they can be recovered.`
   }
-  return true
+  // `recordWrite` answers whether damaged rows rode along, not whether the
+  // write landed — a quota failure would otherwise be reported as success.
+  return ok
 }
 
 function listSessions(): Session[] {
@@ -1108,7 +1120,14 @@ function importBundle(json: string): { patterns: Pattern[]; sessions: Session[] 
     )
   }
 
-  const incoming = raw.patterns.map((entry) => parsePattern(entry))
+  // Normalised on the way in, exactly as `toPattern` does on the way out. A
+  // file can be hand-edited or written by an older build, and `parsePattern`
+  // only asks that tags be strings — ' Rondo ' and 'rondo' arriving together
+  // would put two chips in the filter row for one tag.
+  const incoming = raw.patterns.map((entry) => {
+    const pattern = parsePattern(entry)
+    return { ...pattern, tags: normaliseTags(pattern.tags ?? []) }
+  })
   const incomingSessions = raw.sessions.map((entry) => parseSession(entry))
 
   const seenIds = new Set(patterns.map((p) => p.id))
@@ -1137,6 +1156,11 @@ function importBundle(json: string): { patterns: Pattern[]; sessions: Session[] 
     )
   }
 
+  // Patterns first, deliberately. localStorage has no transaction, so if the
+  // second write fails the import is partial either way — and patterns without
+  // their sessions is the additive half. Sessions landing first would leave
+  // entries pointing at drills that were never written: rows the coach has to
+  // clear by hand.
   if (!recordWrite(writeLibrary([...patterns, ...added], damaged), damaged)) {
     throw new Error('The imported drills could not be saved to this browser.')
   }
@@ -1325,22 +1349,30 @@ const storage = useStorage()
 beforeEach(() => {
   localStorage.clear()
   __resetBoardForTests()
+  capturedSvg = null
+  rasterise.mockReset()
+  rasterise.mockImplementation(async (svg: SVGSVGElement) => {
+    capturedSvg = svg
+    return new Blob(['png'], { type: 'image/png' })
+  })
 })
 
 // jsdom cannot rasterise: canvas has no 2d context here. The point of these
 // tests is the mounting and unmounting around it, so the rasteriser is stood
 // in for and inspected.
+//
+// ONE shared mock, hoisted, because `vi.mock` is hoisted above the imports and
+// `useExport()` is called afresh on every render. Building the mock inside the
+// factory would hand each call its own `vi.fn`, so a rejection armed on one
+// would never reach the next — and the unmount-on-failure test below would
+// pass while exercising nothing.
+const { rasterise } = vi.hoisted(() => ({ rasterise: vi.fn() }))
+
 vi.mock('../src/composables/useExport', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/composables/useExport')>()
   return {
     ...actual,
-    useExport: () => ({
-      ...actual.useExport(),
-      svgToPngBlob: vi.fn(async (svg: SVGSVGElement) => {
-        capturedSvg = svg
-        return new Blob(['png'], { type: 'image/png' })
-      }),
-    }),
+    useExport: () => ({ ...actual.useExport(), svgToPngBlob: rasterise }),
   }
 })
 
@@ -1390,14 +1422,10 @@ describe('renderFrameToDataUrl', () => {
     const pattern = storage.savePattern('One', board.snapshot())
     const before = document.body.childElementCount
 
-    const exporter = await import('../src/composables/useExport')
-    const failing = vi.spyOn(exporter.useExport(), 'svgToPngBlob')
-      .mockRejectedValueOnce(new Error('no canvas'))
+    rasterise.mockRejectedValueOnce(new Error('no canvas'))
 
     await expect(renderFrameToDataUrl(pattern, 0)).rejects.toThrow('no canvas')
     expect(document.body.childElementCount).toBe(before)
-
-    failing.mockRestore()
   })
 })
 ```
@@ -1730,8 +1758,11 @@ export async function buildSessionPdf({
   doc.setFontSize(22)
   doc.text(session.name, MARGIN, MARGIN + 8)
   doc.setFontSize(11)
+  // The session's own last-edited date rather than today's: two coaches
+  // printing the same plan a week apart should get the same document, and
+  // what dates a plan is when it was last changed.
   doc.text(
-    `${live.length} drill${live.length === 1 ? '' : 's'} · ${minutes} min`,
+    `${new Date(session.updatedAt).toLocaleDateString()} · ${live.length} drill${live.length === 1 ? '' : 's'} · ${minutes} min`,
     MARGIN,
     MARGIN + 18,
   )
@@ -1973,7 +2004,14 @@ const selectedTags = ref<string[]>([])
 const taggingId = ref<string | null>(null)
 const tagDraft = ref('')
 
-const availableTags = computed(() => storage.allTags())
+/**
+ * Held in a ref refreshed beside the list, not computed.
+ *
+ * `allTags` reads localStorage, which Vue cannot track — a computed over it
+ * would be evaluated once and cached forever, so a tag added through this very
+ * panel would not reach the filter row until the panel was remounted.
+ */
+const availableTags = ref<string[]>([])
 
 /** Every chosen tag must be on the drill: chips narrow, they do not widen. */
 const shown = computed(() =>
@@ -1991,6 +2029,16 @@ function saveTags(id: string) {
   storage.setTags(id, tagDraft.value.split(','))
   taggingId.value = null
   refresh()
+}
+```
+
+Extend the existing `refresh()` so the chips are gathered whenever the list is,
+which is what keeps the ref honest:
+
+```ts
+function refresh() {
+  patterns.value = storage.listPatterns()
+  availableTags.value = storage.allTags()
 }
 ```
 
@@ -2468,6 +2516,7 @@ watch(
   (session) => {
     entries.value = session ? [...session.entries] : []
     patterns.value = storage.listPatterns()
+    availableTags.value = storage.allTags()
   },
   { immediate: true },
 )
@@ -2483,7 +2532,11 @@ const total = computed(() =>
     : 0,
 )
 
-const availableTags = computed(() => storage.allTags())
+/**
+ * A ref rather than a computed, for the reason given in PatternLibrary:
+ * `allTags` reads localStorage, which Vue cannot track.
+ */
+const availableTags = ref<string[]>([])
 
 const pickable = computed(() =>
   patterns.value.filter((pattern) =>
@@ -2523,6 +2576,18 @@ function add(pattern: Pattern) {
   entries.value.push(sessions.newEntry(pattern.id, 10))
   picking.value = false
   commit()
+}
+
+/**
+ * The session as it stands, not as it arrived.
+ *
+ * `props.session` is the object App handed over when the panel opened; every
+ * edit since has gone into `entries`. Exporting the prop would build a PDF of
+ * the running order the coach started with rather than the one they just
+ * finished arranging.
+ */
+function currentSession(): Session {
+  return { ...(props.session as Session), entries: [...entries.value] }
 }
 </script>
 
@@ -2569,7 +2634,7 @@ function add(pattern: Pattern) {
 
       <div class="row">
         <button data-add-drill class="chip" @click="picking = !picking">Add drill</button>
-        <button data-export-pdf class="chip" @click="emit('exportPdf', session)">Export PDF</button>
+        <button data-export-pdf class="chip" @click="emit('exportPdf', currentSession())">Export PDF</button>
       </div>
 
       <div v-if="picking" class="picker">

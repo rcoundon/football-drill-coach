@@ -326,8 +326,9 @@ Unit tests, matching the existing per-area split:
 - **Tags** — normalisation of case, whitespace and duplicates; a present but
   malformed `tags` rejected; a pattern without tags reading as empty.
 - **Import and export** — a bundle round trip; a colliding pattern id
-  re-mapped through its sessions' entries; a bare-array file still read as
-  patterns.
+  re-mapped through its sessions' entries; a bare-array file refused, since
+  the bundle is the only shape read; an unreadable sessions store aborting the
+  import before either collection is written.
 - **Frame sampling** — one, two, three, four and seven frames; the first and
   last always present; captions naming the true total.
 - **`BoardView`** — renders the pieces of a frame handed to it directly, with
