@@ -130,7 +130,17 @@ function confirmSave() {
   // going through it beats teaching `savePattern` a fifth parameter. Skipped
   // when the drill has no tags and is asking for none, which is most saves.
   const tags = saveTagsDraft.value
-  if (tags.length > 0 || (saved.tags ?? []).length > 0) storage.setTags(saved.id, tags)
+  const already = saved.tags ?? []
+  const unchanged = tags.length === already.length && tags.every((t, i) => t === already[i])
+  if (unchanged) return
+
+  storage.setTags(saved.id, tags)
+  // The drill itself is saved either way — only its filing failed, and the
+  // library's Tags button can still set it. Saying which half went wrong beats
+  // setTags' generic banner, which reads as though nothing was written.
+  if (!storage.lastWriteSucceeded.value) {
+    notice.value = `Saved “${saved.name}”, but its tags could not be stored.`
+  }
 }
 
 function onPatternLoaded(pattern: Pattern) {
@@ -561,7 +571,7 @@ watch(
         </p>
         <TagInput
           :available="availableTags"
-          :selected="saveTagsDraft"
+          :initial="saveTagsDraft"
           @update="saveTagsDraft = $event"
         />
         <div class="prompt-actions">

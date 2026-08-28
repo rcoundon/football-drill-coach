@@ -8,50 +8,52 @@ import { normaliseTags } from '../composables/useStorage'
  *
  * Two halves because they answer two different needs. A coach filing their
  * fiftieth rondo should not have to spell "rondo" again and risk "rondos"
- * beside it — that is a near-duplicate normalisation cannot catch, because
- * both are legitimate strings. A coach inventing a tag has nothing to tap.
+ * beside it — a near-duplicate normalisation cannot catch, because both are
+ * legitimate strings. A coach inventing a tag has nothing to tap.
  */
 const props = defineProps<{
   /** Every tag already on some drill, for the chips. */
   available: string[]
-  /** The tags this drill already carries. Chips for these start pressed. */
-  selected: string[]
+  /**
+   * The tags the drill starts with. Read ONCE, to press the chips a fork
+   * inherits.
+   *
+   * Deliberately not a live binding. The parent stores what this emits, so a
+   * merge that re-read the prop would fold its own output back in on the next
+   * keystroke — which filed a drill under "r", "ro", "ron", "rond" and
+   * "rondo" while the coach typed one word.
+   */
+  initial: string[]
 }>()
 
 const emit = defineEmits<{ update: [tags: string[]] }>()
 
+/** The chips pressed. Seeded from `initial`, owned here afterwards. */
+const chosen = ref<string[]>([...props.initial])
 const typed = ref('')
 
-/**
- * What was typed, as tags.
- *
- * Normalised here rather than only on the way to storage, so that a tag typed
- * as "Rondo" is recognised as the "rondo" chip already pressed instead of
- * riding along beside it as far as the write.
- */
+/** What was typed, as tags. Normalised so the field cannot fork a tag by case. */
 const typedTags = computed(() => normaliseTags(typed.value.split(',')))
 
-/** The chips pressed, then anything typed that is not already among them. */
-function combined(chosen: string[]): string[] {
-  return normaliseTags([...chosen, ...typedTags.value])
+/**
+ * The chips pressed, then anything typed that is not already among them.
+ *
+ * A tag typed that is also pressed collapses to one — which is why the two
+ * halves can be filled in either order without the coach having to keep track.
+ */
+function announce() {
+  emit('update', normaliseTags([...chosen.value, ...typedTags.value]))
 }
 
 function toggle(tag: string) {
-  const chosen = props.selected.includes(tag)
-    ? props.selected.filter((t) => t !== tag)
-    : [...props.selected, tag]
-  emit('update', combined(chosen))
-}
-
-/**
- * Typing re-emits the whole list rather than waiting for the save.
- *
- * The prompt holds one value for the drill's tags, so a half-typed field that
- * only counted on submit would be a second place the answer lived — and the
- * one the coach could not see.
- */
-function onTyped() {
-  emit('update', combined(props.selected))
+  chosen.value = chosen.value.includes(tag)
+    ? chosen.value.filter((t) => t !== tag)
+    : [...chosen.value, tag]
+  // Typing a tag does not press its chip, so pressing a chip off takes the tag
+  // off even while the same word sits in the field. Whatever is still typed
+  // when Save is pressed is added then.
+  typed.value = normaliseTags(typedTags.value.filter((t) => t !== tag)).join(', ')
+  announce()
 }
 </script>
 
@@ -66,8 +68,8 @@ function onTyped() {
         data-tag-choice
         type="button"
         class="chip"
-        :class="{ 'chip--on': selected.includes(tag) }"
-        :aria-pressed="selected.includes(tag)"
+        :class="{ 'chip--on': chosen.includes(tag) }"
+        :aria-pressed="chosen.includes(tag)"
         @click="toggle(tag)"
       >
         {{ tag }}
@@ -79,7 +81,7 @@ function onTyped() {
       data-tag-new
       class="input"
       placeholder="rondo, warm up"
-      @input="onTyped"
+      @input="announce"
     />
   </div>
 </template>
