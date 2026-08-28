@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { normaliseTags } from '../composables/useStorage'
+import { normaliseTags, toggleTag } from '../composables/useStorage'
+import ChipRow from './ChipRow.vue'
 
 /**
  * Choose a drill's tags: tap the ones already in use, type the ones that are
@@ -46,9 +47,7 @@ function announce() {
 }
 
 function toggle(tag: string) {
-  chosen.value = chosen.value.includes(tag)
-    ? chosen.value.filter((t) => t !== tag)
-    : [...chosen.value, tag]
+  chosen.value = toggleTag(chosen.value, tag)
   // Typing a tag does not press its chip, so pressing a chip off takes the tag
   // off even while the same word sits in the field. Whatever is still typed
   // when Save is pressed is added then.
@@ -60,21 +59,7 @@ function toggle(tag: string) {
 <template>
   <div class="tags">
     <label for="drill-tags">Tags</label>
-    <!-- Nothing at all until some drill has a tag: an empty row is furniture. -->
-    <div v-if="available.length > 0" class="row">
-      <button
-        v-for="tag in available"
-        :key="tag"
-        data-tag-choice
-        type="button"
-        class="chip"
-        :class="{ 'chip--on': chosen.includes(tag) }"
-        :aria-pressed="chosen.includes(tag)"
-        @click="toggle(tag)"
-      >
-        {{ tag }}
-      </button>
-    </div>
+    <ChipRow :tags="available" :pressed="chosen" @toggle="toggle" />
     <input
       id="drill-tags"
       v-model="typed"
@@ -89,12 +74,6 @@ function toggle(tag: string) {
 <style scoped>
 .tags { display: grid; gap: 0.35rem; margin-top: 0.75rem; }
 .tags label { font-size: 0.8rem; opacity: 0.7; }
-.row { display: flex; flex-wrap: wrap; gap: 0.3rem; }
-.chip {
-  border: 1px solid #ffffff40; background: #455a64; color: inherit;
-  border-radius: 0.8rem; padding: 0.25rem 0.6rem; cursor: pointer; font-size: 0.8rem;
-}
-.chip--on { background: #2e7d32; border-color: #ffffff80; }
 .input {
   padding: 0.4rem; border-radius: 0.3rem;
   border: 1px solid #ffffff40; background: #263238; color: inherit;

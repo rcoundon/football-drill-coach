@@ -11,19 +11,19 @@ function mountInput(props: { available?: string[]; initial?: string[] } = {}) {
 describe('TagInput', () => {
   it('offers a chip for every tag already in use', () => {
     const wrapper = mountInput({ available: ['pressing', 'rondo'] })
-    expect(wrapper.findAll('[data-tag-choice]')).toHaveLength(2)
+    expect(wrapper.findAll('[data-chip]')).toHaveLength(2)
   })
 
   it('shows no chip row at all when nothing has been tagged yet', () => {
     const wrapper = mountInput({ available: [] })
-    expect(wrapper.find('[data-tag-choice]').exists()).toBe(false)
+    expect(wrapper.find('[data-chip]').exists()).toBe(false)
     // The field is the whole control at that point, so it must still be there.
     expect(wrapper.find('[data-tag-new]').exists()).toBe(true)
   })
 
   it('marks the chips that are already on the drill', () => {
     const wrapper = mountInput({ available: ['pressing', 'rondo'], initial: ['rondo'] })
-    const chips = wrapper.findAll('[data-tag-choice]')
+    const chips = wrapper.findAll('[data-chip]')
 
     expect(chips[0].attributes('aria-pressed')).toBe('false')
     expect(chips[1].attributes('aria-pressed')).toBe('true')
@@ -31,14 +31,14 @@ describe('TagInput', () => {
 
   it('adds a tag when its chip is pressed', async () => {
     const wrapper = mountInput({ available: ['pressing', 'rondo'], initial: [] })
-    await wrapper.findAll('[data-tag-choice]')[1].trigger('click')
+    await wrapper.findAll('[data-chip]')[1].trigger('click')
 
     expect(wrapper.emitted('update')?.[0]?.[0]).toEqual(['rondo'])
   })
 
   it('takes a tag off when its chip is pressed again', async () => {
     const wrapper = mountInput({ available: ['rondo'], initial: ['rondo'] })
-    await wrapper.find('[data-tag-choice]').trigger('click')
+    await wrapper.find('[data-chip]').trigger('click')
 
     expect(wrapper.emitted('update')?.[0]?.[0]).toEqual([])
   })
@@ -91,7 +91,7 @@ describe('TagInput', () => {
   it('lets a chip be pressed off again even while its tag is being typed', async () => {
     const wrapper = mountInput({ available: ['rondo'], initial: ['rondo'] })
     await wrapper.find('[data-tag-new]').setValue('rondo')
-    await wrapper.find('[data-tag-choice]').trigger('click')
+    await wrapper.find('[data-chip]').trigger('click')
 
     expect(wrapper.emitted('update')?.slice(-1)[0]?.[0]).toEqual([])
   })
@@ -99,7 +99,7 @@ describe('TagInput', () => {
   it('keeps typed tags when a chip is pressed afterwards', async () => {
     const wrapper = mountInput({ available: ['rondo'], initial: [] })
     await wrapper.find('[data-tag-new]').setValue('warm up')
-    await wrapper.find('[data-tag-choice]').trigger('click')
+    await wrapper.find('[data-chip]').trigger('click')
 
     expect(wrapper.emitted('update')?.slice(-1)[0]?.[0]).toEqual(['rondo', 'warm up'])
   })

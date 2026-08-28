@@ -69,6 +69,17 @@ export function normaliseTags(input: string[]): string[] {
  * the honest signature means a rename of `Pattern.tags` cannot slip past a
  * call site that only ever built `{ tags }`.
  */
+/**
+ * A tag list with one tag flipped in or out.
+ *
+ * Shared because both chip rows do it — the library's filter and the save
+ * prompt's — and two spellings of "on if it was off" is how the two come to
+ * behave differently under the same finger.
+ */
+export function toggleTag(tags: string[], tag: string): string[] {
+  return tags.includes(tag) ? tags.filter((t) => t !== tag) : [...tags, tag]
+}
+
 export function matchesTags(pattern: Pick<Pattern, 'tags'>, selected: string[]): boolean {
   return selected.every((tag) => (pattern.tags ?? []).includes(tag))
 }

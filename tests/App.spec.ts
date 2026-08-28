@@ -621,7 +621,7 @@ describe('saving a board that is not in the library yet', () => {
 
     await wrapper.find('[data-save]').trigger('click')
     await wrapper.find('#pattern-name').setValue('Press trigger')
-    await wrapper.find('[data-tag-choice]').trigger('click')
+    await wrapper.find('[data-chip]').trigger('click')
     await wrapper.find('[data-confirm-save]').trigger('click')
     await nextTick()
 
@@ -655,7 +655,7 @@ describe('tagging while forking a drill', () => {
     await wrapper.find('#pattern-name').setValue('Counter press')
 
     const pressed = wrapper
-      .findAll('[data-tag-choice]')
+      .findAll('[data-chip]')
       .filter((chip) => chip.attributes('aria-pressed') === 'true')
       .map((chip) => chip.text())
     expect(pressed).toEqual(['pressing', 'u12'])
@@ -676,7 +676,7 @@ describe('tagging while forking a drill', () => {
     await openLibraryAndLoad(wrapper)
     await wrapper.find('[data-save-as]').trigger('click')
     await wrapper.find('#pattern-name').setValue('Counter press')
-    await wrapper.find('[data-tag-choice]').trigger('click')
+    await wrapper.find('[data-chip]').trigger('click')
     await wrapper.find('[data-confirm-save]').trigger('click')
     await nextTick()
 

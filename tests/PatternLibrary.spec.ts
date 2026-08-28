@@ -213,7 +213,7 @@ describe('tags', () => {
     const wrapper = mount(PatternLibrary, { props: { open: true } })
     expect(wrapper.findAll('[data-pattern]')).toHaveLength(2)
 
-    const chips = wrapper.findAll('[data-tag-chip]')
+    const chips = wrapper.findAll('[data-chip]')
     const rondo = chips.find((c) => c.text() === 'rondo')!
     await rondo.trigger('click')
 
@@ -268,9 +268,9 @@ describe('tags', () => {
     useStorage().setTags(c.id, ['rondo', 'u9'])
 
     const wrapper = mount(PatternLibrary, { props: { open: true } })
-    const chips = wrapper.findAll('[data-tag-chip]')
+    const chips = wrapper.findAll('[data-chip]')
     await chips.find((chip) => chip.text() === 'rondo')!.trigger('click')
-    await wrapper.findAll('[data-tag-chip]').find((chip) => chip.text() === 'u12')!.trigger('click')
+    await wrapper.findAll('[data-chip]').find((chip) => chip.text() === 'u12')!.trigger('click')
 
     expect(wrapper.findAll('[data-pattern]')).toHaveLength(1)
     expect(wrapper.find('[data-pattern]').text()).toContain('Rondo')
@@ -289,9 +289,9 @@ describe('tags', () => {
     useStorage().setTags(b.id, ['pressing'])
 
     const wrapper = mount(PatternLibrary, { props: { open: true } })
-    const chips = wrapper.findAll('[data-tag-chip]')
+    const chips = wrapper.findAll('[data-chip]')
     await chips.find((chip) => chip.text() === 'rondo')!.trigger('click')
-    await wrapper.findAll('[data-tag-chip]').find((chip) => chip.text() === 'pressing')!.trigger('click')
+    await wrapper.findAll('[data-chip]').find((chip) => chip.text() === 'pressing')!.trigger('click')
 
     expect(wrapper.findAll('[data-pattern]')).toHaveLength(0)
     expect(wrapper.find('[data-no-matches]').exists()).toBe(true)
@@ -310,14 +310,14 @@ describe('tags', () => {
     useStorage().setTags(saved.id, ['rondo'])
 
     const wrapper = mount(PatternLibrary, { props: { open: true } })
-    await wrapper.find('[data-tag-chip]').trigger('click')
+    await wrapper.find('[data-chip]').trigger('click')
     expect(wrapper.findAll('[data-pattern]')).toHaveLength(1)
 
     await wrapper.find('[data-tags]').trigger('click')
     await wrapper.find('[data-tags-input]').setValue('')
     await wrapper.find('[data-tags-save]').trigger('click')
 
-    expect(wrapper.findAll('[data-tag-chip]')).toHaveLength(0)
+    expect(wrapper.findAll('[data-chip]')).toHaveLength(0)
     expect(wrapper.findAll('[data-pattern]')).toHaveLength(1)
   })
 })
