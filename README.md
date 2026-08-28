@@ -203,7 +203,8 @@ comes back landscape whatever you open it on.
 the library afterwards. Naming a drill offers the tags already in use as chips to tap,
 with a field for new ones — comma-separated, so `rondo, warm up` gives it two; a saved
 drill's **Tags** button changes them later. They are stored trimmed, lowercased and
-deduplicated, so `Rondo` and `rondo ` are the same tag however they were entered. The row
+deduplicated, so `Rondo`, and `rondo` typed with a trailing space, are the same tag
+however they were entered. The row
 of chips above the library narrows it: press a chip to require it, press another to
 require both, so "rondo" and "u12" together find the one drill that is both — a coach with
 fifty drills wants "rondos" apart from "pressing" without losing either. Save a copy as…

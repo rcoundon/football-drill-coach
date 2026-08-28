@@ -178,7 +178,7 @@ const emit = defineEmits<{ close: [] }>()
         <p>
           <strong>Tags</strong> file a drill under whatever words you give it. Naming a drill
           asks for them too: tap the tags you have already used, and type any new ones
-          comma-separated, so "rondo, warm up" gives it two. Tags sort the library rather than
+          comma-separated, so "rondo, warm up" gives it two. Tags filter the library rather than
           search it — the row of chips above the list narrows it to drills carrying every chip
           you've pressed, which is how "rondo" and "u12" together find the one drill that is
           both. The Tags button on a row changes them later. Save a copy as… starts the copy

@@ -164,7 +164,18 @@ function saveTags(id: string) {
           </template>
 
           <template v-else-if="taggingId === pattern.id">
-            <input v-model="tagDraft" data-tags-input class="input" placeholder="rondo, warm up" />
+            <!--
+              Named after the drill it belongs to: the row is one of many, and
+              a placeholder is an example of what to type rather than a name
+              for the field, so it cannot be what a screen reader announces.
+            -->
+            <input
+              v-model="tagDraft"
+              data-tags-input
+              class="input"
+              :aria-label="`Tags for ${pattern.name}`"
+              placeholder="rondo, warm up"
+            />
             <button data-tags-save class="chip" @click="saveTags(pattern.id)">Save</button>
             <button class="chip" @click="taggingId = null">Cancel</button>
           </template>
