@@ -7,6 +7,7 @@ import ToolRail from './components/ToolRail.vue'
 import PitchBoard from './components/PitchBoard.vue'
 import PatternLibrary from './components/PatternLibrary.vue'
 import HelpPanel from './components/HelpPanel.vue'
+import TagInput from './components/TagInput.vue'
 import FrameStrip from './components/FrameStrip.vue'
 import { MAX_LABEL_LENGTH, MAX_NOTES_LENGTH, useBoard } from './composables/useBoard'
 import { useStorage } from './composables/useStorage'
@@ -46,6 +47,24 @@ const savePromptOpen = ref(false)
 const saveNameDraft = ref('')
 
 /**
+ * The tags the drill will be filed under, and every tag already in use to
+ * offer as chips.
+ *
+ * Gathered when the prompt opens rather than watched: the library cannot
+ * change while a modal is over it, and `allTags` reads localStorage, which
+ * Vue cannot track anyway.
+ */
+const saveTagsDraft = ref<string[]>([])
+const availableTags = ref<string[]>([])
+
+/** The tags on the drill that is open, for a fork to start from. */
+function openPatternTags(): string[] {
+  const id = currentPatternId.value
+  if (!id) return []
+  return storage.listPatterns().find((p) => p.id === id)?.tags ?? []
+}
+
+/**
  * Which save the open prompt will perform.
  *
  * 'new' writes a pattern the board has never been saved as; 'fork' copies
@@ -73,27 +92,59 @@ function openSavePrompt() {
   }
   savePromptMode.value = 'new'
   saveNameDraft.value = currentName.value || 'New drill'
+  saveTagsDraft.value = []
+  availableTags.value = storage.allTags()
   savePromptOpen.value = true
 }
 
 /** Save as…: fork the board into a new pattern under a new name. */
 function openSaveAsPrompt() {
-  savePromptMode.value = 'fork'
+  // A fork only when there is a drill to fork. Save as… on a board that has
+  // never been saved is simply its first save, and offering to copy a drill
+  // that does not exist — "Save copy", "X stays as it is" — describes
+  // something that is not happening.
+  savePromptMode.value = currentPatternId.value ? 'fork' : 'new'
   saveNameDraft.value = currentName.value ? `${currentName.value} copy` : 'New drill'
+  // The copy starts filed where the original is, which is what `savePattern`
+  // would do unasked — shown as pressed chips so the coach can see it and
+  // untick what does not apply to the copy.
+  saveTagsDraft.value = openPatternTags()
+  availableTags.value = storage.allTags()
   savePromptOpen.value = true
 }
 
 function confirmSave() {
   const name = saveNameDraft.value.trim()
   if (!name) return
-  // A fork deliberately passes no id, so savePattern mints a new one.
-  const id = savePromptMode.value === 'fork' ? undefined : currentPatternId.value ?? undefined
-  const saved = storage.savePattern(name, board.snapshot(), id)
+  const isFork = savePromptMode.value === 'fork'
+  // A fork deliberately passes no id, so savePattern mints a new one — but it
+  // still passes the source pattern's id separately, so the copy carries that
+  // drill's tags across rather than starting untagged.
+  const id = isFork ? undefined : currentPatternId.value ?? undefined
+  const forkFromId = isFork ? currentPatternId.value ?? undefined : undefined
+  const saved = storage.savePattern(name, board.snapshot(), id, forkFromId)
   savePromptOpen.value = false
   // A pattern that was never written is not the pattern that is open.
   if (!storage.lastWriteSucceeded.value) return
   currentPatternId.value = saved.id
   currentName.value = saved.name
+
+  // A second write, and only when there is something to say: `setTags` owns
+  // normalisation, the unreadable-library guard and the quota message, so
+  // going through it beats teaching `savePattern` a fifth parameter. Skipped
+  // when the drill has no tags and is asking for none, which is most saves.
+  const tags = saveTagsDraft.value
+  const already = saved.tags ?? []
+  const unchanged = tags.length === already.length && tags.every((t, i) => t === already[i])
+  if (unchanged) return
+
+  storage.setTags(saved.id, tags)
+  // The drill itself is saved either way — only its filing failed, and the
+  // library's Tags button can still set it. Saying which half went wrong beats
+  // setTags' generic banner, which reads as though nothing was written.
+  if (!storage.lastWriteSucceeded.value) {
+    notice.value = `Saved “${saved.name}”, but its tags could not be stored.`
+  }
 }
 
 function onPatternLoaded(pattern: Pattern) {
@@ -296,7 +347,56 @@ const isDialogOpen = computed(
     labelTarget.value !== null,
 )
 
+/**
+ * Close the innermost thing that is open, and say whether there was one.
+ *
+ * Prompts before panels, one per press: a coach who has the library open and
+ * a prompt over it means the prompt, and closing both at once would take away
+ * the thing they were about to go back to.
+ */
+function closeTopmostDialog(): boolean {
+  if (savePromptOpen.value) {
+    savePromptOpen.value = false
+    return true
+  }
+  if (renamePromptOpen.value) {
+    renamePromptOpen.value = false
+    return true
+  }
+  if (labelTarget.value !== null) {
+    labelTarget.value = null
+    return true
+  }
+  if (libraryOpen.value) {
+    libraryOpen.value = false
+    return true
+  }
+  if (helpOpen.value) {
+    helpOpen.value = false
+    return true
+  }
+  return false
+}
+
 function onKeydown(event: KeyboardEvent) {
+  /*
+   * Escape is handled before both guards below, deliberately.
+   *
+   * It has to reach past the focused-field guard because a prompt focuses its
+   * own input, which is exactly where the coach is standing when they want
+   * out — and past the dialog guard because closing the dialog IS the
+   * shortcut, rather than something that must not leak through to the board.
+   *
+   * Escaping a prompt discards what was typed, which is what pressing Cancel
+   * or the backdrop already does.
+   */
+  if (event.key === 'Escape' && !event.metaKey && !event.ctrlKey) {
+    if (closeTopmostDialog()) {
+      event.preventDefault()
+      return
+    }
+  }
+
   const target = event.target as HTMLElement | null
   if (
     target &&
@@ -522,6 +622,11 @@ watch(
         <p v-if="savePromptMode === 'fork' && currentName" class="hint">
           “{{ currentName }}” stays as it is.
         </p>
+        <TagInput
+          :available="availableTags"
+          :initial="saveTagsDraft"
+          @update="saveTagsDraft = $event"
+        />
         <div class="prompt-actions">
           <button data-confirm-save class="chip" @click="confirmSave">
             {{ savePromptMode === 'fork' ? 'Save copy' : 'Save' }}

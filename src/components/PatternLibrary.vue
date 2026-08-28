@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, toRaw, watch } from 'vue'
 import type { Pattern } from '../types'
-import { useStorage } from '../composables/useStorage'
+import { matchesTags, useStorage } from '../composables/useStorage'
+import TagFilter from './TagFilter.vue'
 
 const props = defineProps<{ open: boolean }>()
 /**
@@ -23,14 +24,39 @@ const patterns = ref<Pattern[]>([])
 const confirmingId = ref<string | null>(null)
 const renamingId = ref<string | null>(null)
 const renameDraft = ref('')
+const selectedTags = ref<string[]>([])
+const taggingId = ref<string | null>(null)
+const tagDraft = ref('')
+
+/**
+ * Held in a ref refreshed beside the list, not computed.
+ *
+ * `allTags` reads localStorage, which Vue cannot track — a computed over it
+ * would be evaluated once and cached forever, so a tag added through this very
+ * panel would not reach the filter row until the panel was remounted.
+ */
+const availableTags = ref<string[]>([])
 
 function refresh() {
   patterns.value = storage.listPatterns()
+  availableTags.value = storage.allTags()
+  // A tag can disappear from the library entirely — the coach untags the
+  // last drill that carried it — while the panel stays mounted underneath.
+  // Without this, its chip vanishes from the filter row but the selection
+  // survives, leaving a permanently empty list with no chip left to clear.
+  selectedTags.value = selectedTags.value.filter((tag) => availableTags.value.includes(tag))
 }
 
 watch(() => props.open, (open) => { if (open) refresh() }, { immediate: true })
 
+/** Every chosen tag must be on the drill: chips narrow, they do not widen. */
+const shown = computed(() =>
+  patterns.value.filter((pattern) => matchesTags(pattern, selectedTags.value)),
+)
+
 const isEmpty = computed(() => patterns.value.length === 0)
+/** The library has drills, but none carry every tag the coach chose. */
+const noMatches = computed(() => !isEmpty.value && shown.value.length === 0)
 
 /**
  * Report what the coach chose; App puts it on the board.
@@ -60,8 +86,13 @@ function askDelete(id: string) {
 
 function confirmDelete(id: string) {
   storage.deletePattern(id)
-  emit('delete', id)
   confirmingId.value = null
+  // deletePattern writes nothing when the library is unreadable, and a write
+  // can fail on quota, so success is not something to claim on faith: refresh()
+  // starts with lastError cleared, which would erase the error banner that is
+  // the only thing telling the coach the delete did not happen.
+  if (!storage.lastWriteSucceeded.value) return
+  emit('delete', id)
   refresh()
 }
 
@@ -72,16 +103,36 @@ function startRename(pattern: Pattern) {
 
 function saveRename(id: string) {
   const name = renameDraft.value.trim()
-  if (name) {
-    storage.renamePattern(id, name)
-    emit('rename', { id, name })
-  }
   renamingId.value = null
+  if (!name) return
+  storage.renamePattern(id, name)
+  // renamePattern writes nothing when the library is unreadable, and a write
+  // can fail on quota, so success is not something to claim on faith: refresh()
+  // starts with lastError cleared, which would erase the error banner that is
+  // the only thing telling the coach the rename did not happen.
+  if (!storage.lastWriteSucceeded.value) return
+  emit('rename', { id, name })
   refresh()
 }
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString()
+}
+
+function startTagging(pattern: Pattern) {
+  taggingId.value = pattern.id
+  tagDraft.value = (pattern.tags ?? []).join(', ')
+}
+
+function saveTags(id: string) {
+  storage.setTags(id, tagDraft.value.split(','))
+  taggingId.value = null
+  // setTags writes nothing when the library is unreadable, and a write can
+  // fail on quota, so success is not something to claim on faith: refresh()
+  // starts with lastError cleared, which would erase the error banner that
+  // is the only thing telling the coach the tags were not saved.
+  if (!storage.lastWriteSucceeded.value) return
+  refresh()
 }
 </script>
 
@@ -93,10 +144,13 @@ function formatDate(iso: string): string {
         <button class="chip" @click="emit('close')">Close</button>
       </header>
 
+      <TagFilter :tags="availableTags" :selected="selectedTags" @update="selectedTags = $event" />
+
       <p v-if="isEmpty" class="empty">Nothing saved yet. Build a drill and press Save.</p>
+      <p v-else-if="noMatches" data-no-matches class="empty">No drills match these tags.</p>
 
       <ul v-else class="list">
-        <li v-for="pattern in patterns" :key="pattern.id" data-pattern class="row">
+        <li v-for="pattern in shown" :key="pattern.id" data-pattern class="row">
           <template v-if="renamingId === pattern.id">
             <input v-model="renameDraft" data-rename-input class="input" />
             <button data-rename-save class="chip" @click="saveRename(pattern.id)">Save</button>
@@ -109,11 +163,29 @@ function formatDate(iso: string): string {
             <button class="chip" @click="confirmingId = null">Cancel</button>
           </template>
 
+          <template v-else-if="taggingId === pattern.id">
+            <!--
+              Named after the drill it belongs to: the row is one of many, and
+              a placeholder is an example of what to type rather than a name
+              for the field, so it cannot be what a screen reader announces.
+            -->
+            <input
+              v-model="tagDraft"
+              data-tags-input
+              class="input"
+              :aria-label="`Tags for ${pattern.name}`"
+              placeholder="rondo, warm up"
+            />
+            <button data-tags-save class="chip" @click="saveTags(pattern.id)">Save</button>
+            <button class="chip" @click="taggingId = null">Cancel</button>
+          </template>
+
           <template v-else>
             <span class="name">{{ pattern.name }}</span>
             <span class="date">{{ formatDate(pattern.updatedAt) }}</span>
             <button data-load class="chip" @click="load(pattern)">Load</button>
             <button data-rename class="chip" @click="startRename(pattern)">Rename</button>
+            <button data-tags class="chip" @click="startTagging(pattern)">Tags</button>
             <button data-delete class="chip" @click="askDelete(pattern.id)">Delete</button>
           </template>
         </li>
@@ -135,7 +207,7 @@ function formatDate(iso: string): string {
 .head h2 { margin: 0; font-size: 1.1rem; }
 .empty { opacity: 0.7; }
 .list { list-style: none; margin: 0.75rem 0 0; padding: 0; display: grid; gap: 0.4rem; }
-.row { display: flex; gap: 0.4rem; align-items: center; background: #37474f; padding: 0.45rem 0.6rem; border-radius: 0.4rem; }
+.row { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; background: #37474f; padding: 0.45rem 0.6rem; border-radius: 0.4rem; }
 .name { flex: 1; }
 .date { opacity: 0.6; font-size: 0.8rem; }
 .input { flex: 1; padding: 0.35rem; border-radius: 0.3rem; border: 1px solid #ffffff40; background: #263238; color: inherit; }

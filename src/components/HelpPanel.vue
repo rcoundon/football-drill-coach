@@ -1,33 +1,12 @@
 <script setup lang="ts">
-import { onBeforeUnmount, watch } from 'vue'
-
-const props = defineProps<{ open: boolean }>()
-const emit = defineEmits<{ close: [] }>()
-
-/**
- * The one place Help differs from PatternLibrary's shape: nothing else in
- * this app closes on Escape, because nothing else is read rather than acted
- * on. App's own keydown handler cannot do it either — it deliberately
- * ignores every key while a dialog is open, this one included, so that
- * typing behind a prompt cannot leak into the board's own shortcuts. The
- * panel is mounted for the app's whole life (App only toggles `open`), so a
- * plain module-level listener that arms and disarms with the prop is enough;
- * there is no repeated mount to leak it from.
+/*
+ * Help used to listen for Escape itself, because App's keydown handler
+ * ignored every key while a dialog was open. App handles Escape ahead of that
+ * guard now and closes whatever is topmost, so every dialog in the app closes
+ * the same way and this panel needs no listener of its own.
  */
-function onKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Escape') emit('close')
-}
-
-watch(
-  () => props.open,
-  (open) => {
-    if (open) window.addEventListener('keydown', onKeydown)
-    else window.removeEventListener('keydown', onKeydown)
-  },
-  { immediate: true },
-)
-
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+defineProps<{ open: boolean }>()
+const emit = defineEmits<{ close: [] }>()
 </script>
 
 <template>
@@ -196,6 +175,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           you want on another device or another browser has to be moved there yourself, with
           Export and Import.
         </p>
+        <p>
+          <strong>Tags</strong> file a drill under whatever words you give it. Naming a drill
+          asks for them too: tap the tags you have already used, and type any new ones
+          comma-separated, so "rondo, warm up" gives it two. Tags filter the library rather than
+          search it — the row of chips above the list narrows it to drills carrying every chip
+          you've pressed, which is how "rondo" and "u12" together find the one drill that is
+          both. The Tags button on a row changes them later. Save a copy as… starts the copy
+          with the original's tags already chosen, since a copy of a rondo is still a rondo.
+        </p>
       </section>
 
       <section data-help-section="shortcuts" class="section">
@@ -224,7 +212,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             <tr><td><kbd>Ctrl+Shift+Z</kbd> / <kbd>Cmd+Shift+Z</kbd></td><td>Redo</td></tr>
             <tr><td><kbd>Ctrl+D</kbd> / <kbd>Cmd+D</kbd></td><td>Copy whatever is held</td></tr>
             <tr><td><kbd>Delete</kbd> / <kbd>Backspace</kbd></td><td>Remove whatever is held</td></tr>
-            <tr><td><kbd>Escape</kbd></td><td>Put down whatever is held</td></tr>
+            <tr><td><kbd>Escape</kbd></td><td>Close whatever is open, or put down whatever is held</td></tr>
           </tbody>
         </table>
       </section>

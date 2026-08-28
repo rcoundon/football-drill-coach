@@ -548,6 +548,28 @@ describe('Save as…', () => {
     expect(wrapper.find('[data-current-pattern]').text()).toContain('Counter press')
   })
 
+  /**
+   * Save as… used to pass no id at all, so the fork had nothing to carry
+   * tags forward from and always landed untagged. A copy of a rondo is
+   * still a rondo, and refiling a fork by hand is the exact problem tags
+   * exist to solve.
+   */
+  it('carries the original drill’s tags onto the fork', async () => {
+    const store = useStorage()
+    const original = store.savePattern('Press trigger', sampleSnapshot())
+    store.setTags(original.id, ['rondo', 'warm up'])
+    wrapper = mountApp()
+
+    await openLibraryAndLoad(wrapper)
+    await wrapper.find('[data-save-as]').trigger('click')
+    await wrapper.find('#pattern-name').setValue('Counter press')
+    await wrapper.find('[data-confirm-save]').trigger('click')
+    await nextTick()
+
+    const fork = store.listPatterns().find((p) => p.id !== original.id)!
+    expect(fork.tags).toEqual(['rondo', 'warm up'])
+  })
+
   it('offers the open pattern name as the starting point rather than a placeholder', async () => {
     useStorage().savePattern('Press trigger', sampleSnapshot())
     wrapper = mountApp()
@@ -574,6 +596,184 @@ describe('saving a board that is not in the library yet', () => {
     expect(listed).toHaveLength(1)
     expect(listed[0].name).toBe('Press trigger')
     expect(wrapper.find('[data-current-pattern]').text()).toContain('Press trigger')
+  })
+
+  it('files the drill under the tags typed while naming it', async () => {
+    const store = useStorage()
+    useBoard().addCounter('red')
+    wrapper = mountApp()
+
+    await wrapper.find('[data-save]').trigger('click')
+    await wrapper.find('#pattern-name').setValue('Press trigger')
+    await wrapper.find('[data-tag-new]').setValue('Pressing, u12')
+    await wrapper.find('[data-confirm-save]').trigger('click')
+    await nextTick()
+
+    expect(store.listPatterns()[0].tags).toEqual(['pressing', 'u12'])
+  })
+
+  it('offers the tags already in use as chips, and files under the one pressed', async () => {
+    const store = useStorage()
+    const existing = store.savePattern('Rondo 4v2', sampleSnapshot())
+    store.setTags(existing.id, ['rondo'])
+    useBoard().addCounter('red')
+    wrapper = mountApp()
+
+    await wrapper.find('[data-save]').trigger('click')
+    await wrapper.find('#pattern-name').setValue('Press trigger')
+    await wrapper.find('[data-chip]').trigger('click')
+    await wrapper.find('[data-confirm-save]').trigger('click')
+    await nextTick()
+
+    const saved = store.listPatterns().find((p) => p.name === 'Press trigger')!
+    expect(saved.tags).toEqual(['rondo'])
+  })
+
+  it('leaves a drill untagged when nothing is chosen or typed', async () => {
+    const store = useStorage()
+    useBoard().addCounter('red')
+    wrapper = mountApp()
+
+    await wrapper.find('[data-save]').trigger('click')
+    await wrapper.find('#pattern-name').setValue('Press trigger')
+    await wrapper.find('[data-confirm-save]').trigger('click')
+    await nextTick()
+
+    expect(store.listPatterns()[0].tags).toEqual([])
+  })
+})
+
+describe('Save as… before a drill has ever been saved', () => {
+  it('asks for a name rather than offering to copy a drill that does not exist', async () => {
+    useBoard().addCounter('red')
+    wrapper = mountApp()
+
+    await wrapper.find('[data-save-as]').trigger('click')
+
+    const dialog = wrapper.find('[role="dialog"]')
+    expect(dialog.attributes('aria-label')).toBe('Name this drill')
+    expect(wrapper.find('[data-confirm-save]').text()).toBe('Save')
+    // The hint names the drill being copied from. There isn't one.
+    expect(wrapper.text()).not.toMatch(/stays as it is/)
+  })
+
+  it('still offers to copy once a drill is open', async () => {
+    const store = useStorage()
+    store.savePattern('Press trigger', sampleSnapshot())
+    wrapper = mountApp()
+
+    await openLibraryAndLoad(wrapper)
+    await wrapper.find('[data-save-as]').trigger('click')
+
+    expect(wrapper.find('[role="dialog"]').attributes('aria-label')).toBe('Save a copy as')
+    expect(wrapper.find('[data-confirm-save]').text()).toBe('Save copy')
+  })
+})
+
+describe('escape closes what is open', () => {
+  function pressEscape(from?: Element) {
+    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+    ;(from ?? document.body).dispatchEvent(event)
+    return nextTick()
+  }
+
+  it('closes the save prompt, even from inside the field it focuses', async () => {
+    useBoard().addCounter('red')
+    wrapper = mountApp()
+
+    await wrapper.find('[data-save]').trigger('click')
+    expect(wrapper.find('#pattern-name').exists()).toBe(true)
+
+    // The prompt focuses its name field, so a handler that ignores keys from
+    // inside an input would never see this at all.
+    await pressEscape(wrapper.find('#pattern-name').element)
+
+    expect(wrapper.find('#pattern-name').exists()).toBe(false)
+  })
+
+  it('discards the name typed into an escaped save prompt', async () => {
+    const store = useStorage()
+    useBoard().addCounter('red')
+    wrapper = mountApp()
+
+    await wrapper.find('[data-save]').trigger('click')
+    await wrapper.find('#pattern-name').setValue('Press trigger')
+    await pressEscape(wrapper.find('#pattern-name').element)
+
+    expect(store.listPatterns()).toEqual([])
+
+    // Reopening offers the default again, not the abandoned draft — the same
+    // as pressing Cancel.
+    await wrapper.find('[data-save]').trigger('click')
+    expect((wrapper.find('#pattern-name').element as HTMLInputElement).value).toBe('New drill')
+  })
+
+  it('closes the saved-drills panel', async () => {
+    useStorage().savePattern('Press trigger', sampleSnapshot())
+    wrapper = mountApp()
+
+    await wrapper.find('[data-open]').trigger('click')
+    expect(wrapper.find('[aria-label="Saved drills"]').exists()).toBe(true)
+
+    await pressEscape()
+
+    expect(wrapper.find('[aria-label="Saved drills"]').exists()).toBe(false)
+  })
+
+  it('closes the help panel', async () => {
+    wrapper = mountApp()
+
+    await wrapper.find('[data-help]').trigger('click')
+    expect(wrapper.find('[data-help-section="board"]').exists()).toBe(true)
+
+    await pressEscape()
+
+    expect(wrapper.find('[data-help-section="board"]').exists()).toBe(false)
+  })
+
+})
+
+describe('tagging while forking a drill', () => {
+  it('starts the copy with the original’s tags pressed, and files it under them', async () => {
+    const store = useStorage()
+    const original = store.savePattern('Press trigger', sampleSnapshot())
+    store.setTags(original.id, ['pressing', 'u12'])
+    wrapper = mountApp()
+
+    await openLibraryAndLoad(wrapper)
+    await wrapper.find('[data-save-as]').trigger('click')
+    await wrapper.find('#pattern-name').setValue('Counter press')
+
+    const pressed = wrapper
+      .findAll('[data-chip]')
+      .filter((chip) => chip.attributes('aria-pressed') === 'true')
+      .map((chip) => chip.text())
+    expect(pressed).toEqual(['pressing', 'u12'])
+
+    await wrapper.find('[data-confirm-save]').trigger('click')
+    await nextTick()
+
+    const fork = store.listPatterns().find((p) => p.id !== original.id)!
+    expect(fork.tags).toEqual(['pressing', 'u12'])
+  })
+
+  it('untags the copy when the original’s chips are pressed off', async () => {
+    const store = useStorage()
+    const original = store.savePattern('Press trigger', sampleSnapshot())
+    store.setTags(original.id, ['pressing'])
+    wrapper = mountApp()
+
+    await openLibraryAndLoad(wrapper)
+    await wrapper.find('[data-save-as]').trigger('click')
+    await wrapper.find('#pattern-name').setValue('Counter press')
+    await wrapper.find('[data-chip]').trigger('click')
+    await wrapper.find('[data-confirm-save]').trigger('click')
+    await nextTick()
+
+    const fork = store.listPatterns().find((p) => p.id !== original.id)!
+    expect(fork.tags).toEqual([])
+    // The drill it was copied from keeps its own filing.
+    expect(store.listPatterns().find((p) => p.id === original.id)!.tags).toEqual(['pressing'])
   })
 })
 

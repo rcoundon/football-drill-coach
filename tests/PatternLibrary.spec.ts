@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import PatternLibrary from '../src/components/PatternLibrary.vue'
 import { useStorage } from '../src/composables/useStorage'
@@ -8,6 +8,19 @@ beforeEach(() => {
   localStorage.clear()
   __resetBoardForTests()
 })
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
+/** Same idiom `useStorage.spec.ts` uses to make the next write fail. */
+function failNextWrite() {
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
+    const error = new Error('quota') as Error & { name: string }
+    error.name = 'QuotaExceededError'
+    throw error
+  })
+}
 
 function seed(name: string) {
   return useStorage().savePattern(name, {
@@ -104,6 +117,25 @@ describe('deleting', () => {
 
     expect(wrapper.emitted('delete')).toEqual([[saved.id]])
   })
+
+  /**
+   * refresh() starts with lastError cleared, so calling it unconditionally
+   * after a failed delete erased the only thing telling the coach it did
+   * not happen — and the drill silently stayed on the board.
+   */
+  it('tells the coach when a delete fails, rather than swallowing the error', async () => {
+    const saved = seed('Press trigger')
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    await wrapper.find('[data-delete]').trigger('click')
+
+    failNextWrite()
+    await wrapper.find('[data-confirm-delete]').trigger('click')
+
+    expect(useStorage().lastError.value).toMatch(/out of space/i)
+    expect(wrapper.emitted('delete')).toBeUndefined()
+    const listed = useStorage().listPatterns()
+    expect(listed.map((p) => p.id)).toContain(saved.id)
+  })
 })
 
 describe('renaming', () => {
@@ -132,6 +164,27 @@ describe('renaming', () => {
 
     expect(wrapper.emitted('rename')).toEqual([[{ id: saved.id, name: 'Counter press' }]])
   })
+
+  /**
+   * refresh() starts with lastError cleared, so calling it unconditionally
+   * after a failed rename erased the only thing telling the coach it did
+   * not happen. The row still shows the old name — the one case of these
+   * three where the coach has any sign at all something is wrong, but the
+   * error banner should say so too.
+   */
+  it('tells the coach when a rename fails, rather than swallowing the error', async () => {
+    seed('Press trigger')
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    await wrapper.find('[data-rename]').trigger('click')
+    await wrapper.find('[data-rename-input]').setValue('Counter press')
+
+    failNextWrite()
+    await wrapper.find('[data-rename-save]').trigger('click')
+
+    expect(useStorage().lastError.value).toMatch(/out of space/i)
+    expect(wrapper.emitted('rename')).toBeUndefined()
+    expect(useStorage().listPatterns()[0].name).toBe('Press trigger')
+  })
 })
 
 describe('calling a drill a drill', () => {
@@ -147,5 +200,124 @@ describe('calling a drill a drill', () => {
     localStorage.clear()
     const wrapper = mount(PatternLibrary, { props: { open: true } })
     expect(wrapper.find('.empty').text()).toBe('Nothing saved yet. Build a drill and press Save.')
+  })
+})
+
+describe('tags', () => {
+  it('narrows the list to drills carrying every chosen tag', async () => {
+    const a = seed('Rondo')
+    const b = seed('Pressing trap')
+    useStorage().setTags(a.id, ['rondo', 'u12'])
+    useStorage().setTags(b.id, ['pressing', 'u12'])
+
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    expect(wrapper.findAll('[data-pattern]')).toHaveLength(2)
+
+    const chips = wrapper.findAll('[data-chip]')
+    const rondo = chips.find((c) => c.text() === 'rondo')!
+    await rondo.trigger('click')
+
+    expect(wrapper.findAll('[data-pattern]')).toHaveLength(1)
+    expect(wrapper.find('[data-pattern]').text()).toContain('Rondo')
+  })
+
+  it('edits a drill’s tags', async () => {
+    seed('Rondo')
+
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    await wrapper.find('[data-tags]').trigger('click')
+    await wrapper.find('[data-tags-input]').setValue('Rondo, warm up')
+    await wrapper.find('[data-tags-save]').trigger('click')
+
+    expect(useStorage().listPatterns()[0].tags).toEqual(['rondo', 'warm up'])
+  })
+
+  /**
+   * setTags sets lastError to the quota message and leaves the write
+   * unsucceeded — but refresh() calls listPatterns(), whose first line
+   * clears lastError. On a full-but-readable library the coach pressed
+   * Save, the editor closed, the tags were unchanged, and nothing was
+   * reported. Tags are the worst of the three save-time failures in this
+   * panel: unlike a rename, they are not shown on the row at all, so
+   * without the error banner there is no sign anything went wrong.
+   */
+  it('tells the coach when saving tags fails, rather than swallowing the error', async () => {
+    seed('Rondo')
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    await wrapper.find('[data-tags]').trigger('click')
+    await wrapper.find('[data-tags-input]').setValue('rondo')
+
+    failNextWrite()
+    await wrapper.find('[data-tags-save]').trigger('click')
+
+    expect(useStorage().lastError.value).toMatch(/out of space/i)
+    expect(useStorage().listPatterns()[0].tags ?? []).toEqual([])
+  })
+
+  /**
+   * With one chip selected, AND and OR agree — this is the case that would
+   * pass even if `matchesTags` used `.some`. Only a drill carrying BOTH
+   * chosen tags stays, while a drill with just one of them (u12) drops out.
+   */
+  it('keeps only the drill carrying every one of two chosen tags', async () => {
+    const a = seed('Rondo')
+    const b = seed('Pressing trap')
+    const c = seed('Warm up jog')
+    useStorage().setTags(a.id, ['rondo', 'u12'])
+    useStorage().setTags(b.id, ['pressing', 'u12'])
+    useStorage().setTags(c.id, ['rondo', 'u9'])
+
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    const chips = wrapper.findAll('[data-chip]')
+    await chips.find((chip) => chip.text() === 'rondo')!.trigger('click')
+    await wrapper.findAll('[data-chip]').find((chip) => chip.text() === 'u12')!.trigger('click')
+
+    expect(wrapper.findAll('[data-pattern]')).toHaveLength(1)
+    expect(wrapper.find('[data-pattern]').text()).toContain('Rondo')
+  })
+
+  /**
+   * Each tag alone matches a different drill, so an OR filter would show
+   * both. AND requires both tags on the same drill, and neither has that —
+   * the honest answer is nothing, and the panel says so distinctly from an
+   * empty library.
+   */
+  it('shows nothing, with its own message, when two chosen tags never land on the same drill', async () => {
+    const a = seed('Rondo')
+    const b = seed('Pressing trap')
+    useStorage().setTags(a.id, ['rondo'])
+    useStorage().setTags(b.id, ['pressing'])
+
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    const chips = wrapper.findAll('[data-chip]')
+    await chips.find((chip) => chip.text() === 'rondo')!.trigger('click')
+    await wrapper.findAll('[data-chip]').find((chip) => chip.text() === 'pressing')!.trigger('click')
+
+    expect(wrapper.findAll('[data-pattern]')).toHaveLength(0)
+    expect(wrapper.find('[data-no-matches]').exists()).toBe(true)
+    expect(wrapper.find('[data-no-matches]').text()).toBe('No drills match these tags.')
+    expect(wrapper.text()).not.toMatch(/nothing saved yet/i)
+  })
+
+  /**
+   * The panel stays mounted across close/reopen, so a chip the coach chose
+   * can outlive the tag it represents. Without pruning, editing the tag off
+   * the last drill that had it leaves the list permanently empty with no
+   * chip left to click to clear the selection.
+   */
+  it('drops a chosen tag from the filter once no drill carries it, so the list is not stuck empty', async () => {
+    const saved = seed('Rondo')
+    useStorage().setTags(saved.id, ['rondo'])
+
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    await wrapper.find('[data-chip]').trigger('click')
+    expect(wrapper.findAll('[data-pattern]')).toHaveLength(1)
+
+    await wrapper.find('[data-tags]').trigger('click')
+    await wrapper.find('[data-tags-input]').setValue('')
+    await wrapper.find('[data-tags-save]').trigger('click')
+
+    expect(wrapper.findAll('[data-chip]')).toHaveLength(0)
+    expect(wrapper.findAll('[data-pattern]')).toHaveLength(1)
   })
 })
