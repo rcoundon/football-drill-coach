@@ -7,6 +7,7 @@ import ToolRail from './components/ToolRail.vue'
 import PitchBoard from './components/PitchBoard.vue'
 import PatternLibrary from './components/PatternLibrary.vue'
 import HelpPanel from './components/HelpPanel.vue'
+import TagInput from './components/TagInput.vue'
 import FrameStrip from './components/FrameStrip.vue'
 import { MAX_LABEL_LENGTH, MAX_NOTES_LENGTH, useBoard } from './composables/useBoard'
 import { useStorage } from './composables/useStorage'
@@ -46,6 +47,24 @@ const savePromptOpen = ref(false)
 const saveNameDraft = ref('')
 
 /**
+ * The tags the drill will be filed under, and every tag already in use to
+ * offer as chips.
+ *
+ * Gathered when the prompt opens rather than watched: the library cannot
+ * change while a modal is over it, and `allTags` reads localStorage, which
+ * Vue cannot track anyway.
+ */
+const saveTagsDraft = ref<string[]>([])
+const availableTags = ref<string[]>([])
+
+/** The tags on the drill that is open, for a fork to start from. */
+function openPatternTags(): string[] {
+  const id = currentPatternId.value
+  if (!id) return []
+  return storage.listPatterns().find((p) => p.id === id)?.tags ?? []
+}
+
+/**
  * Which save the open prompt will perform.
  *
  * 'new' writes a pattern the board has never been saved as; 'fork' copies
@@ -73,6 +92,8 @@ function openSavePrompt() {
   }
   savePromptMode.value = 'new'
   saveNameDraft.value = currentName.value || 'New drill'
+  saveTagsDraft.value = []
+  availableTags.value = storage.allTags()
   savePromptOpen.value = true
 }
 
@@ -80,6 +101,11 @@ function openSavePrompt() {
 function openSaveAsPrompt() {
   savePromptMode.value = 'fork'
   saveNameDraft.value = currentName.value ? `${currentName.value} copy` : 'New drill'
+  // The copy starts filed where the original is, which is what `savePattern`
+  // would do unasked — shown as pressed chips so the coach can see it and
+  // untick what does not apply to the copy.
+  saveTagsDraft.value = openPatternTags()
+  availableTags.value = storage.allTags()
   savePromptOpen.value = true
 }
 
@@ -98,6 +124,13 @@ function confirmSave() {
   if (!storage.lastWriteSucceeded.value) return
   currentPatternId.value = saved.id
   currentName.value = saved.name
+
+  // A second write, and only when there is something to say: `setTags` owns
+  // normalisation, the unreadable-library guard and the quota message, so
+  // going through it beats teaching `savePattern` a fifth parameter. Skipped
+  // when the drill has no tags and is asking for none, which is most saves.
+  const tags = saveTagsDraft.value
+  if (tags.length > 0 || (saved.tags ?? []).length > 0) storage.setTags(saved.id, tags)
 }
 
 function onPatternLoaded(pattern: Pattern) {
@@ -526,6 +559,11 @@ watch(
         <p v-if="savePromptMode === 'fork' && currentName" class="hint">
           “{{ currentName }}” stays as it is.
         </p>
+        <TagInput
+          :available="availableTags"
+          :selected="saveTagsDraft"
+          @update="saveTagsDraft = $event"
+        />
         <div class="prompt-actions">
           <button data-confirm-save class="chip" @click="confirmSave">
             {{ savePromptMode === 'fork' ? 'Save copy' : 'Save' }}
