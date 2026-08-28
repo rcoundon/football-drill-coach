@@ -643,6 +643,96 @@ describe('saving a board that is not in the library yet', () => {
   })
 })
 
+describe('Save as… before a drill has ever been saved', () => {
+  it('asks for a name rather than offering to copy a drill that does not exist', async () => {
+    useBoard().addCounter('red')
+    wrapper = mountApp()
+
+    await wrapper.find('[data-save-as]').trigger('click')
+
+    const dialog = wrapper.find('[role="dialog"]')
+    expect(dialog.attributes('aria-label')).toBe('Name this drill')
+    expect(wrapper.find('[data-confirm-save]').text()).toBe('Save')
+    // The hint names the drill being copied from. There isn't one.
+    expect(wrapper.text()).not.toMatch(/stays as it is/)
+  })
+
+  it('still offers to copy once a drill is open', async () => {
+    const store = useStorage()
+    store.savePattern('Press trigger', sampleSnapshot())
+    wrapper = mountApp()
+
+    await openLibraryAndLoad(wrapper)
+    await wrapper.find('[data-save-as]').trigger('click')
+
+    expect(wrapper.find('[role="dialog"]').attributes('aria-label')).toBe('Save a copy as')
+    expect(wrapper.find('[data-confirm-save]').text()).toBe('Save copy')
+  })
+})
+
+describe('escape closes what is open', () => {
+  function pressEscape(from?: Element) {
+    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+    ;(from ?? document.body).dispatchEvent(event)
+    return nextTick()
+  }
+
+  it('closes the save prompt, even from inside the field it focuses', async () => {
+    useBoard().addCounter('red')
+    wrapper = mountApp()
+
+    await wrapper.find('[data-save]').trigger('click')
+    expect(wrapper.find('#pattern-name').exists()).toBe(true)
+
+    // The prompt focuses its name field, so a handler that ignores keys from
+    // inside an input would never see this at all.
+    await pressEscape(wrapper.find('#pattern-name').element)
+
+    expect(wrapper.find('#pattern-name').exists()).toBe(false)
+  })
+
+  it('discards the name typed into an escaped save prompt', async () => {
+    const store = useStorage()
+    useBoard().addCounter('red')
+    wrapper = mountApp()
+
+    await wrapper.find('[data-save]').trigger('click')
+    await wrapper.find('#pattern-name').setValue('Press trigger')
+    await pressEscape(wrapper.find('#pattern-name').element)
+
+    expect(store.listPatterns()).toEqual([])
+
+    // Reopening offers the default again, not the abandoned draft — the same
+    // as pressing Cancel.
+    await wrapper.find('[data-save]').trigger('click')
+    expect((wrapper.find('#pattern-name').element as HTMLInputElement).value).toBe('New drill')
+  })
+
+  it('closes the saved-drills panel', async () => {
+    useStorage().savePattern('Press trigger', sampleSnapshot())
+    wrapper = mountApp()
+
+    await wrapper.find('[data-open]').trigger('click')
+    expect(wrapper.find('[aria-label="Saved drills"]').exists()).toBe(true)
+
+    await pressEscape()
+
+    expect(wrapper.find('[aria-label="Saved drills"]').exists()).toBe(false)
+  })
+
+  it('closes the help panel', async () => {
+    wrapper = mountApp()
+
+    await wrapper.find('[data-help]').trigger('click')
+    expect(wrapper.find('[data-help-section="board"]').exists()).toBe(true)
+
+    await pressEscape()
+
+    expect(wrapper.find('[data-help-section="board"]').exists()).toBe(false)
+  })
+
+})
+
 describe('tagging while forking a drill', () => {
   it('starts the copy with the original’s tags pressed, and files it under them', async () => {
     const store = useStorage()

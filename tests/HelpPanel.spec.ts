@@ -35,15 +35,13 @@ describe('opening and closing', () => {
     expect(wrapper.emitted('close')).toBeFalsy()
   })
 
-  it('closes on Escape while open', async () => {
+  /*
+   * Escape moved to App, which now closes whatever dialog is topmost, so the
+   * panel no longer listens for it — and must not, or a press would close it
+   * twice over. The behaviour itself is covered in tests/App.spec.ts.
+   */
+  it('leaves Escape to App rather than listening for it', async () => {
     const wrapper = mountHelp(true)
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
-    await wrapper.vm.$nextTick()
-    expect(wrapper.emitted('close')).toBeTruthy()
-  })
-
-  it('does not react to Escape while closed', async () => {
-    const wrapper = mountHelp(false)
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     await wrapper.vm.$nextTick()
     expect(wrapper.emitted('close')).toBeFalsy()

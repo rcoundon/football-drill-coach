@@ -99,7 +99,11 @@ function openSavePrompt() {
 
 /** Save as…: fork the board into a new pattern under a new name. */
 function openSaveAsPrompt() {
-  savePromptMode.value = 'fork'
+  // A fork only when there is a drill to fork. Save as… on a board that has
+  // never been saved is simply its first save, and offering to copy a drill
+  // that does not exist — "Save copy", "X stays as it is" — describes
+  // something that is not happening.
+  savePromptMode.value = currentPatternId.value ? 'fork' : 'new'
   saveNameDraft.value = currentName.value ? `${currentName.value} copy` : 'New drill'
   // The copy starts filed where the original is, which is what `savePattern`
   // would do unasked — shown as pressed chips so the coach can see it and
@@ -343,7 +347,56 @@ const isDialogOpen = computed(
     labelTarget.value !== null,
 )
 
+/**
+ * Close the innermost thing that is open, and say whether there was one.
+ *
+ * Prompts before panels, one per press: a coach who has the library open and
+ * a prompt over it means the prompt, and closing both at once would take away
+ * the thing they were about to go back to.
+ */
+function closeTopmostDialog(): boolean {
+  if (savePromptOpen.value) {
+    savePromptOpen.value = false
+    return true
+  }
+  if (renamePromptOpen.value) {
+    renamePromptOpen.value = false
+    return true
+  }
+  if (labelTarget.value !== null) {
+    labelTarget.value = null
+    return true
+  }
+  if (libraryOpen.value) {
+    libraryOpen.value = false
+    return true
+  }
+  if (helpOpen.value) {
+    helpOpen.value = false
+    return true
+  }
+  return false
+}
+
 function onKeydown(event: KeyboardEvent) {
+  /*
+   * Escape is handled before both guards below, deliberately.
+   *
+   * It has to reach past the focused-field guard because a prompt focuses its
+   * own input, which is exactly where the coach is standing when they want
+   * out — and past the dialog guard because closing the dialog IS the
+   * shortcut, rather than something that must not leak through to the board.
+   *
+   * Escaping a prompt discards what was typed, which is what pressing Cancel
+   * or the backdrop already does.
+   */
+  if (event.key === 'Escape' && !event.metaKey && !event.ctrlKey) {
+    if (closeTopmostDialog()) {
+      event.preventDefault()
+      return
+    }
+  }
+
   const target = event.target as HTMLElement | null
   if (
     target &&
