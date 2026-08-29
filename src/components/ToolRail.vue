@@ -363,6 +363,10 @@ function placeText(event: PointerEvent): void {
 .rail-scroll {
   flex: 1; min-height: 0; width: 100%;
   display: flex; flex-direction: column; align-items: center; gap: 0.6rem;
+  /* Sideways stays hidden here for the same reason it does on a short
+   * screen: the tools group bleeds past the padding by design, and asking
+   * for a vertical scroll turns the horizontal one on as well. */
+  overflow-x: hidden;
   overflow-y: auto;
   /*
    * A hairline in reserved space, rather than the platform's own bar.
@@ -420,10 +424,12 @@ function placeText(event: PointerEvent): void {
 .helper { margin: 0; font-size: 0.6rem; line-height: 1.3; text-align: center; color: var(--ink-3); }
 
 /*
- * Stretched to the rail's full width, padding included, so an active tool's
- * marker can sit flush against the edge the pitch is on.
+ * Full width, but within the rail's padding rather than bleeding past it.
+ * The bleed put an active tool's marker flush against the edge the pitch is
+ * on, at the cost of 16px of content wider than the box holding it — which
+ * a scrolling rail turns into sideways scroll, or clips.
  */
-.rail-group--tools { align-self: stretch; margin-inline: -0.5rem; gap: 0.15rem; }
+.rail-group--tools { align-self: stretch; gap: 0.15rem; }
 
 /* Draw colours are small enough to pair up rather than run down the rail. */
 .rail-group--colors { flex: none; flex-direction: row; flex-wrap: wrap; justify-content: center; }
@@ -551,7 +557,6 @@ function placeText(event: PointerEvent): void {
 }
 .rail--horizontal .rail-group--tools {
   align-self: center;
-  margin-inline: 0;
 }
 /* Five discs in a row rather than two: the strip has width and no height. */
 .rail--horizontal .disc-grid { grid-template-columns: repeat(5, auto); }
@@ -592,7 +597,22 @@ function placeText(event: PointerEvent): void {
    * same scroll as the tools instead of standing outside it.
    */
   .rail-scroll { display: contents; }
-  .rail { overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--ring) transparent; }
+  .rail {
+    /*
+     * Sideways stays hidden. Asking for `overflow-y` alone turns on
+     * `overflow-x` too, and the tools group bleeds 8px past the rail's
+     * padding on purpose so an active tool's bar sits flush with the edge —
+     * which became 16px of horizontal scroll that shunted the swatches out
+     * of view.
+     */
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ring) transparent;
+  }
+  .rail::-webkit-scrollbar { width: 6px; }
+  .rail::-webkit-scrollbar-track { background: transparent; }
+  .rail::-webkit-scrollbar-thumb { background: var(--ring); border-radius: 3px; }
   .rail-scroll { gap: 0.35rem; }
   /*
    * The icon and the padding set a tool's height, not `min-height`, so both
