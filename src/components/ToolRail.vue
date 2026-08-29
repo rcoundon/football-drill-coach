@@ -450,38 +450,68 @@ function placeText(event: PointerEvent): void {
  * tablet is in the same rail on a phone, just along a different edge.
  */
 .rail--horizontal {
-  flex-direction: row;
-  align-items: stretch;
+  flex-flow: row wrap;
+  align-items: center;
+  justify-content: center;
   width: 100%;
   height: auto;
   padding: 0.5rem 0.6rem;
 }
+/*
+ * Wraps onto a second line rather than scrolling sideways. Lying down, the
+ * strip shares its width with whatever the inspector is not using, and the
+ * tools — the most-used group in the rail — ended up entirely behind a
+ * horizontal scroll: 822px of controls in a 284px window. A second row of
+ * 50px costs a phone less than a hidden toolset does.
+ */
 .rail--horizontal .rail-scroll {
-  flex-direction: row;
+  flex-flow: row wrap;
   align-items: center;
+  justify-content: center;
   width: auto;
-  overflow-x: auto;
-  overflow-y: hidden;
+  row-gap: 0.35rem;
+  overflow: visible;
 }
-.rail--horizontal .rail-group { flex: none; }
-.rail--horizontal .rail-group--add { flex-direction: row; align-items: center; }
+/*
+ * Each group keeps its label, upright and beside its controls rather than
+ * above them. Turning the labels on their side to save width made the same
+ * word read differently depending on which way the rail was lying, and
+ * letting the groups wrap let the widest of them squeeze the tools down to
+ * a sliver — a flex item that wraps takes the room it is left, not the room
+ * it needs.
+ */
+.rail--horizontal .rail-group {
+  flex: none;
+  flex-flow: row nowrap;
+  align-items: center;
+  gap: 0.3rem;
+}
 .rail--horizontal .rail-group--tools {
-  flex-direction: row;
   align-self: center;
   margin-inline: 0;
 }
-.rail--horizontal .rail-tool { width: 58px; }
+/* Five discs in a row rather than two: the strip has width and no height. */
+.rail--horizontal .disc-grid { grid-template-columns: repeat(5, auto); }
+.rail--horizontal .disc-grid--objects { grid-template-columns: repeat(3, auto); }
+/*
+ * `flex: none` as well as a width: a flex child shrinks below its width by
+ * default, and eight tools sharing what the strip has left is how the whole
+ * group ended up a sliver between Add and Ink.
+ */
+.rail--horizontal .rail-tool { width: 58px; flex: none; }
+.rail--horizontal .swatch,
+.rail--horizontal .object { flex: none; }
 .rail--horizontal .rail-tool.is-active::after { display: none; }
 .rail--horizontal .rail-group--colors { flex: none; align-self: center; }
 .rail--horizontal .rail-group--menus {
-  flex-direction: row; align-items: center;
+  flex-wrap: nowrap;
+  align-items: center;
   width: auto; padding-top: 0; padding-left: 0.5rem;
   border-top: none; border-left: 1px solid var(--border);
 }
-.rail--horizontal .disc-grid { grid-template-columns: repeat(3, auto); }
 /* No room for a sentence along the bottom; the tooltips still carry it. */
 .rail--horizontal .helper { display: none; }
-.rail--horizontal .eyebrow { writing-mode: vertical-rl; width: auto; align-self: center; }
+.rail--horizontal .eyebrow { flex: none; width: auto; }
 
 /*
  * Short screens: the rail carries the same fifteen controls, drawn smaller,
