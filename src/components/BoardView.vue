@@ -46,7 +46,7 @@ const emit = defineEmits<{
 
 const svgEl = ref<SVGSVGElement | null>(null)
 
-const viewBox = computed(() => viewBoxOf(props.pitch.rotated))
+const viewBox = computed(() => viewBoxOf(props.pitch))
 
 /** The rotation is applied once, here, so nothing downstream knows about it. */
 const boardTransform = computed(() =>

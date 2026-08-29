@@ -86,7 +86,7 @@ function dropFromPalette(what: PlacementKind, clientX: number, clientY: number):
     clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom
   if (missed) return false
 
-  const at = clientToPitch(rect, clientX, clientY, board.state.pitch.rotated)
+  const at = clientToPitch(rect, clientX, clientY, board.state.pitch)
   if (what.kind === 'player') board.addCounter(what.color, at)
   else if (what.kind === 'ball') board.addBall(at)
   else if (what.kind === 'cone') board.addMarker(at)
@@ -253,7 +253,7 @@ const view = computed(() => board.view.value)
 
 function toPitch(event: PointerEvent) {
   const rect = svgEl.value!.getBoundingClientRect()
-  return clientToPitch(rect, event.clientX, event.clientY, board.state.pitch.rotated)
+  return clientToPitch(rect, event.clientX, event.clientY, board.state.pitch)
 }
 
 function capture(event: PointerEvent) {
@@ -868,7 +868,7 @@ function onBendGrab(id: string, event: PointerEvent) {
 function bendTo(id: string, at: Vec): void {
   const arrow = board.drawingById(id)
   if (!arrow || arrow.kind !== 'arrow') return
-  const { bend, along } = bendFor(arrow.from, arrow.to, clampToPitch(at))
+  const { bend, along } = bendFor(arrow.from, arrow.to, clampToPitch(at, board.state.pitch.type))
   board.setArrowBend(id, bend, along)
 }
 

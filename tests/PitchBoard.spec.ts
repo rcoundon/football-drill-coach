@@ -426,17 +426,23 @@ describe('discarding a stray stroke', () => {
 
     // Finger A presses in pen mode: startPen pushes an undo entry.
     await firePointer(wrapper.find('svg'), 'pointerdown', clientFor(10, 10))
-    // Finger B taps the pitch buttons, which live outside the captured SVG.
-    board.setPitchType('full')
-    board.setPitchType('half')
+    /*
+     * Finger B taps a control outside the captured SVG. Deliberately not a
+     * pitch preset any more: a preset changes which part of the board is
+     * drawn, and therefore where on the pitch a given point on the screen
+     * is, so a stroke that straddled one would be measuring two different
+     * coordinate spaces rather than the undo stack this is about.
+     */
+    board.toggleLabelsVisible()
+    board.toggleLabelsVisible()
     // Finger A lifts without moving: the stroke is too short to keep.
     await firePointer(wrapper.find('svg'), 'pointerup', clientFor(10, 10))
 
     expect(board.state.drawings).toHaveLength(0)
-    expect(board.state.pitch.type).toBe('half')
+    expect(board.state.labelsVisible).toBe(true)
 
     board.undo()
-    expect(board.state.pitch.type).toBe('full')
+    expect(board.state.labelsVisible).toBe(false)
     expect(board.state.drawings).toHaveLength(0)
 
     board.undo()

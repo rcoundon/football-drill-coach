@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
-import { PITCH_H, PITCH_W } from '../geometry'
+import { viewBoxOf } from '../geometry'
 import { useBoard } from '../composables/useBoard'
 import { PITCHES } from './controls'
 import PitchMarkings from './PitchMarkings.vue'
@@ -97,8 +97,13 @@ function setRotated(rotated: boolean): void {
             :title="p.label"
             @click="board.setPitchType(p.id)"
           >
-            <svg class="thumb-art" :viewBox="`0 0 ${PITCH_W} ${PITCH_H}`" aria-hidden="true">
-              <rect :x="0" :y="0" :width="PITCH_W" :height="PITCH_H" fill="#2e7d32" />
+            <!--
+              Drawn from the same box the board would use, so the thumbnail
+              previews what pressing it gives you rather than showing a half
+              pitch adrift in a full-sized one.
+            -->
+            <svg class="thumb-art" :viewBox="viewBoxOf({ type: p.id, rotated: false })" aria-hidden="true">
+              <rect x="0" y="0" width="100" height="64.76" fill="#2e7d32" />
               <PitchMarkings :type="p.id" />
             </svg>
             <span class="thumb-label">{{ p.label }}</span>

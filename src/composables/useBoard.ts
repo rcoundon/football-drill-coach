@@ -11,7 +11,7 @@ import type {
   SelectionRef,
   Vec,
 } from '../types'
-import { BALL_OFFSET, PITCH_H, PITCH_W, clampToPitch, distance, snapToAxis } from '../geometry'
+import { BALL_OFFSET, PITCH_H, PITCH_W, boundsOf, clampToPitch, distance, snapToAxis } from '../geometry'
 import { MAX_FRAME_MS, MIN_FRAME_MS, interpolateFrames, timelineOf } from '../animation'
 import type { FrameView } from '../animation'
 
@@ -624,11 +624,14 @@ function isClearOfCounters(p: Vec): boolean {
 
 /** True when a counter drawn at `p` sits wholly inside the pitch. */
 function isInsidePitch(p: Vec): boolean {
+  // The pitch being drawn, not the full one: on a half pitch the spiral
+  // that finds a free spot would otherwise walk off the drawn board.
+  const b = boundsOf(state.pitch.type)
   return (
-    p.x >= COUNTER_RADIUS &&
-    p.x <= PITCH_W - COUNTER_RADIUS &&
-    p.y >= COUNTER_RADIUS &&
-    p.y <= PITCH_H - COUNTER_RADIUS
+    p.x >= b.x + COUNTER_RADIUS &&
+    p.x <= b.x + b.width - COUNTER_RADIUS &&
+    p.y >= b.y + COUNTER_RADIUS &&
+    p.y <= b.y + b.height - COUNTER_RADIUS
   )
 }
 
@@ -678,7 +681,7 @@ function addCounter(color: CounterColor, at?: Vec): Counter {
     // Dropped where the coach let go, when they dragged one on. Pressing a
     // colour instead has no place in mind, so the board picks the middle and
     // spirals out from there.
-    pos: at ? clampToPitch(at) : nextCounterPosition(),
+    pos: at ? clampToPitch(at, state.pitch.type) : nextCounterPosition(),
   }
   // Same id and same spot on every frame, so a new player stands still until
   // the coach moves them somewhere.
@@ -763,7 +766,7 @@ function addLabel(at: Vec, text: string): Label | null {
   const clean = cleanLabelText(text)
   if (clean === '') return null
   commit()
-  const label: Label = { id: newId(), pos: clampToPitch(at), text: clean }
+  const label: Label = { id: newId(), pos: clampToPitch(at, state.pitch.type), text: clean }
   for (const frame of allFrames()) frame.labels.push(clone(label))
   // Read back out of state rather than returning the local `label` that was
   // cloned in: the clone pushed into every frame's array is a copy, so the
@@ -793,7 +796,7 @@ function moveLabel(id: string, pos: Vec): void {
   if (locked()) return
   const label = labelById(id)
   if (!label) return
-  label.pos = clampToPitch(pos)
+  label.pos = clampToPitch(pos, state.pitch.type)
 }
 
 function deleteLabel(id: string): void {
@@ -823,7 +826,7 @@ function markerById(id: string): Marker | undefined {
  */
 function addMarker(at: Vec): Marker {
   commit()
-  const marker: Marker = { id: newId(), pos: clampToPitch(at) }
+  const marker: Marker = { id: newId(), pos: clampToPitch(at, state.pitch.type) }
   for (const frame of allFrames()) frame.markers.push(clone(marker))
   return markerById(marker.id)!
 }
@@ -833,7 +836,7 @@ function moveMarker(id: string, pos: Vec): void {
   if (locked()) return
   const marker = markerById(id)
   if (!marker) return
-  marker.pos = clampToPitch(pos)
+  marker.pos = clampToPitch(pos, state.pitch.type)
 }
 
 function deleteMarker(id: string): void {
@@ -850,7 +853,7 @@ function moveCounter(id: string, pos: Vec): void {
   if (locked()) return
   const counter = counterById(id)
   if (!counter) return
-  counter.pos = clampToPitch(pos)
+  counter.pos = clampToPitch(pos, state.pitch.type)
 }
 
 function setCounterLabel(id: string, label: string): void {
@@ -945,7 +948,7 @@ function nextBallPosition(): Vec {
       { x: last.pos.x, y: last.pos.y + BALL_SPACING * step },
       { x: last.pos.x, y: last.pos.y - BALL_SPACING * step },
     ]) {
-      const at = clampToPitch(candidate)
+      const at = clampToPitch(candidate, state.pitch.type)
       if (isFree(at)) return at
     }
   }
@@ -968,7 +971,7 @@ function addBall(at?: Vec): Ball | null {
   commit()
   const ball: Ball = {
     id: newId(),
-    pos: at ? clampToPitch(at) : nextBallPosition(),
+    pos: at ? clampToPitch(at, state.pitch.type) : nextBallPosition(),
     attachedTo: null,
   }
   for (const frame of allFrames()) frame.balls.push(clone(ball))
@@ -997,7 +1000,7 @@ function moveBall(id: string, pos: Vec): void {
   const ball = ballById(id)
   if (!ball) return
   ball.attachedTo = null
-  ball.pos = clampToPitch(pos)
+  ball.pos = clampToPitch(pos, state.pitch.type)
 }
 
 /** Where this counter's ball would be drawn if it had possession. */
@@ -1035,7 +1038,7 @@ function dropBall(id: string, pos: Vec): void {
   if (locked()) return
   const ball = ballById(id)
   if (!ball) return
-  const at = clampToPitch(pos)
+  const at = clampToPitch(pos, state.pitch.type)
   ball.pos = at
 
   const taken = new Set(
@@ -1095,7 +1098,7 @@ function startPen(at: Vec, color: string): string {
   const entry = commit()
   const id = newId()
   strokeUndoEntries.set(id, entry)
-  state.drawings.push({ id, kind: 'pen', color, points: [clampToPitch(at)] })
+  state.drawings.push({ id, kind: 'pen', color, points: [clampToPitch(at, state.pitch.type)] })
   return id
 }
 
@@ -1104,7 +1107,7 @@ function extendPen(id: string, at: Vec): void {
   if (locked()) return
   const drawing = drawingById(id)
   if (!drawing || drawing.kind !== 'pen') return
-  const point = clampToPitch(at)
+  const point = clampToPitch(at, state.pitch.type)
   const last = drawing.points[drawing.points.length - 1]
   if (last && distance(last, point) < MIN_PEN_STEP) return
   drawing.points.push(point)
@@ -1114,7 +1117,7 @@ function startArrow(at: Vec, color: string, style: 'run' | 'pass'): string {
   const entry = commit()
   const id = newId()
   strokeUndoEntries.set(id, entry)
-  const point = clampToPitch(at)
+  const point = clampToPitch(at, state.pitch.type)
   state.drawings.push({ id, kind: 'arrow', color, style, from: point, to: { ...point } })
   return id
 }
@@ -1123,7 +1126,7 @@ function startLine(at: Vec, color: string): string {
   const entry = commit()
   const id = newId()
   strokeUndoEntries.set(id, entry)
-  const point = clampToPitch(at)
+  const point = clampToPitch(at, state.pitch.type)
   state.drawings.push({ id, kind: 'line', color, from: point, to: { ...point } })
   return id
 }
@@ -1139,7 +1142,7 @@ function updateSegment(id: string, to: Vec): void {
   if (locked()) return
   const drawing = drawingById(id)
   if (!drawing || drawing.kind === 'pen') return
-  const point = clampToPitch(to)
+  const point = clampToPitch(to, state.pitch.type)
   drawing.to = drawing.kind === 'line' ? snapToAxis(drawing.from, point) : point
 }
 
@@ -1185,7 +1188,7 @@ function moveSegmentEnd(id: string, end: 'from' | 'to', pos: Vec): void {
   const drawing = drawingById(id)
   if (!drawing || drawing.kind === 'pen') return
   const anchor = end === 'to' ? drawing.from : drawing.to
-  const point = clampToPitch(pos)
+  const point = clampToPitch(pos, state.pitch.type)
   drawing[end] = drawing.kind === 'line' ? snapToAxis(anchor, point) : point
 }
 
