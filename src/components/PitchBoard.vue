@@ -31,7 +31,7 @@ export const STALE_DRAG_MS = 10_000
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { ArrowDrawing, SegmentDrawing, SelectionRef, ToolMode, Vec } from '../types'
-import { bendFor, clampToPitch, clientToPitch, distance } from '../geometry'
+import { bendFor, boundsOf, clampToPitch, clientToPitch, distance } from '../geometry'
 import { useBoard } from '../composables/useBoard'
 import { setPlacementDropTarget, type PlacementKind } from '../composables/usePlacement'
 import BoardView from './BoardView.vue'
@@ -86,7 +86,17 @@ function dropFromPalette(what: PlacementKind, clientX: number, clientY: number):
     clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom
   if (missed) return false
 
+  // Inside the element is not inside the pitch. The board is letterboxed
+  // within its box, and on a half pitch the drawn part is half of it, so a
+  // release on the dark green either side converts to a point off the pitch
+  // — which the placement clamp would then pull onto the touchline, putting
+  // a player somewhere the coach never let go of.
   const at = clientToPitch(rect, clientX, clientY, board.state.pitch)
+  const b = boundsOf(board.state.pitch.type)
+  const offPitch =
+    at.x < b.x || at.x > b.x + b.width || at.y < b.y || at.y > b.y + b.height
+  if (offPitch) return false
+
   if (what.kind === 'player') board.addCounter(what.color, at)
   else if (what.kind === 'ball') board.addBall(at)
   else if (what.kind === 'cone') board.addMarker(at)

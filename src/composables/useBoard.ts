@@ -1254,8 +1254,12 @@ function translatePoints(points: Vec[], delta: Vec): void {
   const xs = points.map((p) => p.x)
   const ys = points.map((p) => p.y)
 
-  const dx = Math.min(PITCH_W - Math.max(...xs), Math.max(-Math.min(...xs), delta.x))
-  const dy = Math.min(PITCH_H - Math.max(...ys), Math.max(-Math.min(...ys), delta.y))
+  // Trimmed against the pitch being drawn, not the full one: on a half
+  // pitch the room either side of it is off the board, and a shape slid
+  // into it is a shape the coach can no longer see or reach.
+  const b = boundsOf(state.pitch.type)
+  const dx = Math.min(b.x + b.width - Math.max(...xs), Math.max(b.x - Math.min(...xs), delta.x))
+  const dy = Math.min(b.y + b.height - Math.max(...ys), Math.max(b.y - Math.min(...ys), delta.y))
 
   for (const point of points) {
     point.x += dx

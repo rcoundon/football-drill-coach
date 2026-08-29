@@ -1132,6 +1132,22 @@ describe('dragging a player onto the pitch', () => {
     expect(wrapper.find('[data-placement-ghost]').exists()).toBe(false)
   })
 
+  /**
+   * Inside the board's box is not inside the pitch: it is letterboxed
+   * within it, and a release on the dark green either side used to convert
+   * to a point off the pitch that the placement clamp then pulled onto the
+   * touchline — a player somewhere the coach never let go of.
+   */
+  it('places nothing when the drag ends beside the pitch rather than on it', async () => {
+    const board = useBoard()
+    wrapper = mountApp()
+
+    // Well below the pitch's own height, but still inside the 800x600 board.
+    await dragTo(wrapper, '[data-add-counter="blue"]', { clientX: 400, clientY: 595, pointerId: 1 })
+
+    expect(board.state.counters).toHaveLength(0)
+  })
+
   /** A player dropped on the toolbar is a player the coach did not mean. */
   it('places nothing when the drag ends off the pitch', async () => {
     const board = useBoard()
