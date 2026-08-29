@@ -11,7 +11,7 @@ import type {
   SelectionRef,
   Vec,
 } from '../types'
-import { BALL_OFFSET, PITCH_H, PITCH_W, clampToPitch, distance, snapToAxis } from '../geometry'
+import { BALL_OFFSET, PITCH_H, PITCH_W, boundsOf, clampToPitch, distance, snapToAxis } from '../geometry'
 import { MAX_FRAME_MS, MIN_FRAME_MS, interpolateFrames, timelineOf } from '../animation'
 import type { FrameView } from '../animation'
 
@@ -71,7 +71,16 @@ export const MIN_SEGMENT_LENGTH = 2
 export type BoardSnapshot = {
   frames: Frame[]
   currentFrame: number
+  /** The text labels a coach places with the Text tool. */
   labelsVisible: boolean
+  /**
+   * The number or initials written on a player's own disc.
+   *
+   * Optional, because every drill saved before the setting existed has no
+   * opinion about it and should come back showing them, which is what they
+   * were saved doing. `apply` supplies the default.
+   */
+  counterLabelsVisible?: boolean
   /**
    * Whether the balls are on the pitch at all. Drill-wide, beside the other
    * two visibility settings: it used to ride on the ball itself, which put it
@@ -113,9 +122,14 @@ function emptySnapshot(): BoardSnapshot {
     frames: [emptyFrame()],
     currentFrame: 0,
     labelsVisible: true,
+    counterLabelsVisible: true,
     ballsVisible: true,
     notes: '',
-    notesVisible: true,
+    // Closed on a fresh board: the panel used to hold a quarter of the
+    // screen open for a field that is usually empty, and the pitch is the
+    // only thing on the page a coach is actually looking at. A drill that
+    // was saved with it open comes back with it open.
+    notesVisible: false,
     pitch: { type: 'blank', rotated: false },
   }
 }
@@ -253,6 +267,7 @@ function snapshot(): BoardSnapshot {
     frames: raw.frames,
     currentFrame: raw.currentFrame,
     labelsVisible: raw.labelsVisible,
+    counterLabelsVisible: raw.counterLabelsVisible,
     ballsVisible: raw.ballsVisible,
     notes: raw.notes,
     notesVisible: raw.notesVisible,
@@ -270,6 +285,7 @@ function apply(snap: BoardSnapshot): void {
   state.frames = frames
   state.currentFrame = Math.max(0, Math.min(copy.currentFrame ?? 0, frames.length - 1))
   state.labelsVisible = copy.labelsVisible ?? true
+  state.counterLabelsVisible = copy.counterLabelsVisible ?? true
   state.ballsVisible = copy.ballsVisible ?? true
   state.notes = copy.notes ?? ''
   state.notesVisible = copy.notesVisible ?? true
@@ -514,14 +530,27 @@ function restoreSnapshot(snap: BoardSnapshot): void {
  * carry over so the arrow describing a pass survives until the pass has
  * happened and the coach rubs it out.
  */
-function addFrame(): number {
+/**
+ * Copy a phase and land on the copy.
+ *
+ * A new phase always starts as a copy of an existing one — same players,
+ * same positions — because a coach builds a drill by moving what is already
+ * there, not by rebuilding it. That makes duplicating a phase and adding one
+ * after it the same operation, so there is one of them.
+ */
+function duplicateFrame(index: number): number {
   if (locked()) return state.currentFrame
+  if (index < 0 || index >= state.frames.length) return state.currentFrame
   commit()
-  const index = state.currentFrame + 1
-  state.frames.splice(index, 0, clone(toRaw(state).frames[state.currentFrame]))
-  state.currentFrame = index
+  const at = index + 1
+  state.frames.splice(at, 0, clone(toRaw(state).frames[index]))
+  state.currentFrame = at
   parkPlayhead()
-  return index
+  return at
+}
+
+function addFrame(): number {
+  return duplicateFrame(state.currentFrame)
 }
 
 /** A drill has to be something. The last frame cannot be removed. */
@@ -607,11 +636,14 @@ function isClearOfCounters(p: Vec): boolean {
 
 /** True when a counter drawn at `p` sits wholly inside the pitch. */
 function isInsidePitch(p: Vec): boolean {
+  // The pitch being drawn, not the full one: on a half pitch the spiral
+  // that finds a free spot would otherwise walk off the drawn board.
+  const b = boundsOf(state.pitch.type)
   return (
-    p.x >= COUNTER_RADIUS &&
-    p.x <= PITCH_W - COUNTER_RADIUS &&
-    p.y >= COUNTER_RADIUS &&
-    p.y <= PITCH_H - COUNTER_RADIUS
+    p.x >= b.x + COUNTER_RADIUS &&
+    p.x <= b.x + b.width - COUNTER_RADIUS &&
+    p.y >= b.y + COUNTER_RADIUS &&
+    p.y <= b.y + b.height - COUNTER_RADIUS
   )
 }
 
@@ -652,13 +684,16 @@ function nextCounterPosition(): Vec {
  * position, and an automatic number is one the coach has to clear before
  * writing the one they actually wanted. Double-press a counter to label it.
  */
-function addCounter(color: CounterColor): Counter {
+function addCounter(color: CounterColor, at?: Vec): Counter {
   commit()
   const counter: Counter = {
     id: newId(),
     color,
     label: '',
-    pos: nextCounterPosition(),
+    // Dropped where the coach let go, when they dragged one on. Pressing a
+    // colour instead has no place in mind, so the board picks the middle and
+    // spirals out from there.
+    pos: at ? clampToPitch(at, state.pitch.type) : nextCounterPosition(),
   }
   // Same id and same spot on every frame, so a new player stands still until
   // the coach moves them somewhere.
@@ -682,9 +717,12 @@ function setNotes(text: string): void {
   if (clean === state.notes) return
   // Coalesce consecutive typing: only the first keystroke of a run commits.
   // Compare against the raw entry — reading the stack through the ref hands
-  // back a proxy, which never matches the object commit() returned.
+  // back a proxy, which never matches the object commit() returned. An empty
+  // stack always commits: there is nothing up there that could be ours, so
+  // taking the run as already-committed would leave the typing with no undo
+  // entry at all.
   const top = undoStack.value.at(-1)
-  if (notesUndoEntry === null || (top && toRaw(top) !== notesUndoEntry)) {
+  if (!top || toRaw(top) !== notesUndoEntry) {
     notesUndoEntry = commit()
   }
   state.notes = clean
@@ -693,6 +731,45 @@ function setNotes(text: string): void {
 function toggleNotesVisible(): void {
   commit()
   state.notesVisible = !state.notesVisible
+}
+
+/** What one phase alone is about, or '' when it has nothing of its own. */
+function frameNote(index: number): string {
+  return state.frames[index]?.note ?? ''
+}
+
+/**
+ * The last commit made by phase-note typing, and the phase it was made for.
+ *
+ * The phase matters: moving between them commits nothing, so without it a
+ * run of typing in one phase's note and a run in another's shared an entry,
+ * and one undo took back both.
+ */
+let frameNoteUndoEntry: BoardSnapshot | null = null
+let frameNoteUndoIndex: number | null = null
+
+/**
+ * A note that belongs to one phase rather than to the drill.
+ *
+ * Unlike the players, this deliberately does NOT reach every phase: the
+ * point of it is to say what is happening at this moment and not at the
+ * others.
+ */
+function setFrameNote(index: number, text: string): void {
+  if (locked()) return
+  const frame = state.frames[index]
+  if (!frame) return
+  const clean = text.slice(0, MAX_NOTES_LENGTH)
+  if (clean === (frame.note ?? '')) return
+  const top = undoStack.value.at(-1)
+  if (!top || toRaw(top) !== frameNoteUndoEntry || frameNoteUndoIndex !== index) {
+    frameNoteUndoEntry = commit()
+    frameNoteUndoIndex = index
+  }
+  // Stored only while there is something to store, so a phase a coach typed
+  // into and then cleared is indistinguishable from one they never touched.
+  if (clean === '') delete frame.note
+  else frame.note = clean
 }
 
 function labelById(id: string): Label | undefined {
@@ -709,7 +786,7 @@ function addLabel(at: Vec, text: string): Label | null {
   const clean = cleanLabelText(text)
   if (clean === '') return null
   commit()
-  const label: Label = { id: newId(), pos: clampToPitch(at), text: clean }
+  const label: Label = { id: newId(), pos: clampToPitch(at, state.pitch.type), text: clean }
   for (const frame of allFrames()) frame.labels.push(clone(label))
   // Read back out of state rather than returning the local `label` that was
   // cloned in: the clone pushed into every frame's array is a copy, so the
@@ -739,7 +816,7 @@ function moveLabel(id: string, pos: Vec): void {
   if (locked()) return
   const label = labelById(id)
   if (!label) return
-  label.pos = clampToPitch(pos)
+  label.pos = clampToPitch(pos, state.pitch.type)
 }
 
 function deleteLabel(id: string): void {
@@ -756,6 +833,18 @@ function toggleLabelsVisible(): void {
   state.labelsVisible = !state.labelsVisible
 }
 
+/**
+ * Show or hide what is written on the players themselves.
+ *
+ * Separate from the text labels above: one is the drill's annotations, the
+ * other is who each player is, and a coach explaining a shape often wants
+ * the numbers off without losing the notes on the grass.
+ */
+function toggleCounterLabelsVisible(): void {
+  commit()
+  state.counterLabelsVisible = !state.counterLabelsVisible
+}
+
 function markerById(id: string): Marker | undefined {
   return state.markers.find((m) => m.id === id)
 }
@@ -769,7 +858,7 @@ function markerById(id: string): Marker | undefined {
  */
 function addMarker(at: Vec): Marker {
   commit()
-  const marker: Marker = { id: newId(), pos: clampToPitch(at) }
+  const marker: Marker = { id: newId(), pos: clampToPitch(at, state.pitch.type) }
   for (const frame of allFrames()) frame.markers.push(clone(marker))
   return markerById(marker.id)!
 }
@@ -779,7 +868,7 @@ function moveMarker(id: string, pos: Vec): void {
   if (locked()) return
   const marker = markerById(id)
   if (!marker) return
-  marker.pos = clampToPitch(pos)
+  marker.pos = clampToPitch(pos, state.pitch.type)
 }
 
 function deleteMarker(id: string): void {
@@ -796,7 +885,7 @@ function moveCounter(id: string, pos: Vec): void {
   if (locked()) return
   const counter = counterById(id)
   if (!counter) return
-  counter.pos = clampToPitch(pos)
+  counter.pos = clampToPitch(pos, state.pitch.type)
 }
 
 function setCounterLabel(id: string, label: string): void {
@@ -808,6 +897,24 @@ function setCounterLabel(id: string, label: string): void {
   for (const frame of allFrames()) {
     const target = frame.counters.find((c) => c.id === id)
     if (target) target.label = clean
+  }
+}
+
+/**
+ * Recolour a player, on every phase.
+ *
+ * A player is cast for the whole drill — the same person from start to end —
+ * so their colour is not something that can differ from phase to phase, any
+ * more than their name is.
+ */
+function setCounterColor(id: string, color: CounterColor): void {
+  if (locked()) return
+  const counter = counterById(id)
+  if (!counter || counter.color === color) return
+  commit()
+  for (const frame of allFrames()) {
+    const target = frame.counters.find((c) => c.id === id)
+    if (target) target.color = color
   }
 }
 
@@ -873,7 +980,7 @@ function nextBallPosition(): Vec {
       { x: last.pos.x, y: last.pos.y + BALL_SPACING * step },
       { x: last.pos.x, y: last.pos.y - BALL_SPACING * step },
     ]) {
-      const at = clampToPitch(candidate)
+      const at = clampToPitch(candidate, state.pitch.type)
       if (isFree(at)) return at
     }
   }
@@ -890,11 +997,15 @@ function nextBallPosition(): Vec {
  * it stands differs from phase to phase. Returns null at the cap so a caller
  * can tell the difference between "added" and "there are already eight".
  */
-function addBall(): Ball | null {
+function addBall(at?: Vec): Ball | null {
   if (locked()) return null
   if (state.balls.length >= MAX_BALLS) return null
   commit()
-  const ball: Ball = { id: newId(), pos: nextBallPosition(), attachedTo: null }
+  const ball: Ball = {
+    id: newId(),
+    pos: at ? clampToPitch(at, state.pitch.type) : nextBallPosition(),
+    attachedTo: null,
+  }
   for (const frame of allFrames()) frame.balls.push(clone(ball))
   return ballById(ball.id) ?? null
 }
@@ -921,7 +1032,7 @@ function moveBall(id: string, pos: Vec): void {
   const ball = ballById(id)
   if (!ball) return
   ball.attachedTo = null
-  ball.pos = clampToPitch(pos)
+  ball.pos = clampToPitch(pos, state.pitch.type)
 }
 
 /** Where this counter's ball would be drawn if it had possession. */
@@ -959,7 +1070,7 @@ function dropBall(id: string, pos: Vec): void {
   if (locked()) return
   const ball = ballById(id)
   if (!ball) return
-  const at = clampToPitch(pos)
+  const at = clampToPitch(pos, state.pitch.type)
   ball.pos = at
 
   const taken = new Set(
@@ -1019,7 +1130,7 @@ function startPen(at: Vec, color: string): string {
   const entry = commit()
   const id = newId()
   strokeUndoEntries.set(id, entry)
-  state.drawings.push({ id, kind: 'pen', color, points: [clampToPitch(at)] })
+  state.drawings.push({ id, kind: 'pen', color, points: [clampToPitch(at, state.pitch.type)] })
   return id
 }
 
@@ -1028,7 +1139,7 @@ function extendPen(id: string, at: Vec): void {
   if (locked()) return
   const drawing = drawingById(id)
   if (!drawing || drawing.kind !== 'pen') return
-  const point = clampToPitch(at)
+  const point = clampToPitch(at, state.pitch.type)
   const last = drawing.points[drawing.points.length - 1]
   if (last && distance(last, point) < MIN_PEN_STEP) return
   drawing.points.push(point)
@@ -1038,7 +1149,7 @@ function startArrow(at: Vec, color: string, style: 'run' | 'pass'): string {
   const entry = commit()
   const id = newId()
   strokeUndoEntries.set(id, entry)
-  const point = clampToPitch(at)
+  const point = clampToPitch(at, state.pitch.type)
   state.drawings.push({ id, kind: 'arrow', color, style, from: point, to: { ...point } })
   return id
 }
@@ -1047,7 +1158,7 @@ function startLine(at: Vec, color: string): string {
   const entry = commit()
   const id = newId()
   strokeUndoEntries.set(id, entry)
-  const point = clampToPitch(at)
+  const point = clampToPitch(at, state.pitch.type)
   state.drawings.push({ id, kind: 'line', color, from: point, to: { ...point } })
   return id
 }
@@ -1063,7 +1174,7 @@ function updateSegment(id: string, to: Vec): void {
   if (locked()) return
   const drawing = drawingById(id)
   if (!drawing || drawing.kind === 'pen') return
-  const point = clampToPitch(to)
+  const point = clampToPitch(to, state.pitch.type)
   drawing.to = drawing.kind === 'line' ? snapToAxis(drawing.from, point) : point
 }
 
@@ -1109,7 +1220,7 @@ function moveSegmentEnd(id: string, end: 'from' | 'to', pos: Vec): void {
   const drawing = drawingById(id)
   if (!drawing || drawing.kind === 'pen') return
   const anchor = end === 'to' ? drawing.from : drawing.to
-  const point = clampToPitch(pos)
+  const point = clampToPitch(pos, state.pitch.type)
   drawing[end] = drawing.kind === 'line' ? snapToAxis(anchor, point) : point
 }
 
@@ -1175,8 +1286,12 @@ function translatePoints(points: Vec[], delta: Vec): void {
   const xs = points.map((p) => p.x)
   const ys = points.map((p) => p.y)
 
-  const dx = Math.min(PITCH_W - Math.max(...xs), Math.max(-Math.min(...xs), delta.x))
-  const dy = Math.min(PITCH_H - Math.max(...ys), Math.max(-Math.min(...ys), delta.y))
+  // Trimmed against the pitch being drawn, not the full one: on a half
+  // pitch the room either side of it is off the board, and a shape slid
+  // into it is a shape the coach can no longer see or reach.
+  const b = boundsOf(state.pitch.type)
+  const dx = Math.min(b.x + b.width - Math.max(...xs), Math.max(b.x - Math.min(...xs), delta.x))
+  const dy = Math.min(b.y + b.height - Math.max(...ys), Math.max(b.y - Math.min(...ys), delta.y))
 
   for (const point of points) {
     point.x += dx
@@ -1428,6 +1543,7 @@ const board = {
   canUndo,
   playback,
   timeline,
+  duplicateFrame,
   view,
   isDerived,
   play,
@@ -1455,6 +1571,9 @@ const board = {
   addCounter,
   moveCounter,
   setCounterLabel,
+  setCounterColor,
+  frameNote,
+  setFrameNote,
   deleteCounter,
   counterById,
   markerById,
@@ -1464,6 +1583,7 @@ const board = {
   moveLabel,
   deleteLabel,
   toggleLabelsVisible,
+  toggleCounterLabelsVisible,
   setNotes,
   toggleNotesVisible,
   addMarker,
@@ -1500,6 +1620,8 @@ export function useBoard() {
 /** Test-only: put the singleton back to its just-loaded condition. */
 export function __resetBoardForTests(): void {
   notesUndoEntry = null
+  frameNoteUndoEntry = null
+  frameNoteUndoIndex = null
   apply(emptySnapshot())
   undoStack.value = []
   redoStack.value = []

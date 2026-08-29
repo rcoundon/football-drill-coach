@@ -821,3 +821,41 @@ describe('duplicating a group', () => {
     expect(copies).toHaveLength(1)
   })
 })
+
+/**
+ * Dragging a shape is trimmed against the pitch being drawn, not the full
+ * one. On a half pitch the room either side is off the board, and a shape
+ * slid into it is a shape the coach can no longer see or reach.
+ */
+describe('dragging a drawing on a half pitch', () => {
+  it('cannot be slid off the drawn half', () => {
+    const board = useBoard()
+    board.setPitchType('half')
+
+    const id = board.startArrow({ x: 40, y: 30 }, '#ffffff', 'pass')
+    board.updateSegment(id, { x: 60, y: 30 })
+    board.finishDrawing(id)
+
+    // Far enough left to leave the half entirely, were it not trimmed.
+    board.translateGroup([{ kind: 'drawing', id }], { x: -100, y: 0 })
+
+    const arrow = board.drawingById(id) as ArrowDrawing
+    const xs = [arrow.from.x, arrow.to.x]
+    expect(Math.min(...xs)).toBeCloseTo(25, 5)
+    expect(Math.max(...xs)).toBeCloseTo(45, 5)
+  })
+
+  it('still reaches both ends of a full pitch', () => {
+    const board = useBoard()
+    board.setPitchType('full')
+
+    const id = board.startArrow({ x: 40, y: 30 }, '#ffffff', 'pass')
+    board.updateSegment(id, { x: 60, y: 30 })
+    board.finishDrawing(id)
+
+    board.translateGroup([{ kind: 'drawing', id }], { x: -100, y: 0 })
+
+    const arrow = board.drawingById(id) as ArrowDrawing
+    expect(Math.min(arrow.from.x, arrow.to.x)).toBeCloseTo(0, 5)
+  })
+})

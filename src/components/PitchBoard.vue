@@ -29,10 +29,11 @@ export const STALE_DRAG_MS = 10_000
 </script>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { ArrowDrawing, SegmentDrawing, SelectionRef, ToolMode, Vec } from '../types'
-import { bendFor, clampToPitch, clientToPitch, distance } from '../geometry'
+import { bendFor, boundsOf, clampToPitch, clientToPitch, distance } from '../geometry'
 import { useBoard } from '../composables/useBoard'
+import { setPlacementDropTarget, type PlacementKind } from '../composables/usePlacement'
 import BoardView from './BoardView.vue'
 import BendHandle from './BendHandle.vue'
 import EndHandle from './EndHandle.vue'
@@ -48,6 +49,11 @@ const emit = defineEmits<{
    * tablet — there is no Cmd key and no Delete key under a finger.
    */
   selectionSize: [count: number]
+  /**
+   * What is held, not merely how much of it. The inspector shows the thing
+   * itself — its colour, its label — so a count is no longer enough.
+   */
+  selectionChanged: [held: SelectionRef[]]
 }>()
 
 const board = useBoard()
@@ -62,6 +68,47 @@ const boardView = ref<InstanceType<typeof BoardView> | null>(null)
 const svgEl = computed<SVGSVGElement | null>(() => boardView.value?.svgEl ?? null)
 
 defineExpose({ svgEl, deleteSelected, duplicateSelected, clearSelection })
+
+/**
+ * Where a thing dragged out of the palette lands.
+ *
+ * The palette knows what is being dragged; only the pitch can say where on
+ * the grass a point on the screen is, so the pitch is what receives the
+ * drop. A release anywhere else places nothing — a player dropped on the
+ * toolbar is a player the coach did not mean to add.
+ */
+function dropFromPalette(what: PlacementKind, clientX: number, clientY: number): boolean {
+  const svg = svgEl.value
+  if (!svg || board.isDerived.value) return false
+
+  const rect = svg.getBoundingClientRect()
+  const missed =
+    clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom
+  if (missed) return false
+
+  // Inside the element is not inside the pitch. The board is letterboxed
+  // within its box, and on a half pitch the drawn part is half of it, so a
+  // release on the dark green either side converts to a point off the pitch
+  // — which the placement clamp would then pull onto the touchline, putting
+  // a player somewhere the coach never let go of.
+  const at = clientToPitch(rect, clientX, clientY, board.state.pitch)
+  const b = boundsOf(board.state.pitch.type)
+  const offPitch =
+    at.x < b.x || at.x > b.x + b.width || at.y < b.y || at.y > b.y + b.height
+  if (offPitch) return false
+
+  if (what.kind === 'player') board.addCounter(what.color, at)
+  else if (what.kind === 'ball') board.addBall(at)
+  else if (what.kind === 'cone') board.addMarker(at)
+  // A label with no text is nothing to look at, so the app asks for it and
+  // places the label itself — the same way a press on the pitch with the
+  // Text tool already does.
+  else emit('addLabel', at)
+  return true
+}
+
+onMounted(() => setPlacementDropTarget(dropFromPalette))
+onBeforeUnmount(() => setPlacementDropTarget(null))
 
 type DragTarget =
   | { kind: 'counter'; id: string }
@@ -216,7 +263,7 @@ const view = computed(() => board.view.value)
 
 function toPitch(event: PointerEvent) {
   const rect = svgEl.value!.getBoundingClientRect()
-  return clientToPitch(rect, event.clientX, event.clientY, board.state.pitch.rotated)
+  return clientToPitch(rect, event.clientX, event.clientY, board.state.pitch)
 }
 
 function capture(event: PointerEvent) {
@@ -644,6 +691,12 @@ watch(
   { immediate: true },
 )
 
+watch(
+  selection,
+  (held) => emit('selectionChanged', held.map((ref) => ({ ...ref }))),
+  { immediate: true, deep: true },
+)
+
 // Playing is for watching. Handles and halos belong to editing, and a
 // selection surviving into playback would put them over the animation.
 watch(
@@ -825,7 +878,7 @@ function onBendGrab(id: string, event: PointerEvent) {
 function bendTo(id: string, at: Vec): void {
   const arrow = board.drawingById(id)
   if (!arrow || arrow.kind !== 'arrow') return
-  const { bend, along } = bendFor(arrow.from, arrow.to, clampToPitch(at))
+  const { bend, along } = bendFor(arrow.from, arrow.to, clampToPitch(at, board.state.pitch.type))
   board.setArrowBend(id, bend, along)
 }
 
@@ -1004,6 +1057,7 @@ function onPointerUp(event: PointerEvent) {
     :frame="view"
     :pitch="board.state.pitch"
     :labels-visible="board.state.labelsVisible"
+    :counter-labels-visible="board.state.counterLabelsVisible"
     :balls-visible="board.state.ballsVisible"
     :selected-drawing-ids="selectedDrawingIds"
     @grab-counter="onCounterGrab"

@@ -1,23 +1,17 @@
 import { readonly, ref, type Ref } from 'vue'
 
 /**
- * Below this, the toolbar cannot show every control at a touchable size, so
- * the layout collapses to a compact one. Chosen from the toolbar's own
- * natural width rather than a device: it needs well over 2000px to lay out
- * flat, and anything under this wraps into rows that eat the pitch.
+ * Below this the rail lies down.
+ *
+ * A rail is a column of controls down one edge, which is the right shape
+ * while there is width to spare. On a phone an 88px column is a fifth of
+ * the screen taken from the pitch before a coach has drawn anything, so
+ * under this width the same rail runs along the bottom instead, directly
+ * above the timeline.
  */
-export const NARROW_MAX_PX = 768
+export const COMPACT_MAX_PX = 1023
 
-/**
- * Above this the toolbar has room to lay out flat across the top. Between
- * here and NARROW_MAX_PX is tablet territory, where the controls fit but
- * only by stacking into rows — so they move to a rail down the edge
- * instead, under the thumb of the hand already holding the device.
- */
-export const RAIL_MAX_PX = 1280
-
-const isNarrow = ref(false)
-const isRail = ref(false)
+const isCompact = ref(false)
 const isPortrait = ref(false)
 let watching = false
 
@@ -35,17 +29,15 @@ function track(query: string, target: Ref<boolean>): void {
 function startWatching(): void {
   if (watching) return
   watching = true
-  track(`(max-width: ${NARROW_MAX_PX}px)`, isNarrow)
+  track(`(max-width: ${COMPACT_MAX_PX}px)`, isCompact)
   track('(orientation: portrait)', isPortrait)
-  track(`(min-width: ${NARROW_MAX_PX + 1}px) and (max-width: ${RAIL_MAX_PX}px)`, isRail)
 }
 
 /** Whether the screen is small enough, or tall enough, to change the layout. */
 export function useViewport() {
   startWatching()
   return {
-    isNarrow: readonly(isNarrow),
-    isRail: readonly(isRail),
+    isCompact: readonly(isCompact),
     isPortrait: readonly(isPortrait),
   }
 }
@@ -53,7 +45,6 @@ export function useViewport() {
 /** Test-only: forget what was measured so a fresh stub can be installed. */
 export function __resetViewportForTests(): void {
   watching = false
-  isNarrow.value = false
-  isRail.value = false
+  isCompact.value = false
   isPortrait.value = false
 }

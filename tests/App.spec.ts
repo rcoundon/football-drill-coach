@@ -19,7 +19,7 @@ const RECT = { left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600
  */
 function mountApp() {
   const app = mount(App, { attachTo: document.body })
-  const svg = app.find('svg').element as unknown as SVGSVGElement
+  const svg = app.find('.stage svg').element as unknown as SVGSVGElement
   svg.getBoundingClientRect = () => RECT as DOMRect
   ;(svg as unknown as { setPointerCapture: (id: number) => void }).setPointerCapture = vi.fn()
   ;(svg as unknown as { releasePointerCapture: (id: number) => void }).releasePointerCapture = vi.fn()
@@ -44,10 +44,15 @@ async function firePointer(node: Element, type: string, opts: ReturnType<typeof 
  * from these, not from `dblclick`, which pointer capture retargets away from
  * the counter and which therefore never reaches it in a real browser.
  */
+/** The drill name, which the header renders as an editable field. */
+function drillName(app: VueWrapper): string {
+  return (app.find('[data-current-pattern]').element as HTMLInputElement).value
+}
+
 async function pressCounter(app: VueWrapper) {
   const hit = app.find('[data-counter]').element.lastElementChild as Element
   await firePointer(hit, 'pointerdown', clientFor(50, 32))
-  await firePointer(app.find('svg').element, 'pointerup', clientFor(50, 32))
+  await firePointer(app.find('.stage svg').element, 'pointerup', clientFor(50, 32))
 }
 
 beforeEach(() => {
@@ -81,14 +86,15 @@ describe('resetting the board', () => {
     await wrapper.vm.$nextTick()
     await wrapper.find('[data-load]').trigger('click')
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('[data-current-pattern]').text()).toContain('High press')
+    expect(drillName(wrapper)).toContain('High press')
 
     board.addCounter('red')
     await wrapper.vm.$nextTick()
     await wrapper.find('[data-reset]').trigger('click')
+    await wrapper.find('[data-confirm-reset]').trigger('click')
     await wrapper.vm.$nextTick()
 
-    expect(wrapper.find('[data-current-pattern]').text()).not.toContain('High press')
+    expect(drillName(wrapper)).not.toContain('High press')
     expect(storage.listPatterns().find((p) => p.id === saved.id)).toBeDefined()
   })
 
@@ -96,7 +102,8 @@ describe('resetting the board', () => {
    * Reset refuses on the board while the drill is playing or mid-move — but
    * the toolbar used to forget the open pattern regardless, so the coach saw
    * "Unsaved" for a board that had not actually changed, and the next Save
-   * wrote a duplicate under a new id.
+   * wrote a duplicate under a new id. It is now refused before it is even
+   * offered.
    */
   it('is refused while the drill is playing or mid-move, so a saved pattern is not silently detached', async () => {
     const board = useBoard()
@@ -110,15 +117,17 @@ describe('resetting the board', () => {
     await wrapper.vm.$nextTick()
 
     await openLibraryAndLoad(wrapper)
-    expect(wrapper.find('[data-current-pattern]').text()).toContain('High press')
+    expect(drillName(wrapper)).toContain('High press')
 
     board.scrubTo(500)
     await wrapper.vm.$nextTick()
 
+    expect(wrapper.find('[data-reset]').attributes('disabled')).toBeDefined()
     await wrapper.find('[data-reset]').trigger('click')
     await wrapper.vm.$nextTick()
 
-    expect(wrapper.find('[data-current-pattern]').text()).toContain('High press')
+    expect(wrapper.find('[data-confirm-reset]').exists()).toBe(false)
+    expect(drillName(wrapper)).toContain('High press')
     expect(board.state.frames).toHaveLength(2)
 
     board.endScrub()
@@ -166,7 +175,7 @@ describe('dialogs', () => {
     await wrapper.find('[data-open]').trigger('click')
     await wrapper.vm.$nextTick()
 
-    fire({ key: 'p' })
+    fire({ key: 'd' })
     await wrapper.vm.$nextTick()
 
     expect(wrapper.find('[data-tool="pen"]').classes()).not.toContain('is-active')
@@ -174,9 +183,9 @@ describe('dialogs', () => {
 })
 
 describe('keyboard shortcuts', () => {
-  it('switches to the pen tool on an unmodified "p"', async () => {
+  it('switches to the pen tool on an unmodified "d"', async () => {
     wrapper = mount(App)
-    fire({ key: 'p' })
+    fire({ key: 'd' })
     await wrapper.vm.$nextTick()
     expect(wrapper.find('[data-tool="pen"]').classes()).toContain('is-active')
   })
@@ -188,14 +197,14 @@ describe('keyboard shortcuts', () => {
     expect(wrapper.find('[data-tool="line"]').classes()).toContain('is-active')
   })
 
-  it('does not change the tool on Ctrl+S or Meta+S, leaving the shortcut to the browser', async () => {
+  it('does not change the tool on Ctrl+P or Meta+P, leaving Print to the browser', async () => {
     wrapper = mount(App)
-    fire({ key: 's', ctrlKey: true })
+    fire({ key: 'p', ctrlKey: true })
     await wrapper.vm.$nextTick()
     expect(wrapper.find('[data-tool="select"]').classes()).toContain('is-active')
     expect(wrapper.find('[data-tool="arrow-pass"]').classes()).not.toContain('is-active')
 
-    fire({ key: 's', metaKey: true })
+    fire({ key: 'p', metaKey: true })
     await wrapper.vm.$nextTick()
     expect(wrapper.find('[data-tool="select"]').classes()).toContain('is-active')
     expect(wrapper.find('[data-tool="arrow-pass"]').classes()).not.toContain('is-active')
@@ -219,7 +228,7 @@ describe('keyboard shortcuts', () => {
     const input = document.createElement('input')
     document.body.appendChild(input)
     try {
-      fire({ key: 'p' }, input)
+      fire({ key: 'd' }, input)
       await wrapper.vm.$nextTick()
       expect(wrapper.find('[data-tool="select"]').classes()).toContain('is-active')
       expect(wrapper.find('[data-tool="pen"]').classes()).not.toContain('is-active')
@@ -239,7 +248,7 @@ describe('the chosen drawing and the keyboard', () => {
     await app.vm.$nextTick()
     const path = app.find('[data-drawing]').element
     await firePointer(path, 'pointerdown', clientFor(40, 30))
-    await firePointer(app.find('svg').element, 'pointerup', clientFor(40, 30))
+    await firePointer(app.find('.stage svg').element, 'pointerup', clientFor(40, 30))
   }
 
   it('rubs the chosen drawing out on Delete', async () => {
@@ -325,7 +334,7 @@ describe('the chosen drawing and the keyboard', () => {
     expect(board.state.drawings).toHaveLength(1)
   })
 
-  it('copies from the toolbar button, which is the only way in on a tablet', async () => {
+  it('copies from the inspector, which is the only way in on a tablet', async () => {
     const board = useBoard()
     wrapper = mount(App)
     await chooseAnArrow(wrapper)
@@ -335,7 +344,7 @@ describe('the chosen drawing and the keyboard', () => {
     expect(board.state.drawings).toHaveLength(2)
   })
 
-  it('removes from the toolbar button as well', async () => {
+  it('removes from the inspector as well', async () => {
     const board = useBoard()
     wrapper = mount(App)
     await chooseAnArrow(wrapper)
@@ -345,18 +354,23 @@ describe('the chosen drawing and the keyboard', () => {
     expect(board.state.drawings).toEqual([])
   })
 
-  it('greys both buttons out until something is held', async () => {
+  /**
+   * The buttons no longer sit in the chrome waiting to be greyed out: they
+   * only exist while something is held, which is the only time either of
+   * them means anything.
+   */
+  it('offers neither until something is held', async () => {
     const board = useBoard()
     const id = board.startArrow({ x: 20, y: 30 }, '#ffffff', 'pass')
     board.updateSegment(id, { x: 60, y: 30 })
     board.finishDrawing(id)
     wrapper = mount(App)
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('[data-duplicate]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-duplicate]').exists()).toBe(false)
 
     await chooseAnArrow(wrapper)
 
-    expect(wrapper.find('[data-duplicate]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-duplicate]').exists()).toBe(true)
   })
 
   it('leaves Delete to the field while a dialog is up', async () => {
@@ -464,7 +478,7 @@ describe('the pattern that is open', () => {
 
     expect(board.state.counters).toHaveLength(1)
     expect(board.state.pitch.type).toBe('full')
-    expect(wrapper.find('[data-current-pattern]').text()).toContain('Press trigger')
+    expect(drillName(wrapper)).toContain('Press trigger')
   })
 
   it('is undoable, so a mis-click does not lose the working board', async () => {
@@ -545,7 +559,7 @@ describe('Save as…', () => {
     expect(fork.frames[0].counters).toHaveLength(2)
 
     // The fork is what is open now, so the next Save updates the copy.
-    expect(wrapper.find('[data-current-pattern]').text()).toContain('Counter press')
+    expect(drillName(wrapper)).toContain('Counter press')
   })
 
   /**
@@ -595,7 +609,7 @@ describe('saving a board that is not in the library yet', () => {
     const listed = store.listPatterns()
     expect(listed).toHaveLength(1)
     expect(listed[0].name).toBe('Press trigger')
-    expect(wrapper.find('[data-current-pattern]').text()).toContain('Press trigger')
+    expect(drillName(wrapper)).toContain('Press trigger')
   })
 
   it('files the drill under the tags typed while naming it', async () => {
@@ -843,7 +857,7 @@ describe('the library changing the open pattern', () => {
     await wrapper.find('[data-rename-save]').trigger('click')
     await nextTick()
 
-    expect(wrapper.find('[data-current-pattern]').text()).toContain('Counter press')
+    expect(drillName(wrapper)).toContain('Counter press')
 
     await wrapper.find('[data-save]').trigger('click')
     await nextTick()
@@ -865,7 +879,7 @@ describe('the library changing the open pattern', () => {
     await wrapper.find('[data-confirm-delete]').trigger('click')
     await nextTick()
 
-    expect(wrapper.find('[data-current-pattern]').text()).toMatch(/unsaved/i)
+    expect(wrapper.find('[data-save-status]').text()).toMatch(/not saved/i)
 
     await wrapper.find('[data-save]').trigger('click')
     await nextTick()
@@ -907,8 +921,652 @@ describe('a save that was refused', () => {
     await wrapper.find('[data-confirm-save]').trigger('click')
     await nextTick()
 
-    expect(wrapper.find('[data-current-pattern]').text()).toMatch(/unsaved/i)
+    expect(wrapper.find('[data-save-status]').text()).toMatch(/not saved/i)
     expect(localStorage.getItem(PATTERNS_KEY)).toBe('{not json at all')
+  })
+})
+
+/**
+ * A drill already in the library keeps itself up to date, so Save is
+ * something a coach may press rather than something they must remember.
+ * Debounced by a second: a drag is hundreds of changes and the library is a
+ * single localStorage key.
+ */
+describe('autosaving the open drill', () => {
+  it('writes a change back to the library without anyone pressing Save', async () => {
+    vi.useFakeTimers()
+    try {
+      const store = useStorage()
+      const board = useBoard()
+      const saved = store.savePattern('Press trigger', sampleSnapshot())
+      wrapper = mountApp()
+      await openLibraryAndLoad(wrapper)
+
+      const before = board.state.counters.length
+      board.addCounter('red')
+      await nextTick()
+      expect(wrapper.find('[data-save-status]').text()).toMatch(/unsaved changes/i)
+
+      vi.advanceTimersByTime(1000)
+      await nextTick()
+
+      const listed = store.listPatterns()
+      expect(listed).toHaveLength(1)
+      expect(listed[0].id).toBe(saved.id)
+      expect(listed[0].frames[0].counters).toHaveLength(before + 1)
+      // Not a bare /saved/, which "Not saved yet" satisfies too.
+      expect(wrapper.find('[data-save-status]').text()).toMatch(/saved (just now|\d+m ago)/i)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  /**
+   * Autosave can update a drill in place, but it cannot decide what a new
+   * one is called — a board that has never been saved stays a draft until
+   * the coach names it.
+   */
+  it('leaves a board that was never saved out of the library', async () => {
+    vi.useFakeTimers()
+    try {
+      const store = useStorage()
+      const board = useBoard()
+      wrapper = mountApp()
+
+      board.addCounter('red')
+      vi.advanceTimersByTime(2000)
+      await nextTick()
+
+      expect(store.listPatterns()).toHaveLength(0)
+      expect(wrapper.find('[data-save-status]').text()).toMatch(/not saved/i)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('files the drill under the name typed into the header', async () => {
+    vi.useFakeTimers()
+    try {
+      const store = useStorage()
+      const saved = store.savePattern('Press trigger', sampleSnapshot())
+      wrapper = mountApp()
+      await openLibraryAndLoad(wrapper)
+
+      const field = wrapper.find('[data-current-pattern]')
+      await field.setValue('Counter press')
+      await field.trigger('change')
+      vi.advanceTimersByTime(1000)
+      await nextTick()
+
+      const listed = store.listPatterns()
+      expect(listed).toHaveLength(1)
+      expect(listed[0].id).toBe(saved.id)
+      expect(listed[0].name).toBe('Counter press')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  /**
+   * Playing moves the playhead, not the drill. Writing a blend back over the
+   * saved drill would file a half-tweened board as the coach's work.
+   */
+  it('writes nothing while the drill is playing', async () => {
+    vi.useFakeTimers()
+    try {
+      const store = useStorage()
+      const board = useBoard()
+      board.addFrame()
+      board.setFrameDuration(1, 1000)
+      board.goToFrame(0)
+      store.savePattern('Press trigger', board.snapshot())
+      wrapper = mountApp()
+      await openLibraryAndLoad(wrapper)
+
+      const before = JSON.stringify(store.listPatterns())
+      board.scrubTo(500)
+      vi.advanceTimersByTime(2000)
+      await nextTick()
+
+      expect(JSON.stringify(store.listPatterns())).toBe(before)
+      board.endScrub()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+/**
+ * Deleting the open drill throws away work no undo on the board can bring
+ * back, so it is the one header action that asks first.
+ */
+describe('deleting the open drill from the header', () => {
+  it('asks before it deletes, and leaves the board alone when it does', async () => {
+    const store = useStorage()
+    const board = useBoard()
+    store.savePattern('Press trigger', sampleSnapshot())
+    wrapper = mountApp()
+    await openLibraryAndLoad(wrapper)
+    const onBoard = board.state.counters.length
+
+    await wrapper.find('[data-drill-menu]').trigger('click')
+    await wrapper.find('[data-delete-drill]').trigger('click')
+    await nextTick()
+    expect(store.listPatterns()).toHaveLength(1)
+
+    await wrapper.find('[data-confirm-delete-drill]').trigger('click')
+    await nextTick()
+
+    expect(store.listPatterns()).toHaveLength(0)
+    expect(board.state.counters).toHaveLength(onBoard)
+    expect(wrapper.find('[data-save-status]').text()).toMatch(/not saved/i)
+  })
+})
+
+/**
+ * Duplicate adapts a saved drill for today without a dialog, and without
+ * touching the drill it came from.
+ */
+describe('duplicating the open drill', () => {
+  it('files a copy and leaves the original as it was', async () => {
+    const store = useStorage()
+    store.savePattern('Press trigger', sampleSnapshot())
+    wrapper = mountApp()
+    await openLibraryAndLoad(wrapper)
+
+    await wrapper.find('[data-drill-menu]').trigger('click')
+    await wrapper.find('[data-duplicate-drill]').trigger('click')
+    await nextTick()
+
+    const names = store.listPatterns().map((p) => p.name).sort()
+    expect(names).toEqual(['Press trigger', 'Press trigger copy'])
+    expect(drillName(wrapper)).toBe('Press trigger copy')
+  })
+})
+
+/**
+ * The one thing the tool never said was how a player gets onto the grass.
+ * A press drops one in the middle; a drag puts it exactly where the coach
+ * let go, which is the interaction that says placement is possible at all.
+ */
+describe('dragging a player onto the pitch', () => {
+  /** A drag, as a browser produces it: press, travel, release. */
+  async function dragTo(
+    app: VueWrapper,
+    selector: string,
+    to: { clientX: number; clientY: number; pointerId?: number },
+  ) {
+    const from = app.find(selector).element
+    from.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0, pointerId: 1 }))
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 40, clientY: 40, pointerId: 1 }))
+    await nextTick()
+    window.dispatchEvent(new PointerEvent('pointermove', to))
+    await nextTick()
+    window.dispatchEvent(new PointerEvent('pointerup', to))
+    await nextTick()
+  }
+
+  it('leaves the player where it was let go, not in the middle', async () => {
+    const board = useBoard()
+    wrapper = mountApp()
+
+    await dragTo(wrapper, '[data-add-counter="blue"]', clientFor(20, 10))
+
+    expect(board.state.counters).toHaveLength(1)
+    expect(board.state.counters[0].color).toBe('blue')
+    expect(board.state.counters[0].pos.x).toBeCloseTo(20, 1)
+    expect(board.state.counters[0].pos.y).toBeCloseTo(10, 1)
+  })
+
+  it('shows what is being carried while the drag is running', async () => {
+    wrapper = mountApp()
+    const from = wrapper.find('[data-add-counter="red"]').element
+
+    from.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0, pointerId: 1 }))
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 60, clientY: 60, pointerId: 1 }))
+    await nextTick()
+    expect(wrapper.find('[data-placement-ghost]').exists()).toBe(true)
+
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 60, clientY: 60, pointerId: 1 }))
+    await nextTick()
+    expect(wrapper.find('[data-placement-ghost]').exists()).toBe(false)
+  })
+
+  /**
+   * Inside the board's box is not inside the pitch: it is letterboxed
+   * within it, and a release on the dark green either side used to convert
+   * to a point off the pitch that the placement clamp then pulled onto the
+   * touchline — a player somewhere the coach never let go of.
+   */
+  it('places nothing when the drag ends beside the pitch rather than on it', async () => {
+    const board = useBoard()
+    wrapper = mountApp()
+
+    // Well below the pitch's own height, but still inside the 800x600 board.
+    await dragTo(wrapper, '[data-add-counter="blue"]', { clientX: 400, clientY: 595, pointerId: 1 })
+
+    expect(board.state.counters).toHaveLength(0)
+  })
+
+  /** A player dropped on the toolbar is a player the coach did not mean. */
+  it('places nothing when the drag ends off the pitch', async () => {
+    const board = useBoard()
+    wrapper = mountApp()
+
+    await dragTo(wrapper, '[data-add-counter="blue"]', { clientX: 900, clientY: 900, pointerId: 1 })
+
+    expect(board.state.counters).toHaveLength(0)
+  })
+
+  /**
+   * The browser takes the pointer away for reasons that have nothing to do
+   * with the drill — a system gesture, a notification — and a player
+   * appearing wherever that happened is not something anyone asked for.
+   */
+  it('places nothing when the pointer is taken away mid-drag', async () => {
+    const board = useBoard()
+    wrapper = mountApp()
+
+    const from = wrapper.find('[data-add-counter="blue"]').element
+    from.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0, pointerId: 1 }))
+    window.dispatchEvent(new PointerEvent('pointermove', clientFor(20, 10)))
+    await nextTick()
+    window.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 1 }))
+    await nextTick()
+
+    expect(board.state.counters).toHaveLength(0)
+    expect(wrapper.find('[data-placement-ghost]').exists()).toBe(false)
+  })
+
+  /**
+   * A tablet has as many pointers as the coach has fingers. A second one
+   * used to be able to start its own placement over the first, or end the
+   * first one's gesture somewhere the first finger had never been.
+   */
+  it('belongs to the finger that started it', async () => {
+    const board = useBoard()
+    wrapper = mountApp()
+
+    const from = wrapper.find('[data-add-counter="blue"]').element
+    from.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0, pointerId: 1 }),
+    )
+    // A second finger presses another swatch and lets go somewhere else.
+    wrapper
+      .find('[data-add-counter="red"]')
+      .element.dispatchEvent(
+        new PointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0, pointerId: 2 }),
+      )
+    window.dispatchEvent(new PointerEvent('pointermove', { ...clientFor(20, 10), pointerId: 2 }))
+    window.dispatchEvent(new PointerEvent('pointerup', { ...clientFor(20, 10), pointerId: 2 }))
+    await nextTick()
+
+    expect(board.state.counters).toHaveLength(0)
+
+    // The first finger's own release still places, and places once.
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 0, clientY: 0, pointerId: 1 }))
+    await nextTick()
+
+    expect(board.state.counters).toHaveLength(1)
+    expect(board.state.counters[0].color).toBe('blue')
+  })
+
+  /**
+   * Under the drag threshold the gesture is a press, and a press drops in
+   * the middle. Without the threshold the wobble of a finger would place a
+   * player under the coach's own hand.
+   */
+  it('treats a press that barely moves as a press', async () => {
+    const board = useBoard()
+    wrapper = mountApp()
+
+    const from = wrapper.find('[data-add-counter="blue"]').element
+    from.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0, pointerId: 1 }))
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 3, clientY: 2, pointerId: 1 }))
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 3, clientY: 2, pointerId: 1 }))
+    await nextTick()
+
+    expect(board.state.counters).toHaveLength(1)
+    expect(board.state.counters[0].pos).toEqual({ x: PITCH_W / 2, y: PITCH_H / 2 })
+  })
+})
+
+/**
+ * Said once, over the only place a coach is looking, and gone for good the
+ * moment the first thing lands.
+ */
+describe('the first-run prompt', () => {
+  it('is on an empty pitch', () => {
+    wrapper = mountApp()
+    expect(wrapper.find('[data-empty-state]').exists()).toBe(true)
+  })
+
+  it('goes as soon as a player is placed, and does not come back', async () => {
+    const board = useBoard()
+    wrapper = mountApp()
+
+    board.addCounter('red')
+    await nextTick()
+    expect(wrapper.find('[data-empty-state]').exists()).toBe(false)
+
+    board.clearCounters()
+    await nextTick()
+    expect(wrapper.find('[data-empty-state]').exists()).toBe(false)
+  })
+
+  it('never appears for a drill that already has players on it', async () => {
+    const store = useStorage()
+    store.savePattern('Press trigger', sampleSnapshot())
+    wrapper = mountApp()
+    await openLibraryAndLoad(wrapper)
+
+    expect(wrapper.find('[data-empty-state]').exists()).toBe(false)
+  })
+})
+
+/**
+ * Anything held populates the panel, which is no use behind a closed one:
+ * opening it is what makes Duplicate and Remove reachable at all on a
+ * tablet, where there is no Cmd+D and no Delete key.
+ */
+describe('the inspector and the selection', () => {
+  /** Draw an arrow and pick it up, the way a coach would. */
+  async function chooseAnArrow(app: VueWrapper) {
+    const board = useBoard()
+    const id = board.startArrow({ x: 20, y: 30 }, '#ffffff', 'pass')
+    board.updateSegment(id, { x: 60, y: 30 })
+    board.finishDrawing(id)
+    await app.vm.$nextTick()
+    const path = app.find('[data-drawing]').element
+    await firePointer(path, 'pointerdown', clientFor(40, 30))
+    await firePointer(app.find('.stage svg').element, 'pointerup', clientFor(40, 30))
+  }
+
+  it('opens itself when something is picked up', async () => {
+    wrapper = mountApp()
+    expect(wrapper.find('[data-inspector]').exists()).toBe(false)
+
+    await chooseAnArrow(wrapper)
+
+    expect(wrapper.find('[data-inspector]').exists()).toBe(true)
+    expect(wrapper.find('[data-inspector-title]').text()).toBe('Drawing')
+  })
+
+  /** Putting it down gives the pitch its room back. */
+  it('closes again when the selection is put down', async () => {
+    wrapper = mountApp()
+    await chooseAnArrow(wrapper)
+    expect(wrapper.find('[data-inspector]').exists()).toBe(true)
+
+    fire({ key: 'Escape' })
+    await nextTick()
+
+    expect(wrapper.find('[data-inspector]').exists()).toBe(false)
+  })
+
+  /**
+   * Picking a player up is not an edit to the drill. Routing the panel
+   * through the board's own toggle put an entry on the undo stack, marked
+   * the drill dirty and set the autosave going, all for a panel opening.
+   */
+  it('does not count as a change to the drill', async () => {
+    const board = useBoard()
+    wrapper = mountApp()
+    await chooseAnArrow(wrapper)
+    const undoDepth = board.canUndo.value
+
+    board.undo()
+    await nextTick()
+
+    // The undo that follows takes back the drawing, not the panel.
+    expect(undoDepth).toBe(true)
+    expect(board.state.drawings).toHaveLength(0)
+  })
+
+  /**
+   * A coach who opened the notes themselves did not open them to have them
+   * shut again by picking something up.
+   */
+  it('leaves a panel the coach opened themselves alone', async () => {
+    wrapper = mountApp()
+    await wrapper.find('[data-inspector-open]').trigger('click')
+
+    await chooseAnArrow(wrapper)
+    fire({ key: 'Escape' })
+    await nextTick()
+
+    expect(wrapper.find('[data-inspector]').exists()).toBe(true)
+  })
+})
+
+/**
+ * Clear players, Clear drawings and Reset used to sit one mis-tap from Undo.
+ * They are behind the drill menu now, and each either asks first or leaves a
+ * way back.
+ */
+describe('taking things off the board', () => {
+  it('says what a clear took, and offers it back', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    board.addCounter('blue')
+    wrapper = mountApp()
+
+    await wrapper.find('[data-clear-players]').trigger('click')
+    await nextTick()
+
+    expect(board.state.counters).toHaveLength(0)
+    expect(wrapper.find('[data-toast]').text()).toContain('Cleared 2 players')
+
+    await wrapper.find('[data-toast-undo]').trigger('click')
+    await nextTick()
+
+    expect(board.state.counters).toHaveLength(2)
+    expect(wrapper.find('[data-toast]').exists()).toBe(false)
+  })
+
+  it('counts one player as a player', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    wrapper = mountApp()
+
+    await wrapper.find('[data-clear-players]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.find('[data-toast]').text()).toContain('Cleared 1 player.')
+  })
+
+  it('offers the drawings back too', async () => {
+    const board = useBoard()
+    const id = board.startArrow({ x: 20, y: 30 }, '#ffffff', 'pass')
+    board.updateSegment(id, { x: 60, y: 30 })
+    board.finishDrawing(id)
+    wrapper = mountApp()
+
+    await wrapper.find('[data-clear-drawings]').trigger('click')
+    await nextTick()
+
+    expect(board.state.drawings).toHaveLength(0)
+    expect(wrapper.find('[data-toast]').text()).toContain('Cleared 1 drawing.')
+
+    await wrapper.find('[data-toast-undo]').trigger('click')
+    await nextTick()
+    expect(board.state.drawings).toHaveLength(1)
+  })
+
+  it('can be waved away without undoing anything', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    wrapper = mountApp()
+
+    await wrapper.find('[data-clear-players]').trigger('click')
+    await wrapper.find('[data-toast-dismiss]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.find('[data-toast]').exists()).toBe(false)
+    expect(board.state.counters).toHaveLength(0)
+  })
+
+  /**
+   * Reset is not one thing taken off the board but all of them at once, and
+   * it detaches the board from the drill it was saved as — more than a
+   * six-second window is worth resting on.
+   */
+  it('asks before resetting, and does nothing if the answer is no', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    wrapper = mountApp()
+
+    await wrapper.find('[data-reset]').trigger('click')
+    await nextTick()
+    expect(board.state.counters).toHaveLength(1)
+
+    fire({ key: 'Escape' })
+    await nextTick()
+    expect(wrapper.find('[data-confirm-reset]').exists()).toBe(false)
+    expect(board.state.counters).toHaveLength(1)
+  })
+
+  it('resets once the answer is yes', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    wrapper = mountApp()
+
+    await wrapper.find('[data-reset]').trigger('click')
+    await wrapper.find('[data-confirm-reset]').trigger('click')
+    await nextTick()
+
+    expect(board.state.counters).toHaveLength(0)
+  })
+
+  /** Nothing to clear, nothing to say. */
+  it('offers no clear at all on a board with nothing on it', async () => {
+    wrapper = mountApp()
+    expect(wrapper.find('[data-clear-players]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-clear-drawings]').attributes('disabled')).toBeDefined()
+  })
+})
+
+/**
+ * The bar across the top exists only where there is no rail. On a tablet the
+ * rail carries the tools, the colours and the two board menus, and what was
+ * left of the bar was an empty stripe of chrome over the pitch.
+ */
+/**
+ * Showing a drill to players rather than building one. Everything that
+ * edits leaves the screen, and the pitch stops taking pointer events at
+ * all: a tablet held out to a group should not lose a player to a thumb.
+ */
+describe('presenting the drill', () => {
+  /** A drill with phases, so the bar has something to run. */
+  function aDrillWithPhases() {
+    const board = useBoard()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+  }
+
+  it('is reached from the pitch itself, and from F', async () => {
+    aDrillWithPhases()
+    wrapper = mountApp()
+    expect(wrapper.find('[data-presentation-bar]').exists()).toBe(false)
+
+    await wrapper.find('[data-present-toggle]').trigger('click')
+    expect(wrapper.find('[data-presentation-bar]').exists()).toBe(true)
+
+    await wrapper.find('[data-present-toggle]').trigger('click')
+    expect(wrapper.find('[data-presentation-bar]').exists()).toBe(false)
+
+    fire({ key: 'f' })
+    await nextTick()
+    expect(wrapper.find('[data-presentation-bar]').exists()).toBe(true)
+  })
+
+  it('takes everything that edits off the screen', async () => {
+    wrapper = mountApp()
+    await wrapper.find('[data-present-toggle]').trigger('click')
+
+    expect(wrapper.find('.rail').exists()).toBe(false)
+    expect(wrapper.find('[data-add-frame]').exists()).toBe(false)
+    expect(wrapper.find('[data-drill-menu]').exists()).toBe(false)
+    expect(wrapper.find('[data-inspector-open]').exists()).toBe(false)
+  })
+
+  it('keeps the drill playable and steppable', async () => {
+    const board = useBoard()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+    wrapper = mountApp()
+    await wrapper.find('[data-present-toggle]').trigger('click')
+
+    expect(wrapper.find('[data-present-phase]').text()).toBe('1 / 2')
+
+    await wrapper.find('[data-present-next]').trigger('click')
+    expect(board.state.currentFrame).toBe(1)
+    expect(wrapper.find('[data-present-phase]').text()).toBe('2 / 2')
+
+    await wrapper.find('[data-present-play]').trigger('click')
+    expect(board.playback.playing).toBe(true)
+    board.pause()
+  })
+
+  /**
+   * A single phase has nothing to play or step through, and a bar holding
+   * one button over the middle of the pitch says less than the corner
+   * control that put it there.
+   */
+  it('shows no bar at all for a single-phase drill', async () => {
+    wrapper = mountApp()
+    await wrapper.find('[data-present-toggle]').trigger('click')
+    expect(wrapper.find('[data-presentation-bar]').exists()).toBe(false)
+    // Still a way back, and the same control that opened it.
+    expect(wrapper.find('[data-present-toggle]').attributes('aria-pressed')).toBe('true')
+  })
+
+  it('leaves on Escape and on the bar’s own button', async () => {
+    aDrillWithPhases()
+    wrapper = mountApp()
+    await wrapper.find('[data-present-toggle]').trigger('click')
+    fire({ key: 'Escape' })
+    await nextTick()
+    expect(wrapper.find('[data-presentation-bar]').exists()).toBe(false)
+
+    await wrapper.find('[data-present-toggle]').trigger('click')
+    await wrapper.find('[data-present-exit]').trigger('click')
+    expect(wrapper.find('[data-presentation-bar]').exists()).toBe(false)
+  })
+
+  /**
+   * The tools it would switch between are not on screen to say what
+   * happened, so a stray key must not change one.
+   */
+  it('ignores the tool shortcuts while it is up', async () => {
+    wrapper = mountApp()
+    await wrapper.find('[data-present-toggle]').trigger('click')
+
+    fire({ key: 'd' })
+    await nextTick()
+    await wrapper.find('[data-present-toggle]').trigger('click')
+
+    expect(wrapper.find('[data-tool="select"]').classes()).toContain('is-active')
+  })
+
+  it('puts down whatever was held before it started', async () => {
+    const board = useBoard()
+    const id = board.startArrow({ x: 20, y: 30 }, '#ffffff', 'pass')
+    board.updateSegment(id, { x: 60, y: 30 })
+    board.finishDrawing(id)
+    wrapper = mountApp()
+
+    const path = wrapper.find('[data-drawing]').element
+    await firePointer(path, 'pointerdown', clientFor(40, 30))
+    await firePointer(wrapper.find('.stage svg').element, 'pointerup', clientFor(40, 30))
+    expect(wrapper.find('[data-inspector]').exists()).toBe(true)
+
+    await wrapper.find('[data-present-toggle]').trigger('click')
+    await wrapper.find('[data-present-toggle]').trigger('click')
+
+    expect(wrapper.find('[data-inspector]').exists()).toBe(false)
   })
 })
 
@@ -990,10 +1648,17 @@ describe('adding a label', () => {
 })
 
 describe('drill notes', () => {
+  /** The panel is a strip until a coach asks for it. */
+  async function openNotes(app: VueWrapper) {
+    await app.find('[data-inspector-open]').trigger('click')
+    await app.vm.$nextTick()
+  }
+
   it('types into the board notes', async () => {
     const board = useBoard()
     wrapper = mount(App, { attachTo: document.body })
     await wrapper.vm.$nextTick()
+    await openNotes(wrapper)
 
     await wrapper.find('[data-notes]').setValue('Two touch max.\nSwitch after 90 seconds.')
     await wrapper.vm.$nextTick()
@@ -1006,16 +1671,21 @@ describe('drill notes', () => {
     board.setNotes('Coaching points')
     wrapper = mount(App, { attachTo: document.body })
     await wrapper.vm.$nextTick()
+    await openNotes(wrapper)
     expect((wrapper.find('[data-notes]').element as HTMLTextAreaElement).value).toBe(
       'Coaching points',
     )
   })
 
-  it('hides the panel when notes are toggled off', async () => {
-    const board = useBoard()
-    board.toggleNotesVisible()
+  it('is a strip until the coach asks for it', async () => {
     wrapper = mount(App, { attachTo: document.body })
     await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-notes]').exists()).toBe(false)
+
+    await openNotes(wrapper)
+    expect(wrapper.find('[data-notes]').exists()).toBe(true)
+
+    await wrapper.find('[data-inspector-close]').trigger('click')
     expect(wrapper.find('[data-notes]').exists()).toBe(false)
   })
 
@@ -1026,6 +1696,7 @@ describe('drill notes', () => {
   it('does not fire tool shortcuts while typing notes', async () => {
     wrapper = mount(App, { attachTo: document.body })
     await wrapper.vm.$nextTick()
+    await openNotes(wrapper)
 
     const notes = wrapper.find('[data-notes]')
     ;(notes.element as HTMLTextAreaElement).focus()
@@ -1098,66 +1769,73 @@ describe('a fresh board on a portrait screen', () => {
   })
 })
 
-describe('the tablet rail layout', () => {
-  function stubWidth(kind: 'narrow' | 'rail' | 'wide') {
-    window.matchMedia = ((query: string) => {
-      const isNarrowQuery = query.includes('max-width') && !query.includes('min-width')
-      const isRailQuery = query.includes('min-width')
-      return {
-        matches:
-          (isNarrowQuery && kind === 'narrow') || (isRailQuery && kind === 'rail'),
-        addEventListener: () => {},
-        removeEventListener: () => {},
-      }
-    }) as unknown as typeof window.matchMedia
+/**
+ * One rail, at every width. A coach who plans a session on a desktop and
+ * runs it from a tablet used to learn the tool twice: the same controls sat
+ * in a bar across the top on one and down the edge on the other.
+ */
+describe('the rail at every width', () => {
+  function stubScreen({ compact, portrait = false }: { compact: boolean; portrait?: boolean }) {
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes('orientation') ? portrait : compact,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia
     __resetViewportForTests()
   }
 
   afterEach(() => __resetViewportForTests())
 
-  it('shows the rail beside the board at tablet width', async () => {
-    stubWidth('rail')
+  it('stands beside the board on a wide screen', async () => {
+    stubScreen({ compact: false })
     wrapper = mount(App)
-    await wrapper.vm.$nextTick()
-    expect(wrapper.findComponent({ name: 'ToolRail' }).exists()).toBe(true)
+    await nextTick()
+    const rail = wrapper.find('.rail')
+    expect(rail.exists()).toBe(true)
+    expect(rail.classes()).not.toContain('rail--horizontal')
   })
 
-  it('does not repeat the tools in the bar above it', async () => {
-    stubWidth('rail')
+  /** Held upright, an 88px column is a fifth of a phone's width. */
+  it('lies along the bottom on a small screen held upright', async () => {
+    stubScreen({ compact: true, portrait: true })
     wrapper = mount(App)
-    await wrapper.vm.$nextTick()
-    // Exactly one control per tool across the whole app, and it is the rail's.
-    expect(wrapper.findAll('[data-tool="pen"]')).toHaveLength(1)
-    expect(wrapper.findComponent({ name: 'ToolRail' }).find('[data-tool="pen"]').exists()).toBe(
-      true,
-    )
+    await nextTick()
+    const rail = wrapper.find('.rail')
+    expect(rail.exists()).toBe(true)
+    expect(rail.classes()).toContain('rail--horizontal')
   })
 
-  it('keeps the tools in the bar on a wide screen, with no rail', async () => {
-    stubWidth('wide')
+  /**
+   * Turned on its side the same phone has width to spare and barely 300px
+   * of height once the header is off, and a rail lying down there took the
+   * pitch away entirely.
+   */
+  it('stands back up on a small screen turned on its side', async () => {
+    stubScreen({ compact: true, portrait: false })
     wrapper = mount(App)
-    await wrapper.vm.$nextTick()
-    expect(wrapper.findComponent({ name: 'ToolRail' }).exists()).toBe(false)
-    expect(wrapper.find('[data-tool="pen"]').exists()).toBe(true)
+    await nextTick()
+    expect(wrapper.find('.rail').classes()).not.toContain('rail--horizontal')
   })
 
-  it('uses the compact bar rather than a rail on a phone', async () => {
-    stubWidth('narrow')
-    wrapper = mount(App)
-    await wrapper.vm.$nextTick()
-    expect(wrapper.findComponent({ name: 'ToolRail' }).exists()).toBe(false)
-    expect(wrapper.find('[data-more]').exists()).toBe(true)
+  it('carries the same controls either way round', async () => {
+    for (const portrait of [false, true]) {
+      stubScreen({ compact: true, portrait })
+      wrapper = mount(App)
+      await nextTick()
+      for (const hook of ['[data-tool="pen"]', '[data-add-counter="red"]', '[data-add-ball]', '[data-pitch-menu]']) {
+        expect(wrapper.findAll(hook)).toHaveLength(1)
+      }
+      wrapper.unmount()
+    }
   })
 
   it('changes tool from the rail', async () => {
-    stubWidth('rail')
+    stubScreen({ compact: false })
     wrapper = mount(App)
-    await wrapper.vm.$nextTick()
-    await wrapper.findComponent({ name: 'ToolRail' }).find('[data-tool="cone"]').trigger('click')
-    await wrapper.vm.$nextTick()
-    expect(
-      wrapper.findComponent({ name: 'ToolRail' }).find('[data-tool="cone"]').classes(),
-    ).toContain('is-active')
+    await nextTick()
+    await wrapper.find('[data-tool="cone"]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-tool="cone"]').classes()).toContain('is-active')
   })
 })
 
@@ -1263,6 +1941,7 @@ describe('space plays and pauses', () => {
     board.addFrame()
     board.setFrameDuration(1, 1000)
     wrapper = mountApp()
+    await wrapper.find('[data-inspector-open]').trigger('click')
 
     const notes = wrapper.find('[data-notes]').element as HTMLTextAreaElement
     notes.focus()
@@ -1285,8 +1964,8 @@ describe('space plays and pauses', () => {
     board.setFrameDuration(1, 1000)
     wrapper = mountApp()
 
-    // The add-frame chip is a real <button>, exactly like every chip in
-    // Toolbar, ToolRail and FrameStrip. Space is the platform's own way to
+    // The add-phase card is a real <button>, exactly like every control in
+    // the rail and the timeline. Space is the platform's own way to
     // press a focused button, so the shortcut must not steal it — a coach
     // who just clicked a chip still has that chip focused.
     const chip = wrapper.find('[data-add-frame]').element as HTMLButtonElement
@@ -1321,7 +2000,7 @@ describe('other shortcuts still work with a chip focused', () => {
     await app.vm.$nextTick()
     const path = app.find('[data-drawing]').element
     await firePointer(path, 'pointerdown', clientFor(40, 30))
-    await firePointer(app.find('svg').element, 'pointerup', clientFor(40, 30))
+    await firePointer(app.find('.stage svg').element, 'pointerup', clientFor(40, 30))
   }
 
   it('still clears the selection on Escape', async () => {
@@ -1355,7 +2034,7 @@ describe('other shortcuts still work with a chip focused', () => {
 
     const chip = wrapper.find('[data-add-frame]').element as HTMLButtonElement
     chip.focus()
-    fire({ key: 'p' }, chip)
+    fire({ key: 'd' }, chip)
     await nextTick()
 
     expect(wrapper.find('[data-tool="pen"]').classes()).toContain('is-active')

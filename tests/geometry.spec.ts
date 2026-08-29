@@ -4,6 +4,7 @@ import {
   PITCH_H,
   COUNTER_COLORS,
   viewBoxOf,
+  boundsOf,
   toView,
   fromView,
   clientToPitch,
@@ -38,11 +39,11 @@ describe('COUNTER_COLORS', () => {
 
 describe('viewBoxOf', () => {
   it('is landscape when not rotated', () => {
-    expect(viewBoxOf(false)).toBe(`0 0 ${PITCH_W} ${PITCH_H}`)
+    expect(viewBoxOf({ type: 'full', rotated: false })).toBe(`0 0 ${PITCH_W} ${PITCH_H}`)
   })
 
   it('swaps the axes when rotated', () => {
-    expect(viewBoxOf(true)).toBe(`0 0 ${PITCH_H} ${PITCH_W}`)
+    expect(viewBoxOf({ type: 'full', rotated: true })).toBe(`0 0 ${PITCH_H} ${PITCH_W}`)
   })
 })
 
@@ -74,27 +75,27 @@ describe('clientToPitch', () => {
   const rect = { left: 0, top: 0, width: 800, height: 600 }
 
   it('maps the centre of the element to the centre of the pitch', () => {
-    const p = clientToPitch(rect, 400, 300, false)
+    const p = clientToPitch(rect, 400, 300, { type: 'full', rotated: false })
     expect(p.x).toBeCloseTo(PITCH_W / 2, 6)
     expect(p.y).toBeCloseTo(PITCH_H / 2, 6)
   })
 
   it('maps the top-left of the rendered pitch to the pitch origin', () => {
     const letterbox = (600 - PITCH_H * 8) / 2
-    const p = clientToPitch(rect, 0, letterbox, false)
+    const p = clientToPitch(rect, 0, letterbox, { type: 'full', rotated: false })
     expect(p.x).toBeCloseTo(0, 6)
     expect(p.y).toBeCloseTo(0, 6)
   })
 
   it('accounts for the element being offset in the page', () => {
     const offset = { left: 120, top: 45, width: 800, height: 600 }
-    const p = clientToPitch(offset, 120 + 400, 45 + 300, false)
+    const p = clientToPitch(offset, 120 + 400, 45 + 300, { type: 'full', rotated: false })
     expect(p.x).toBeCloseTo(PITCH_W / 2, 6)
     expect(p.y).toBeCloseTo(PITCH_H / 2, 6)
   })
 
   it('maps the centre correctly when rotated', () => {
-    const p = clientToPitch({ left: 0, top: 0, width: 600, height: 800 }, 300, 400, true)
+    const p = clientToPitch({ left: 0, top: 0, width: 600, height: 800 }, 300, 400, { type: 'full', rotated: true })
     expect(p.x).toBeCloseTo(PITCH_W / 2, 6)
     expect(p.y).toBeCloseTo(PITCH_H / 2, 6)
   })
@@ -105,7 +106,7 @@ describe('clientToPitch', () => {
     const scale = 8
     const renderedW = PITCH_H * scale
     const offX = (600 - renderedW) / 2
-    const p = clientToPitch({ left: 0, top: 0, width: 600, height: 800 }, offX + renderedW, 0, true)
+    const p = clientToPitch({ left: 0, top: 0, width: 600, height: 800 }, offX + renderedW, 0, { type: 'full', rotated: true })
     expect(p.x).toBeCloseTo(0, 6)
     expect(p.y).toBeCloseTo(0, 6)
   })
@@ -115,7 +116,7 @@ describe('clientToPitch', () => {
     const view = toView(original, false)
     const scale = 8
     const offY = (600 - PITCH_H * scale) / 2
-    const p = clientToPitch(rect, view.x * scale, offY + view.y * scale, false)
+    const p = clientToPitch(rect, view.x * scale, offY + view.y * scale, { type: 'full', rotated: false })
     expect(p.x).toBeCloseTo(original.x, 6)
     expect(p.y).toBeCloseTo(original.y, 6)
   })
@@ -310,5 +311,53 @@ describe('bendFor', () => {
   it('reports no offset along a chord it has straightened, so nothing skewed is kept', () => {
     const at = { x: 50, y: 30 + BEND_DEADBAND / 2 }
     expect(bendFor(from, to, at)).toEqual({ bend: 0, along: 0 })
+  })
+})
+
+/**
+ * A half pitch used to be drawn at half scale in the middle of a full-sized
+ * canvas, with a third of the board empty at each end — a half-pitch drill
+ * got about a quarter of the screen it could have had.
+ */
+describe('the pitch a board is drawn from', () => {
+  it('is the whole thing for a full pitch', () => {
+    expect(boundsOf('full')).toEqual({ x: 0, y: 0, width: PITCH_W, height: PITCH_H })
+    expect(boundsOf('blank')).toEqual({ x: 0, y: 0, width: PITCH_W, height: PITCH_H })
+  })
+
+  /** Centred in the full pitch's coordinates, where the markings are drawn. */
+  it('is the middle half for a half pitch', () => {
+    expect(boundsOf('half')).toEqual({ x: 25, y: 0, width: 50, height: PITCH_H })
+  })
+
+  it('gives a half pitch a canvas of its own size', () => {
+    expect(viewBoxOf({ type: 'half', rotated: false })).toBe(`25 0 50 ${PITCH_H}`)
+    expect(viewBoxOf({ type: 'half', rotated: true })).toBe(`0 25 ${PITCH_H} 50`)
+  })
+
+  it('leaves a full pitch exactly as it was', () => {
+    expect(viewBoxOf({ type: 'full', rotated: false })).toBe(`0 0 ${PITCH_W} ${PITCH_H}`)
+    expect(viewBoxOf({ type: 'full', rotated: true })).toBe(`0 0 ${PITCH_H} ${PITCH_W}`)
+  })
+
+  /**
+   * The mapping has to read off the same box the board is drawn from, or a
+   * press lands somewhere other than where the coach put it.
+   */
+  it('maps a press through the half pitch it was made on', () => {
+    const rect = { left: 0, top: 0, width: 500, height: 647.6 }
+    const middle = clientToPitch(rect, 250, 323.8, { type: 'half', rotated: false })
+    expect(middle.x).toBeCloseTo(50, 1)
+    expect(middle.y).toBeCloseTo(PITCH_H / 2, 1)
+
+    const topLeft = clientToPitch(rect, 0, 0, { type: 'half', rotated: false })
+    expect(topLeft.x).toBeCloseTo(25, 1)
+    expect(topLeft.y).toBeCloseTo(0, 1)
+  })
+
+  it('holds a point inside whichever pitch is being drawn', () => {
+    expect(clampToPitch({ x: 10, y: 30 }, 'half')).toEqual({ x: 25, y: 30 })
+    expect(clampToPitch({ x: 90, y: 30 }, 'half')).toEqual({ x: 75, y: 30 })
+    expect(clampToPitch({ x: 10, y: 30 }, 'full')).toEqual({ x: 10, y: 30 })
   })
 })

@@ -1,4 +1,7 @@
-import type { CounterColor, Rect, Vec } from './types'
+import type { CounterColor, PitchType, Rect, Vec } from './types'
+
+/** Which pitch is drawn, and which way round. */
+export type PitchShape = { type: PitchType; rotated: boolean }
 
 /**
  * A real pitch is 105m x 68m. We normalise the long side to 100 units and
@@ -31,8 +34,39 @@ export function m(metres: number): number {
   return metres * PITCH_SCALE
 }
 
-export function viewBoxOf(rotated: boolean): string {
-  return rotated ? `0 0 ${PITCH_H} ${PITCH_W}` : `0 0 ${PITCH_W} ${PITCH_H}`
+/** The rectangle a pitch actually occupies, in pitch coordinates. */
+export type PitchBounds = { x: number; y: number; width: number; height: number }
+
+/**
+ * What the chosen pitch covers.
+ *
+ * Half a pitch is the left half of a full one, centred in the full pitch's
+ * coordinates — the same coordinates a drill's players are stored in, so
+ * switching between presets never moves anybody. What changes is how much
+ * of the board is drawn, and therefore how large it is on screen: a half
+ * pitch used to be drawn at half scale in the middle of a full-sized
+ * canvas, with a third of the board empty at each end.
+ */
+export function boundsOf(type: PitchType): PitchBounds {
+  if (type !== 'half') return { x: 0, y: 0, width: PITCH_W, height: PITCH_H }
+  const width = PITCH_W / 2
+  return { x: (PITCH_W - width) / 2, y: 0, width, height: PITCH_H }
+}
+
+/**
+ * The same bounds in view coordinates, which is where the rotation lives.
+ * A rotated board is the pitch turned 90 degrees clockwise, so its width
+ * and height swap and its origin moves to the far end.
+ */
+export function viewBoundsOf(pitch: PitchShape): PitchBounds {
+  const b = boundsOf(pitch.type)
+  if (!pitch.rotated) return b
+  return { x: PITCH_H - (b.y + b.height), y: b.x, width: b.height, height: b.width }
+}
+
+export function viewBoxOf(pitch: PitchShape): string {
+  const b = viewBoundsOf(pitch)
+  return `${b.x} ${b.y} ${b.width} ${b.height}`
 }
 
 /**
@@ -57,24 +91,38 @@ export function fromView(p: Vec, rotated: boolean): Vec {
  * leaving letterboxing on the other axis. We reproduce that here rather
  * than using getScreenCTM so the function stays pure and testable.
  */
-export function clientToPitch(rect: Rect, clientX: number, clientY: number, rotated: boolean): Vec {
-  const vw = rotated ? PITCH_H : PITCH_W
-  const vh = rotated ? PITCH_W : PITCH_H
+export function clientToPitch(
+  rect: Rect,
+  clientX: number,
+  clientY: number,
+  pitch: PitchShape,
+): Vec {
+  // Read off the same box the board is drawn from, or a press lands
+  // somewhere other than where the coach put it the moment the two differ.
+  const view = viewBoundsOf(pitch)
 
-  const scale = Math.min(rect.width / vw, rect.height / vh)
-  const offsetX = (rect.width - vw * scale) / 2
-  const offsetY = (rect.height - vh * scale) / 2
+  const scale = Math.min(rect.width / view.width, rect.height / view.height)
+  const offsetX = (rect.width - view.width * scale) / 2
+  const offsetY = (rect.height - view.height * scale) / 2
 
-  const viewX = (clientX - rect.left - offsetX) / scale
-  const viewY = (clientY - rect.top - offsetY) / scale
+  const viewX = (clientX - rect.left - offsetX) / scale + view.x
+  const viewY = (clientY - rect.top - offsetY) / scale + view.y
 
-  return fromView({ x: viewX, y: viewY }, rotated)
+  return fromView({ x: viewX, y: viewY }, pitch.rotated)
 }
 
-export function clampToPitch(p: Vec): Vec {
+/**
+ * Hold a point inside the pitch being drawn.
+ *
+ * Defaults to the full pitch, so the many callers that have no opinion —
+ * and every drill saved before half pitches had their own canvas — behave
+ * exactly as they did.
+ */
+export function clampToPitch(p: Vec, type: PitchType = 'full'): Vec {
+  const b = boundsOf(type)
   return {
-    x: Math.min(PITCH_W, Math.max(0, p.x)),
-    y: Math.min(PITCH_H, Math.max(0, p.y)),
+    x: Math.min(b.x + b.width, Math.max(b.x, p.x)),
+    y: Math.min(b.y + b.height, Math.max(b.y, p.y)),
   }
 }
 

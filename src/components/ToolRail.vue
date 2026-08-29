@@ -1,17 +1,101 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import type { CounterColor, ToolMode } from '../types'
-import { COUNTER_COLORS } from '../geometry'
-import { useBoard } from '../composables/useBoard'
+import { COUNTER_COLORS, PITCH_H, PITCH_W } from '../geometry'
+import { MAX_BALLS, useBoard } from '../composables/useBoard'
+import { startPlacementDrag, type PlacementKind } from '../composables/usePlacement'
 import { DRAW_COLORS, DRAW_COLOR_NAMES, SWATCHES, TOOLS } from './controls'
+import BoardMenus from './BoardMenus.vue'
+import { FOOTBALL_PATH, footballTransform } from './football'
 
-const props = defineProps<{ tool: ToolMode; drawColor: string }>()
+const props = withDefaults(
+  defineProps<{
+    tool: ToolMode
+    drawColor: string
+    /**
+     * Lay the rail along the bottom rather than down the edge. Below about
+     * a tablet's width a column costs the pitch more than it is worth.
+     */
+    horizontal?: boolean
+  }>(),
+  { horizontal: false },
+)
 
 const emit = defineEmits<{
   'update:tool': [tool: ToolMode]
   'update:drawColor': [color: string]
+  /** A text label needs its words before it can be placed, so App asks. */
+  addLabel: []
 }>()
 
 const board = useBoard()
+
+const railEl = ref<HTMLElement | null>(null)
+
+/**
+ * Move between tools with the arrow keys, the way a radio group is expected
+ * to work — and choose as you go, because a tool is chosen by arriving at
+ * it. Tab reaches the group once and leaves it once, rather than stopping
+ * eight times on the way past.
+ */
+function onToolKeydown(index: number, event: KeyboardEvent): void {
+  const keys: Record<string, number> = {
+    ArrowDown: 1,
+    ArrowRight: 1,
+    ArrowUp: -1,
+    ArrowLeft: -1,
+  }
+  const step = keys[event.key]
+  if (step === undefined) return
+  event.preventDefault()
+  const next = (index + step + TOOLS.length) % TOOLS.length
+  emit('update:tool', TOOLS[next].id)
+  // Focus follows the selection, or the coach's next arrow press starts
+  // from where they were rather than from where they are.
+  const buttons = railEl.value?.querySelectorAll<HTMLElement>('[data-tool]')
+  buttons?.[next]?.focus()
+}
+
+/**
+ * Lucide outline paths, inlined rather than pulled in as a package: eight
+ * icons is a smaller thing to own than a dependency, and the rail is the
+ * only place in the app drawing them. `dashed` marks the stroke that gives
+ * Run its dashes, which is what tells it apart from Pass at a glance.
+ */
+const TOOL_ICONS: Record<ToolMode, { d: string; dashed?: boolean }[]> = {
+  select: [
+    { d: 'M12 2v20' }, { d: 'm15 19-3 3-3-3' }, { d: 'm19 9 3 3-3 3' },
+    { d: 'M2 12h20' }, { d: 'm5 9-3 3 3 3' }, { d: 'm9 5 3-3 3 3' },
+  ],
+  pen: [
+    { d: 'M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z' },
+    { d: 'm15 5 4 4' },
+  ],
+  'arrow-run': [{ d: 'M18 8l4 4-4 4' }, { d: 'M2 12h20', dashed: true }],
+  'arrow-pass': [{ d: 'M5 12h14' }, { d: 'm12 5 7 7-7 7' }],
+  line: [{ d: 'M5 12h14' }],
+  cone: [{ d: 'M13.73 4a2 2 0 0 0-3.46 0L2.6 17a2 2 0 0 0 1.73 3h15.34a2 2 0 0 0 1.73-3z' }],
+  text: [{ d: 'M12 4v16' }, { d: 'M4 7V4h16v3' }, { d: 'M9 20h6' }],
+  erase: [
+    { d: 'm7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21' },
+    { d: 'M22 21H7' }, { d: 'm5 11 9 9' },
+  ],
+}
+
+/**
+ * The keys App.vue actually listens for. Kept in the tooltip so the rail
+ * teaches the shortcut that works, rather than one it would be nice to have.
+ */
+const TOOL_KEYS: Record<ToolMode, string> = {
+  select: 'V',
+  pen: 'D',
+  'arrow-run': 'R',
+  'arrow-pass': 'P',
+  line: 'L',
+  cone: 'C',
+  text: 'T',
+  erase: 'E',
+}
 
 /**
  * A new player arrives where the board decides, which is rarely where the
@@ -27,6 +111,82 @@ function addPlayer(color: CounterColor): void {
   board.addCounter(color)
   if (props.tool !== 'select') emit('update:tool', 'select')
 }
+
+/** A drill may have eight balls. Past that the pitch stops being readable. */
+const atBallCap = computed(() => board.state.balls.length >= MAX_BALLS)
+
+const addBallTitle = computed(() => {
+  if (!board.state.ballsVisible) return 'Show the balls before putting another one out'
+  if (atBallCap.value) return `A drill can have ${MAX_BALLS} balls at most`
+  if (board.isDerived.value) return lockedTitle
+  return 'Drag a ball onto the pitch, or press for the middle'
+})
+
+/** Why the whole Add group refuses mid-move. */
+const lockedTitle = 'A player appearing mid-drill is never what anyone meant'
+
+/**
+ * Press to drop in the middle, drag to drop where you let go. Both are
+ * started by the same press, so the coach does not have to decide which
+ * gesture they are making before they make it.
+ */
+/**
+ * Set by a pointer gesture that has already placed something, so the click
+ * the browser synthesises after it does not place a second one.
+ */
+let placedByPointer = false
+
+function beginPlacement(what: PlacementKind, event: PointerEvent, onTap: () => void): void {
+  if (board.isDerived.value) return
+  startPlacementDrag(what, event, () => {
+    placedByPointer = true
+    onTap()
+  })
+}
+
+/**
+ * The same drop, for a press that had no pointer behind it.
+ *
+ * Enter and Space on a focused button, and every assistive technology that
+ * activates one, produce a click and no pointerdown at all — so a palette
+ * that only listened for pointers could be reached by keyboard but never
+ * used from one.
+ */
+function activate(place: () => void): void {
+  if (placedByPointer) {
+    placedByPointer = false
+    return
+  }
+  if (board.isDerived.value) return
+  place()
+}
+
+function placePlayer(color: CounterColor, event: PointerEvent): void {
+  beginPlacement({ kind: 'player', color }, event, () => addPlayer(color))
+}
+
+function placeBall(event: PointerEvent): void {
+  if (atBallCap.value || !board.state.ballsVisible) return
+  beginPlacement({ kind: 'ball' }, event, () => board.addBall())
+}
+
+/**
+ * Straight to Move afterwards, like a player: a cone dropped on the pitch is
+ * one the coach is about to nudge into place, and the Cone tool is for
+ * laying out a line of them rather than for the one just placed.
+ */
+function dropCentreCone(): void {
+  board.addMarker({ x: PITCH_W / 2, y: PITCH_H / 2 })
+  if (props.tool !== 'select') emit('update:tool', 'select')
+}
+
+function placeCone(event: PointerEvent): void {
+  beginPlacement({ kind: 'cone' }, event, dropCentreCone)
+}
+
+function placeText(event: PointerEvent): void {
+  beginPlacement({ kind: 'text' }, event, () => emit('addLabel'))
+}
 </script>
 
 <template>
@@ -35,36 +195,131 @@ function addPlayer(color: CounterColor): void {
     tablet is already on. Everything used once per drill stays in the bar
     across the top.
   -->
-  <nav class="rail" aria-label="Players and tools">
-    <div class="rail-group">
-      <button
-        v-for="color in COUNTER_COLORS"
-        :key="color"
-        :data-add-counter="color"
-        class="swatch"
-        :style="{ background: SWATCHES[color] }"
-        :disabled="board.isDerived.value"
-        :title="
-          board.isDerived.value
-            ? 'A player appearing mid-drill is never what anyone meant'
-            : `Add a ${color} player`
-        "
-        :aria-label="`Add a ${color} player`"
-        @click="addPlayer(color)"
-      />
+  <nav
+    ref="railEl"
+    :class="['rail', { 'rail--horizontal': horizontal }]"
+    aria-label="Players and tools"
+  >
+    <div class="rail-scroll">
+    <!--
+      What the drill is made of, said out loud. The swatches used to be an
+      unlabelled run of colour with no hint that they were the way a player
+      got onto the pitch at all.
+    -->
+    <div class="rail-group rail-group--add">
+      <span class="eyebrow">Add</span>
+      <div class="disc-grid">
+        <button
+          v-for="color in COUNTER_COLORS"
+          :key="color"
+          :data-add-counter="color"
+          class="swatch"
+          :style="{ background: SWATCHES[color] }"
+          :disabled="board.isDerived.value"
+          :title="board.isDerived.value ? lockedTitle : `Drag a ${color} player onto the pitch, or press for the middle`"
+          :aria-label="`Add a ${color} player`"
+          @pointerdown="placePlayer(color, $event)"
+          @click="activate(() => addPlayer(color))"
+        />
+      </div>
+
+      <div class="disc-grid disc-grid--objects">
+        <button
+          data-add-ball
+          class="object"
+          :disabled="atBallCap || !board.state.ballsVisible || board.isDerived.value"
+          :title="addBallTitle"
+          aria-label="Add a ball"
+          @pointerdown="placeBall($event)"
+          @click="activate(() => board.addBall())"
+        >
+          <!--
+            The same football the board draws, from the same path, so the
+            thing that adds a ball and the ball it adds cannot look like two
+            different objects.
+          -->
+          <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true">
+            <g transform="translate(12 12)">
+              <!-- The ball's own colours, not the button's: it is a picture
+                   of the object, and the object is a white football. -->
+              <circle r="9" fill="#ffffff" />
+              <path :d="FOOTBALL_PATH" :transform="footballTransform(9)" fill="#212121" fill-rule="evenodd" />
+            </g>
+          </svg>
+        </button>
+        <button
+          data-add-cone
+          class="object"
+          :disabled="board.isDerived.value"
+          title="Drag a cone onto the pitch, or press for the middle"
+          aria-label="Add a cone"
+          @pointerdown="placeCone($event)"
+          @click="activate(dropCentreCone)"
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.73 4a2 2 0 0 0-3.46 0L2.6 17a2 2 0 0 0 1.73 3h15.34a2 2 0 0 0 1.73-3z" /></svg>
+        </button>
+        <button
+          data-add-text
+          class="object"
+          :disabled="board.isDerived.value"
+          title="Drag a text label onto the pitch, or press for the middle"
+          aria-label="Add a text label"
+          @pointerdown="placeText($event)"
+          @click="activate(() => emit('addLabel'))"
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v16" /><path d="M4 7V4h16v3" /><path d="M9 20h6" /></svg>
+        </button>
+      </div>
+
+      <p class="helper">Drag on, or press to drop in the middle.</p>
     </div>
 
-    <div class="rail-group">
+    <!--
+      One tool is in force at any moment, which the row of identical pills
+      never said out loud. A radio group says it to a screen reader and the
+      ember fill says it across a pitch-side tablet held at arm's length.
+    -->
+    <div class="rail-group rail-group--tools" role="radiogroup" aria-label="Tool">
+      <span class="eyebrow">Tools</span>
       <button
-        v-for="t in TOOLS"
+        v-for="(t, index) in TOOLS"
         :key="t.id"
         :data-tool="t.id"
-        :class="['rail-chip', { 'is-active': tool === t.id }]"
+        :class="['rail-tool', { 'is-active': tool === t.id }]"
+        role="radio"
+        :aria-checked="tool === t.id"
+        :tabindex="tool === t.id ? 0 : -1"
+        :title="`${t.label}  ${TOOL_KEYS[t.id]}`"
+        @keydown="onToolKeydown(index, $event)"
         @click="emit('update:tool', t.id)"
-      >{{ t.label }}</button>
+      >
+        <svg
+          class="rail-tool-icon"
+          viewBox="0 0 24 24"
+          width="22"
+          height="22"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path
+            v-for="(p, i) in TOOL_ICONS[t.id]"
+            :key="i"
+            :d="p.d"
+            :stroke-dasharray="p.dashed ? '4 3' : undefined"
+          />
+        </svg>
+        <span class="rail-tool-label">{{ t.label }}</span>
+      </button>
+    </div>
+
     </div>
 
     <div class="rail-group rail-group--colors">
+      <span class="eyebrow">Ink</span>
       <button
         v-for="c in DRAW_COLORS"
         :key="c"
@@ -78,6 +333,9 @@ function addPlayer(color: CounterColor): void {
       />
     </div>
 
+    <div class="rail-group rail-group--menus">
+      <BoardMenus vertical />
+    </div>
   </nav>
 </template>
 
@@ -85,37 +343,311 @@ function addPlayer(color: CounterColor): void {
 .rail {
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
+  align-items: center;
+  gap: 0.6rem;
+  /*
+   * A fixed width, because a segmented control that changes width with its
+   * longest label is not a segmented control. 88px is the widest tool item
+   * plus the rail's own padding.
+   */
+  width: 88px;
+  flex: none;
   padding: 0.6rem 0.5rem;
-  background: #263238;
-  border-radius: 0.5rem;
-  overflow-y: auto;
+  background: var(--surface-1);
+  /* Everything in here that inherits a colour inherits this one. */
+  color: var(--ink-1);
+  border-radius: var(--radius-card);
+  /*
+   * Visible, so the Pitch and View popovers can stand clear of an 88px
+   * rail. The part that needs clipping does its own.
+   */
+  overflow: visible;
 }
+
+/*
+ * One scroll region for the whole rail, and nothing pinned.
+ *
+ * Ink and the two menus used to be held below the scrolling part so they
+ * could not scroll away. On a phone turned on its side that cost the
+ * scrolling part 120px of the 300 it had, and the tools — 300px of content
+ * — were left with 184px and no way to know they were there. A rail that
+ * scrolls as one list shows less at once and hides nothing.
+ */
+.rail-scroll {
+  flex: 1; min-height: 0; width: 100%;
+  display: flex; flex-direction: column; align-items: center; gap: 0.6rem;
+  /* Sideways stays hidden here for the same reason it does on a short
+   * screen: the tools group bleeds past the padding by design, and asking
+   * for a vertical scroll turns the horizontal one on as well. */
+  overflow-x: hidden;
+  overflow-y: auto;
+  /*
+   * A hairline in reserved space, rather than the platform's own bar.
+   *
+   * On a Mac set to show scrollbars always, the default one is 15px of an
+   * 88px rail — a sixth of it — and it is drawn OVER the swatches rather
+   * than beside them. `scrollbar-gutter` keeps its 6px whether or not the
+   * rail is currently long enough to scroll, so nothing shifts sideways the
+   * moment it is.
+   */
+  scrollbar-width: thin;
+  scrollbar-color: var(--ring) transparent;
+  scrollbar-gutter: stable;
+}
+.rail-scroll::-webkit-scrollbar { width: 6px; }
+.rail-scroll::-webkit-scrollbar-track { background: transparent; }
+.rail-scroll::-webkit-scrollbar-thumb {
+  background: var(--ring);
+  border-radius: 3px;
+}
+.rail-scroll::-webkit-scrollbar-thumb:hover { background: var(--ink-3); }
 
 .rail-group { display: flex; flex-direction: column; gap: 0.35rem; align-items: stretch; }
 
-/* Draw colours are small enough to pair up rather than run down the rail. */
-.rail-group--colors { flex-direction: row; flex-wrap: wrap; justify-content: center; }
+.rail-group--add { align-items: center; gap: 0.4rem; }
 
-.rail-chip {
-  border: 1px solid #ffffff40; background: #37474f; color: #eceff1;
-  border-radius: 0.4rem; padding: 0.45rem 0.6rem; cursor: pointer;
-  font-size: 0.8rem; text-align: center; white-space: nowrap;
+/*
+ * Two discs to a row rather than five down the rail: five in a column is
+ * most of a tablet's height spent on colour, and the rail still has tools
+ * and ink to fit under it.
+ */
+.disc-grid { display: grid; grid-template-columns: repeat(2, auto); gap: 0.35rem; justify-content: center; }
+/* Three objects in a two-column grid: the last one sits under the first. */
+.disc-grid--objects { grid-template-columns: repeat(2, auto); }
+
+.object {
+  width: 30px; height: 30px; display: grid; place-items: center;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--ink-1);
+  border-radius: var(--radius-control); cursor: pointer; padding: 0;
+  touch-action: none;
 }
-.rail-chip:disabled { opacity: 0.4; cursor: default; }
-.rail-chip.is-active { background: #546e7a; border-color: #ffffff; }
+.object:hover:not(:disabled) { background: var(--surface-3); }
+.object:disabled { opacity: 0.4; cursor: default; }
+
+.eyebrow {
+  width: 100%;
+  font-size: 0.65rem; font-weight: 800; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink-3); text-align: center;
+}
+
+/*
+ * Said once, where the discs are, because the drag is the interaction a
+ * coach will not guess at. The press is the one they will find anyway.
+ */
+.helper { margin: 0; font-size: 0.6rem; line-height: 1.3; text-align: center; color: var(--ink-3); }
+
+/*
+ * Full width, but within the rail's padding rather than bleeding past it.
+ * The bleed put an active tool's marker flush against the edge the pitch is
+ * on, at the cost of 16px of content wider than the box holding it — which
+ * a scrolling rail turns into sideways scroll, or clips.
+ */
+.rail-group--tools { align-self: stretch; gap: 0.15rem; }
+
+/* Draw colours are small enough to pair up rather than run down the rail. */
+.rail-group--colors { flex: none; flex-direction: row; flex-wrap: wrap; justify-content: center; }
+
+/*
+ * Last down the rail, and pushed to the bottom: which pitch and what is
+ * drawn on it are settled once and then left alone, unlike everything
+ * above them.
+ */
+.rail-group--menus { flex: none; padding-top: 0.5rem; border-top: 1px solid var(--border); width: 100%; }
+.rail-group--colors { flex: none; }
+
+.rail-tool {
+  position: relative;
+  width: 100%;
+  min-height: 46px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.15rem;
+  border: none; background: transparent; color: var(--ink-3);
+  border-radius: 0.75rem; cursor: pointer; padding: 0.3rem 0;
+  transition: transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1), background 180ms linear, color 180ms linear;
+}
+.rail-tool-label {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+}
+.rail-tool:hover { background: #ffffff0f; color: var(--ink-1); transform: translateY(-1px); }
+.rail-tool:active { transform: translateY(0) scale(0.97); }
+.rail-tool:focus-visible { outline: 2px solid #ff6b35; outline-offset: -2px; }
+
+.rail-tool.is-active {
+  background: var(--brand-gradient);
+  color: #ffffff;
+  box-shadow: 0 6px 16px -8px rgba(238, 10, 36, 0.55);
+  transform: none;
+}
+/* The bar on the pitch-facing edge: the active tool is what the pitch obeys. */
+.rail-tool.is-active::after {
+  content: ''; position: absolute; top: 6px; bottom: 6px; right: 0; width: 3px;
+  border-radius: 3px 0 0 3px; background: #ff6b35;
+}
 
 .swatch {
-  width: 2.1rem; height: 2.1rem; border-radius: 50%;
-  border: 2px solid #ffffff40; cursor: pointer; padding: 0;
+  /*
+   * 30px with a mouse, 44px under a finger. The rail carries eight tools
+   * under these, and a column of full-size discs pushed Erase off the
+   * bottom of a 1000px screen.
+   */
+  width: 30px; height: 30px; border-radius: 50%;
+  border: 2px solid var(--ring); cursor: pointer; padding: 0;
   align-self: center;
+  /*
+   * The browser's own touch gestures would otherwise win: without this, a
+   * finger dragged off a swatch scrolls the rail instead of carrying a
+   * player out to the pitch.
+   */
+  touch-action: none;
 }
+.swatch:disabled { opacity: 0.4; cursor: default; }
 .swatch--sm { width: 1.5rem; height: 1.5rem; }
 .swatch.is-active { border-color: #ffffff; }
 
+/*
+ * Lying down: the same groups, the same order, read left to right instead
+ * of top to bottom. Nothing is removed — a control a coach learnt on a
+ * tablet is in the same rail on a phone, just along a different edge.
+ */
+.rail--horizontal {
+  flex-flow: row wrap;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: auto;
+  /*
+   * Capped, so the strip can never take so much of a short screen that the
+   * pitch has nowhere left to be. Past the cap it scrolls, which is the
+   * lesser of the two evils.
+   */
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: 0.5rem 0.6rem;
+}
+/*
+ * Wraps onto a second line rather than scrolling sideways. Lying down, the
+ * strip shares its width with whatever the inspector is not using, and the
+ * tools — the most-used group in the rail — ended up entirely behind a
+ * horizontal scroll: 822px of controls in a 284px window. A second row of
+ * 50px costs a phone less than a hidden toolset does.
+ */
+.rail--horizontal .rail-scroll {
+  flex-flow: row wrap;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  row-gap: 0.35rem;
+  overflow: visible;
+}
+/*
+ * Each group keeps its label, upright and beside its controls rather than
+ * above them. Turning the labels on their side to save width made the same
+ * word read differently depending on which way the rail was lying, and
+ * letting the groups wrap let the widest of them squeeze the tools down to
+ * a sliver — a flex item that wraps takes the room it is left, not the room
+ * it needs.
+ */
+.rail--horizontal .rail-group {
+  /*
+   * Shrinkable and wrapping, both deliberately. A group that can do
+   * neither runs straight out of the strip and over whatever is beside it
+   * — eight tools are 464px, and a phone sharing its width with the notes
+   * panel has nothing like that to give.
+   */
+  /*
+   * A line each, wrapping within itself. Sharing lines let Ink ride up
+   * beside the tools and read as part of them, and a group that could
+   * neither shrink nor wrap ran straight out of the strip and over the
+   * notes panel beside it — eight tools are 464px, and a phone has nothing
+   * like that to give.
+   */
+  flex: 0 1 100%;
+  flex-flow: row wrap;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  gap: 0.3rem;
+}
+.rail--horizontal .rail-group--tools {
+  align-self: center;
+}
+/* Five discs in a row rather than two: the strip has width and no height. */
+.rail--horizontal .disc-grid { grid-template-columns: repeat(5, auto); }
+.rail--horizontal .disc-grid--objects { grid-template-columns: repeat(3, auto); }
+/*
+ * `flex: none` as well as a width: a flex child shrinks below its width by
+ * default, and eight tools sharing what the strip has left is how the whole
+ * group ended up a sliver between Add and Ink.
+ */
+.rail--horizontal .rail-tool { width: 58px; flex: none; }
+.rail--horizontal .swatch,
+.rail--horizontal .object { flex: none; }
+.rail--horizontal .rail-tool.is-active::after { display: none; }
+/* Under the rest rather than beside it, now that every group has a line. */
+.rail--horizontal .rail-group--menus {
+  flex-wrap: nowrap;
+  align-items: center;
+  width: auto;
+  padding-top: 0.35rem;
+  padding-left: 0;
+  border-left: none;
+  border-top: 1px solid var(--border);
+}
+/* No room for a sentence along the bottom; the tooltips still carry it. */
+.rail--horizontal .helper { display: none; }
+.rail--horizontal .eyebrow { flex: none; width: auto; }
+
+/*
+ * Short screens: the rail carries the same fifteen controls, drawn smaller,
+ * rather than putting the last of them behind a scroll. A laptop at 1080
+ * with a dock and a browser chrome has around 700px to give it, which the
+ * full-size rail overruns by about the height of one tool.
+ */
+@media (max-height: 900px) {
+  .rail { gap: 0.35rem; }
+  /*
+   * The wrapper stops being a box of its own, so ink and the menus join the
+   * same scroll as the tools instead of standing outside it.
+   */
+  .rail-scroll { display: contents; }
+  .rail {
+    /*
+     * Sideways stays hidden. Asking for `overflow-y` alone turns on
+     * `overflow-x` too, and the tools group bleeds 8px past the rail's
+     * padding on purpose so an active tool's bar sits flush with the edge —
+     * which became 16px of horizontal scroll that shunted the swatches out
+     * of view.
+     */
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ring) transparent;
+  }
+  .rail::-webkit-scrollbar { width: 6px; }
+  .rail::-webkit-scrollbar-track { background: transparent; }
+  .rail::-webkit-scrollbar-thumb { background: var(--ring); border-radius: 3px; }
+  .rail-scroll { gap: 0.35rem; }
+  /*
+   * The icon and the padding set a tool's height, not `min-height`, so both
+   * have to come down for the rail to lose a row's worth of space.
+   */
+  .rail-tool { min-height: 0; padding: 0.15rem 0; gap: 0; }
+  .rail-tool-icon { width: 18px; height: 18px; }
+  .rail-tool-label { font-size: 9px; }
+  .swatch { width: 26px; height: 26px; }
+  .object { width: 26px; height: 26px; }
+  .helper { display: none; }
+}
+
 @media (pointer: coarse) {
-  .rail-chip { min-height: 44px; }
+  /* A finger needs its 44px whatever the screen height says. */
+  .rail-tool { min-height: 44px; }
   .swatch { width: 44px; height: 44px; }
   .swatch--sm { width: 36px; height: 36px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rail-tool { transition: background 180ms linear, color 180ms linear; }
+  .rail-tool:hover, .rail-tool:active { transform: none; }
 }
 </style>

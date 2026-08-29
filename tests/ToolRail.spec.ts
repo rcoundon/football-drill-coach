@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import type { ToolMode } from '../src/types'
 import ToolRail from '../src/components/ToolRail.vue'
-import { useBoard, __resetBoardForTests } from '../src/composables/useBoard'
+import { useBoard, __resetBoardForTests, MAX_BALLS } from '../src/composables/useBoard'
 import { COUNTER_COLORS } from '../src/geometry'
 import { TOOLS } from '../src/components/controls'
 
@@ -10,6 +10,17 @@ beforeEach(() => __resetBoardForTests())
 
 function mountRail(tool: ToolMode = 'select') {
   return mount(ToolRail, { props: { tool, drawColor: '#ffffff' } })
+}
+
+/**
+ * Placing is one gesture with two endings: let go without moving and the
+ * thing lands in the middle. The press alone decides nothing, so the release
+ * is what these tests are actually exercising.
+ */
+async function pressAndRelease(wrapper: ReturnType<typeof mount>, selector: string) {
+  await wrapper.find(selector).trigger('pointerdown')
+  window.dispatchEvent(new Event('pointerup'))
+  await wrapper.vm.$nextTick()
 }
 
 describe('the tool rail', () => {
@@ -25,19 +36,19 @@ describe('the tool rail', () => {
   it('adds a player of the colour pressed', async () => {
     const board = useBoard()
     const wrapper = mountRail()
-    await wrapper.find('[data-add-counter="blue"]').trigger('click')
+    await pressAndRelease(wrapper, '[data-add-counter="blue"]')
     expect(board.state.counters[0].color).toBe('blue')
   })
 
   it('switches to Move, so the new player can be dragged straight away', async () => {
     const wrapper = mountRail('arrow-pass')
-    await wrapper.find('[data-add-counter="blue"]').trigger('click')
+    await pressAndRelease(wrapper, '[data-add-counter="blue"]')
     expect(wrapper.emitted('update:tool')!.at(-1)).toEqual(['select'])
   })
 
   it('does not bother emitting when Move is already selected', async () => {
     const wrapper = mountRail('select')
-    await wrapper.find('[data-add-counter="blue"]').trigger('click')
+    await pressAndRelease(wrapper, '[data-add-counter="blue"]')
     expect(wrapper.emitted('update:tool')).toBeUndefined()
   })
 
@@ -77,5 +88,226 @@ describe('the tool rail', () => {
     const wrapper = mountRail()
     expect(wrapper.find('[data-undo]').exists()).toBe(false)
     expect(wrapper.find('[data-redo]').exists()).toBe(false)
+  })
+})
+
+/**
+ * A rail that only offered colours never said what else a drill is made of.
+ * Ball, cone and text sit with the players, under one label, because they
+ * are all answers to the same question: how do I put something on the pitch?
+ */
+describe('the Add group', () => {
+  it('names itself, so a run of colour reads as a way to add players', () => {
+    expect(mountRail().text()).toMatch(/add/i)
+  })
+
+  it('offers a ball, a cone and a text label beside the players', () => {
+    const wrapper = mountRail()
+    expect(wrapper.find('[data-add-ball]').exists()).toBe(true)
+    expect(wrapper.find('[data-add-cone]').exists()).toBe(true)
+    expect(wrapper.find('[data-add-text]').exists()).toBe(true)
+  })
+
+  it('puts a ball in the middle when the ball is pressed', async () => {
+    const board = useBoard()
+    const wrapper = mountRail()
+    const before = board.state.balls.length
+    await pressAndRelease(wrapper, '[data-add-ball]')
+    expect(board.state.balls).toHaveLength(before + 1)
+  })
+
+  it('puts a cone in the middle, then hands the board back to Move', async () => {
+    const board = useBoard()
+    const wrapper = mountRail('cone')
+    await pressAndRelease(wrapper, '[data-add-cone]')
+    expect(board.state.markers).toHaveLength(1)
+    expect(wrapper.emitted('update:tool')!.at(-1)).toEqual(['select'])
+  })
+
+  /** A label with no words is nothing to look at, so the app asks first. */
+  it('asks the app for the words when a text label is pressed', async () => {
+    const wrapper = mountRail()
+    await pressAndRelease(wrapper, '[data-add-text]')
+    expect(wrapper.emitted('addLabel')).toHaveLength(1)
+  })
+
+  it('stops at the cap, and says why', async () => {
+    const board = useBoard()
+    while (board.state.balls.length < MAX_BALLS) board.addBall()
+    const wrapper = mountRail()
+    await wrapper.vm.$nextTick()
+    const add = wrapper.find('[data-add-ball]')
+    expect(add.attributes('disabled')).toBeDefined()
+    expect(add.attributes('title')).toMatch(new RegExp(String(MAX_BALLS)))
+  })
+
+  /**
+   * Otherwise the button works, nothing appears, and the coach presses it
+   * again — then finds four balls when they next show them.
+   */
+  it('will not put a ball out while the balls are hidden, and says why', async () => {
+    const board = useBoard()
+    board.toggleBallsVisible()
+    const wrapper = mountRail()
+    await wrapper.vm.$nextTick()
+    const add = wrapper.find('[data-add-ball]')
+    expect(add.attributes('disabled')).toBeDefined()
+    expect(add.attributes('title')).toMatch(/show the balls/i)
+  })
+
+  it('will not add anything while the drill is playing', async () => {
+    const board = useBoard()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+    board.scrubTo(500)
+
+    const wrapper = mountRail()
+    expect(wrapper.find('[data-add-cone]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-add-text]').attributes('disabled')).toBeDefined()
+    board.endScrub()
+  })
+})
+
+/**
+ * A radio group that cannot be driven with the arrow keys is a radio group
+ * in name only, and eight tools that each take a Tab stop is eight presses
+ * between the rail and the board.
+ */
+describe('reaching the tools from the keyboard', () => {
+  it('puts exactly one tool in the tab order — the one in use', () => {
+    const wrapper = mountRail('cone')
+    const tabbable = wrapper
+      .findAll('[data-tool]')
+      .filter((button) => button.attributes('tabindex') === '0')
+    expect(tabbable).toHaveLength(1)
+    expect(tabbable[0].attributes('data-tool')).toBe('cone')
+  })
+
+  it('moves to the next tool on an arrow key, and chooses it', async () => {
+    const wrapper = mountRail('select')
+    await wrapper.find('[data-tool="select"]').trigger('keydown', { key: 'ArrowDown' })
+    expect(wrapper.emitted('update:tool')!.at(-1)).toEqual(['pen'])
+  })
+
+  it('goes the other way too', async () => {
+    const wrapper = mountRail('pen')
+    await wrapper.find('[data-tool="pen"]').trigger('keydown', { key: 'ArrowUp' })
+    expect(wrapper.emitted('update:tool')!.at(-1)).toEqual(['select'])
+  })
+
+  /** Past the end is the beginning: a rail has two ends and no dead stop. */
+  it('wraps around at both ends', async () => {
+    const first = mountRail('select')
+    await first.find('[data-tool="select"]').trigger('keydown', { key: 'ArrowUp' })
+    expect(first.emitted('update:tool')!.at(-1)).toEqual(['erase'])
+
+    const last = mountRail('erase')
+    await last.find('[data-tool="erase"]').trigger('keydown', { key: 'ArrowDown' })
+    expect(last.emitted('update:tool')!.at(-1)).toEqual(['select'])
+  })
+
+  it('leaves other keys to the board', async () => {
+    const wrapper = mountRail('select')
+    await wrapper.find('[data-tool="select"]').trigger('keydown', { key: 'r' })
+    expect(wrapper.emitted('update:tool')).toBeUndefined()
+  })
+})
+
+/**
+ * Lying down, the rail shares its width with whatever the notes panel is
+ * not using. Eight tools are 464px side by side, and a group that can
+ * neither shrink nor wrap runs out of the strip and over what is beside it.
+ */
+describe('the rail lying down', () => {
+  function mountHorizontal() {
+    return mount(ToolRail, {
+      props: { tool: 'select' as ToolMode, drawColor: '#ffffff', horizontal: true },
+    })
+  }
+
+  it('carries every control it carries standing up', () => {
+    const wrapper = mountHorizontal()
+    expect(wrapper.findAll('[data-tool]')).toHaveLength(TOOLS.length)
+    expect(wrapper.findAll('[data-add-counter]')).toHaveLength(COUNTER_COLORS.length)
+    expect(wrapper.find('[data-add-ball]').exists()).toBe(true)
+    expect(wrapper.find('[data-pitch-menu]').exists()).toBe(true)
+  })
+
+  /**
+   * The labels were turned on their side to save width, which set the same
+   * word differently depending on which way the rail was lying.
+   */
+  it('keeps its group labels the right way up', () => {
+    const wrapper = mountHorizontal()
+    expect(wrapper.text()).toMatch(/add/i)
+    expect(wrapper.text()).toMatch(/tools/i)
+    expect(wrapper.text()).toMatch(/ink/i)
+  })
+
+  it('says which way it is lying, so the styles can follow', () => {
+    expect(mountHorizontal().find('.rail').classes()).toContain('rail--horizontal')
+    expect(mountRail().find('.rail').classes()).not.toContain('rail--horizontal')
+  })
+})
+
+/**
+ * Enter and Space on a focused button, and every assistive technology that
+ * activates one, produce a click and no pointerdown at all. A palette that
+ * only listened for pointers could be reached by keyboard but never used
+ * from one.
+ */
+describe('placing without a pointer', () => {
+  it('adds a player when the swatch is activated', async () => {
+    const board = useBoard()
+    const wrapper = mountRail()
+    await wrapper.find('[data-add-counter="blue"]').trigger('click')
+    expect(board.state.counters).toHaveLength(1)
+    expect(board.state.counters[0].color).toBe('blue')
+  })
+
+  it('adds a ball, a cone and a label the same way', async () => {
+    const board = useBoard()
+    const wrapper = mountRail()
+    const balls = board.state.balls.length
+
+    await wrapper.find('[data-add-ball]').trigger('click')
+    await wrapper.find('[data-add-cone]').trigger('click')
+    await wrapper.find('[data-add-text]').trigger('click')
+
+    expect(board.state.balls).toHaveLength(balls + 1)
+    expect(board.state.markers).toHaveLength(1)
+    expect(wrapper.emitted('addLabel')).toHaveLength(1)
+  })
+
+  /**
+   * A press with a pointer behind it produces a click too, and the two
+   * routes must not both place.
+   */
+  it('places once for a press, not twice', async () => {
+    const board = useBoard()
+    const wrapper = mountRail()
+    const swatch = wrapper.find('[data-add-counter="red"]')
+
+    await swatch.trigger('pointerdown')
+    window.dispatchEvent(new Event('pointerup'))
+    await wrapper.vm.$nextTick()
+    await swatch.trigger('click')
+
+    expect(board.state.counters).toHaveLength(1)
+  })
+
+  it('refuses while the drill is mid-move', async () => {
+    const board = useBoard()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+    board.scrubTo(500)
+
+    const wrapper = mountRail()
+    await wrapper.find('[data-add-counter="blue"]').trigger('click')
+
+    expect(board.state.counters).toHaveLength(0)
+    board.endScrub()
   })
 })

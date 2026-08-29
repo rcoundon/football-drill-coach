@@ -296,6 +296,9 @@ export function parsePattern(value: unknown): Pattern {
         throw new Error('That pattern has a damaged frame duration.')
       }
     }
+    if (frame.note !== undefined && typeof frame.note !== 'string') {
+      throw new Error('That pattern has a damaged phase note.')
+    }
   }
 
   return value as unknown as Pattern
@@ -446,6 +449,7 @@ function frameWithDefaults(
     balls: ballsOf(frame, ballId),
     drawings: (frame.drawings ?? legacyDrawings) as Drawing[],
     ...(typeof frame.duration === 'number' ? { duration: frame.duration } : {}),
+    ...(typeof frame.note === 'string' && frame.note !== '' ? { note: frame.note } : {}),
   }
 }
 
@@ -475,6 +479,7 @@ function toPattern(name: string, snap: BoardSnapshot, id: string, createdAt: str
     pitch: copy.pitch,
     frames: copy.frames,
     labelsVisible: copy.labelsVisible ?? true,
+    counterLabelsVisible: copy.counterLabelsVisible ?? true,
     ballsVisible: copy.ballsVisible ?? true,
     notes: copy.notes ?? '',
     notesVisible: copy.notesVisible ?? true,
@@ -600,6 +605,7 @@ function patternToSnapshot(pattern: Pattern): BoardSnapshot {
     frames: frames.length > 0 ? frames : [emptyFrameData()],
     currentFrame: 0,
     labelsVisible: (copy.labelsVisible as boolean | undefined) ?? true,
+    counterLabelsVisible: (copy.counterLabelsVisible as boolean | undefined) ?? true,
     ballsVisible: ballsVisibleOf(copy),
     notes: (copy.notes as string | undefined) ?? '',
     notesVisible: (copy.notesVisible as boolean | undefined) ?? true,
@@ -646,7 +652,8 @@ function isValidFrame(value: unknown): boolean {
     // has to be one `durationOf` can actually use, exactly as `parsePattern`
     // already requires for a saved pattern's frames.
     (value.duration === undefined ||
-      (typeof value.duration === 'number' && Number.isFinite(value.duration) && value.duration > 0))
+      (typeof value.duration === 'number' && Number.isFinite(value.duration) && value.duration > 0)) &&
+    (value.note === undefined || typeof value.note === 'string')
   )
 }
 
@@ -693,6 +700,7 @@ function toSnapshot(value: Record<string, unknown>): BoardSnapshot {
     frames,
     currentFrame: typeof value.currentFrame === 'number' ? value.currentFrame : 0,
     labelsVisible: (value.labelsVisible as boolean | undefined) ?? true,
+    counterLabelsVisible: (value.counterLabelsVisible as boolean | undefined) ?? true,
     ballsVisible: ballsVisibleOf(value),
     notes: (value.notes as string | undefined) ?? '',
     notesVisible: (value.notesVisible as boolean | undefined) ?? true,

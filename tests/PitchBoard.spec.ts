@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, type DOMWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import PitchBoard, { DOUBLE_PRESS_MS, STALE_DRAG_MS } from '../src/components/PitchBoard.vue'
+import { TOKEN_CASING } from '../src/components/controls'
+import { FOOTBALL_PATH } from '../src/components/football'
 import { useBoard, __resetBoardForTests } from '../src/composables/useBoard'
 import { BALL_HIT_RADIUS_ATTACHED } from '../src/components/BallToken.vue'
 import { PITCH_H, PITCH_W } from '../src/geometry'
@@ -425,17 +427,23 @@ describe('discarding a stray stroke', () => {
 
     // Finger A presses in pen mode: startPen pushes an undo entry.
     await firePointer(wrapper.find('svg'), 'pointerdown', clientFor(10, 10))
-    // Finger B taps the pitch buttons, which live outside the captured SVG.
-    board.setPitchType('full')
-    board.setPitchType('half')
+    /*
+     * Finger B taps a control outside the captured SVG. Deliberately not a
+     * pitch preset any more: a preset changes which part of the board is
+     * drawn, and therefore where on the pitch a given point on the screen
+     * is, so a stroke that straddled one would be measuring two different
+     * coordinate spaces rather than the undo stack this is about.
+     */
+    board.toggleLabelsVisible()
+    board.toggleLabelsVisible()
     // Finger A lifts without moving: the stroke is too short to keep.
     await firePointer(wrapper.find('svg'), 'pointerup', clientFor(10, 10))
 
     expect(board.state.drawings).toHaveLength(0)
-    expect(board.state.pitch.type).toBe('half')
+    expect(board.state.labelsVisible).toBe(true)
 
     board.undo()
-    expect(board.state.pitch.type).toBe('full')
+    expect(board.state.labelsVisible).toBe(false)
     expect(board.state.drawings).toHaveLength(0)
 
     board.undo()
@@ -722,19 +730,27 @@ describe('cones', () => {
 })
 
 describe('appearance', () => {
-  it('draws players without an outline', async () => {
+  /**
+   * Players and cones were flattened onto the grass deliberately, and the
+   * casing is deliberately back: a red disc is 1.03:1 against the pitch by
+   * luminance and a blue one 1.11:1, so both are told apart from the grass
+   * by hue alone — the one channel colour blindness, bright sunlight and a
+   * cheap screen each take away. The ring clears 3:1 against the pitch and
+   * against its markings, so the shape survives all three.
+   */
+  it('gives players a casing, so the shape does not depend on hue', async () => {
     useBoard().addCounter('red')
     const wrapper = mountBoard()
     await wrapper.vm.$nextTick()
     const disc = wrapper.find('[data-counter] circle')
-    expect(disc.attributes('stroke')).toBeUndefined()
+    expect(disc.attributes('stroke')).toBe(TOKEN_CASING)
   })
 
-  it('draws cones without an outline', async () => {
+  it('gives cones the same casing', async () => {
     useBoard().addMarker({ x: 20, y: 20 })
     const wrapper = mountBoard()
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('[data-marker] polygon').attributes('stroke')).toBeUndefined()
+    expect(wrapper.find('[data-marker] polygon').attributes('stroke')).toBe(TOKEN_CASING)
   })
 
   /**
@@ -745,21 +761,24 @@ describe('appearance', () => {
     const wrapper = mountBoard()
     await wrapper.vm.$nextTick()
     const ball = wrapper.find('[data-ball]')
+    // The white disc behind the panels, which is what stops the ball
+    // disappearing into a white pitch marking.
     expect(ball.find('circle').attributes('stroke')).toBeDefined()
-    expect(ball.find('polygon').exists()).toBe(true)
-    expect(ball.findAll('line').length).toBe(5)
+    expect(ball.find('path').attributes('d')).toBe(FOOTBALL_PATH)
   })
 
   /**
    * PNG export serialises the SVG, so anything styled in CSS is lost. Every
-   * value that makes the ball look like a ball must be an attribute.
+   * value that makes the ball look like a ball must be an attribute — the
+   * asset this path came from carries its fill in a `<style>` block, which
+   * would have gone out of the export as a black square.
    */
   it('styles the ball with attributes, so PNG export keeps it', async () => {
     const wrapper = mountBoard()
     await wrapper.vm.$nextTick()
-    const ball = wrapper.find('[data-ball]')
-    expect(ball.find('polygon').attributes('fill')).toBeDefined()
-    expect(ball.find('line').attributes('stroke')).toBeDefined()
+    const panels = wrapper.find('[data-ball]').find('path')
+    expect(panels.attributes('fill')).toBeDefined()
+    expect(panels.attributes('fill-rule')).toBe('evenodd')
   })
 })
 

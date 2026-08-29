@@ -165,3 +165,37 @@ describe('deleteCounter', () => {
     expect(board.state.counters).toHaveLength(1)
   })
 })
+
+/**
+ * A player is cast for the whole drill — the same person from start to end —
+ * so their colour is not something that can differ from phase to phase, any
+ * more than their name is.
+ */
+describe('recolouring a player', () => {
+  it('changes them on every phase, undoably', () => {
+    const board = useBoard()
+    const counter = board.addCounter('red')
+    board.addFrame()
+
+    board.setCounterColor(counter.id, 'blue')
+    expect(board.state.frames.every((f) => f.counters[0].color === 'blue')).toBe(true)
+
+    board.undo()
+    expect(board.state.frames.every((f) => f.counters[0].color === 'red')).toBe(true)
+  })
+
+  /**
+   * Checked by undoing rather than by reading `canUndo`, which was already
+   * true from adding the player and stayed true either way.
+   */
+  it('commits nothing when the colour is already what was asked for', () => {
+    const board = useBoard()
+    const counter = board.addCounter('red')
+
+    board.setCounterColor(counter.id, 'red')
+    board.undo()
+
+    // One undo reaches past the colour that never changed to the player.
+    expect(board.state.counters).toHaveLength(0)
+  })
+})

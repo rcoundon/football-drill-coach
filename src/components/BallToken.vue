@@ -21,6 +21,7 @@ export const BALL_HIT_RADIUS_FREE = 3.2
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Vec } from '../types'
+import { FOOTBALL_PATH, footballTransform } from './football'
 
 const props = defineProps<{ pos: Vec; attached: boolean }>()
 defineEmits<{ grab: [event: PointerEvent] }>()
@@ -33,20 +34,18 @@ const hitRadius = computed(() =>
 <template>
   <g data-ball :transform="`translate(${pos.x} ${pos.y})`" style="cursor: grab">
     <!--
-      A football rather than a plain disc: one dark pentagon with seams
-      running towards the edge, stopping just short of the outline the way
-      a real ball's seams meet its outer patches rather than its rim.
-      A full net turns to mush at this size, and
-      every value here is an SVG attribute so it survives PNG export, which
-      serialises the SVG and loses anything styled in CSS.
+      The football from the assets folder, drawn at ball size. The white
+      disc behind it is what makes it a ball rather than a blot: the panels
+      are holes in that one path, not shapes of their own.
+
+      It keeps its outline, deliberately: the ball is white and frequently
+      sits on a white pitch marking — the halfway line, the centre circle —
+      where without an edge it would disappear entirely. Every value is an
+      SVG attribute, because the PNG export serialises this SVG and loses
+      anything styled in CSS.
     -->
     <circle r="1.3" fill="#ffffff" stroke="#3f3f3f" stroke-width="0.18" />
-    <line x1="0.0" y1="-0.52" x2="0.0" y2="-1.17" stroke="#212121" stroke-width="0.14" stroke-linecap="round" />
-    <line x1="0.495" y1="-0.161" x2="1.113" y2="-0.362" stroke="#212121" stroke-width="0.14" stroke-linecap="round" />
-    <line x1="0.306" y1="0.421" x2="0.688" y2="0.946" stroke="#212121" stroke-width="0.14" stroke-linecap="round" />
-    <line x1="-0.306" y1="0.421" x2="-0.688" y2="0.946" stroke="#212121" stroke-width="0.14" stroke-linecap="round" />
-    <line x1="-0.495" y1="-0.161" x2="-1.113" y2="-0.362" stroke="#212121" stroke-width="0.14" stroke-linecap="round" />
-    <polygon points="0.0,-0.52 0.495,-0.161 0.306,0.421 -0.306,0.421 -0.495,-0.161" fill="#212121" />
+    <path :d="FOOTBALL_PATH" :transform="footballTransform(1.3)" fill="#212121" fill-rule="evenodd" />
     <circle
       :r="hitRadius"
       fill="transparent"
