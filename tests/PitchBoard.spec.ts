@@ -3,6 +3,7 @@ import { mount, type DOMWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import PitchBoard, { DOUBLE_PRESS_MS, STALE_DRAG_MS } from '../src/components/PitchBoard.vue'
 import { TOKEN_CASING } from '../src/components/controls'
+import { FOOTBALL_PATH } from '../src/components/football'
 import { useBoard, __resetBoardForTests } from '../src/composables/useBoard'
 import { BALL_HIT_RADIUS_ATTACHED } from '../src/components/BallToken.vue'
 import { PITCH_H, PITCH_W } from '../src/geometry'
@@ -760,21 +761,24 @@ describe('appearance', () => {
     const wrapper = mountBoard()
     await wrapper.vm.$nextTick()
     const ball = wrapper.find('[data-ball]')
+    // The white disc behind the panels, which is what stops the ball
+    // disappearing into a white pitch marking.
     expect(ball.find('circle').attributes('stroke')).toBeDefined()
-    expect(ball.find('polygon').exists()).toBe(true)
-    expect(ball.findAll('line').length).toBe(5)
+    expect(ball.find('path').attributes('d')).toBe(FOOTBALL_PATH)
   })
 
   /**
    * PNG export serialises the SVG, so anything styled in CSS is lost. Every
-   * value that makes the ball look like a ball must be an attribute.
+   * value that makes the ball look like a ball must be an attribute — the
+   * asset this path came from carries its fill in a `<style>` block, which
+   * would have gone out of the export as a black square.
    */
   it('styles the ball with attributes, so PNG export keeps it', async () => {
     const wrapper = mountBoard()
     await wrapper.vm.$nextTick()
-    const ball = wrapper.find('[data-ball]')
-    expect(ball.find('polygon').attributes('fill')).toBeDefined()
-    expect(ball.find('line').attributes('stroke')).toBeDefined()
+    const panels = wrapper.find('[data-ball]').find('path')
+    expect(panels.attributes('fill')).toBeDefined()
+    expect(panels.attributes('fill-rule')).toBe('evenodd')
   })
 })
 

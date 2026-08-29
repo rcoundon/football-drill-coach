@@ -6,6 +6,7 @@ import { MAX_BALLS, useBoard } from '../composables/useBoard'
 import { startPlacementDrag, type PlacementKind } from '../composables/usePlacement'
 import { DRAW_COLORS, DRAW_COLOR_NAMES, SWATCHES, TOOLS } from './controls'
 import BoardMenus from './BoardMenus.vue'
+import { FOOTBALL_PATH, footballTransform } from './football'
 
 const props = withDefaults(
   defineProps<{
@@ -233,15 +234,17 @@ function placeText(event: PointerEvent): void {
           @click="activate(() => board.addBall())"
         >
           <!--
-            The same football the board draws, at icon size: a dark pentagon
-            with five seams running out towards the rim. The handoff's own
-            icon was a circle with a shape inside it that reads as a face at
-            18px, and the ball on the pitch looks nothing like it.
+            The same football the board draws, from the same path, so the
+            thing that adds a ball and the ball it adds cannot look like two
+            different objects.
           -->
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" />
-            <polygon points="12,8.4 15.43,10.89 14.12,14.91 9.88,14.91 8.57,10.89" fill="currentColor" stroke="none" />
-            <path d="M12 8.4V3.9M15.43 10.89 19.7 9.49M14.12 14.91 16.76 18.55M9.88 14.91 7.24 18.55M8.57 10.89 4.3 9.49" />
+          <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true">
+            <g transform="translate(12 12)">
+              <!-- The ball's own colours, not the button's: it is a picture
+                   of the object, and the object is a white football. -->
+              <circle r="9" fill="#ffffff" />
+              <path :d="FOOTBALL_PATH" :transform="footballTransform(9)" fill="#212121" fill-rule="evenodd" />
+            </g>
           </svg>
         </button>
         <button
