@@ -213,3 +213,40 @@ describe('reaching the tools from the keyboard', () => {
     expect(wrapper.emitted('update:tool')).toBeUndefined()
   })
 })
+
+/**
+ * Lying down, the rail shares its width with whatever the notes panel is
+ * not using. Eight tools are 464px side by side, and a group that can
+ * neither shrink nor wrap runs out of the strip and over what is beside it.
+ */
+describe('the rail lying down', () => {
+  function mountHorizontal() {
+    return mount(ToolRail, {
+      props: { tool: 'select' as ToolMode, drawColor: '#ffffff', horizontal: true },
+    })
+  }
+
+  it('carries every control it carries standing up', () => {
+    const wrapper = mountHorizontal()
+    expect(wrapper.findAll('[data-tool]')).toHaveLength(TOOLS.length)
+    expect(wrapper.findAll('[data-add-counter]')).toHaveLength(COUNTER_COLORS.length)
+    expect(wrapper.find('[data-add-ball]').exists()).toBe(true)
+    expect(wrapper.find('[data-pitch-menu]').exists()).toBe(true)
+  })
+
+  /**
+   * The labels were turned on their side to save width, which set the same
+   * word differently depending on which way the rail was lying.
+   */
+  it('keeps its group labels the right way up', () => {
+    const wrapper = mountHorizontal()
+    expect(wrapper.text()).toMatch(/add/i)
+    expect(wrapper.text()).toMatch(/tools/i)
+    expect(wrapper.text()).toMatch(/ink/i)
+  })
+
+  it('says which way it is lying, so the styles can follow', () => {
+    expect(mountHorizontal().find('.rail').classes()).toContain('rail--horizontal')
+    expect(mountRail().find('.rail').classes()).not.toContain('rail--horizontal')
+  })
+})

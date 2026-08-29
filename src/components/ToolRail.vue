@@ -481,9 +481,24 @@ function placeText(event: PointerEvent): void {
  * it needs.
  */
 .rail--horizontal .rail-group {
-  flex: none;
-  flex-flow: row nowrap;
+  /*
+   * Shrinkable and wrapping, both deliberately. A group that can do
+   * neither runs straight out of the strip and over whatever is beside it
+   * — eight tools are 464px, and a phone sharing its width with the notes
+   * panel has nothing like that to give.
+   */
+  /*
+   * A line each, wrapping within itself. Sharing lines let Ink ride up
+   * beside the tools and read as part of them, and a group that could
+   * neither shrink nor wrap ran straight out of the strip and over the
+   * notes panel beside it — eight tools are 464px, and a phone has nothing
+   * like that to give.
+   */
+  flex: 0 1 100%;
+  flex-flow: row wrap;
   align-items: center;
+  justify-content: center;
+  min-width: 0;
   gap: 0.3rem;
 }
 .rail--horizontal .rail-group--tools {
@@ -502,12 +517,15 @@ function placeText(event: PointerEvent): void {
 .rail--horizontal .swatch,
 .rail--horizontal .object { flex: none; }
 .rail--horizontal .rail-tool.is-active::after { display: none; }
-.rail--horizontal .rail-group--colors { flex: none; align-self: center; }
+/* Under the rest rather than beside it, now that every group has a line. */
 .rail--horizontal .rail-group--menus {
   flex-wrap: nowrap;
   align-items: center;
-  width: auto; padding-top: 0; padding-left: 0.5rem;
-  border-top: none; border-left: 1px solid var(--border);
+  width: auto;
+  padding-top: 0.35rem;
+  padding-left: 0;
+  border-left: none;
+  border-top: 1px solid var(--border);
 }
 /* No room for a sentence along the bottom; the tooltips still carry it. */
 .rail--horizontal .helper { display: none; }
