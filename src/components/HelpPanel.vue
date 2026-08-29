@@ -198,8 +198,10 @@ const emit = defineEmits<{ close: [] }>()
           currently is rather than offering to turn it.
         </p>
         <p>
-          <strong>View</strong> is what is drawn on that pitch: switches for the player labels,
-          the balls, and the notes panel at the right-hand edge.
+          <strong>View</strong> is what is drawn on that pitch: <strong>Player labels</strong> is
+          what is written on the players themselves, <strong>Text labels</strong> is the text you
+          place on the grass with the Text tool, and the other two switches are the balls and the
+          notes panel at the right-hand edge.
         </p>
       </section>
 

@@ -232,7 +232,17 @@ function placeText(event: PointerEvent): void {
           @pointerdown="placeBall($event)"
           @click="activate(() => board.addBall())"
         >
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7.5 8.5 10l1.3 4h4.4l1.3-4z" /><path d="M12 3v4.5M4.2 14 9.8 14M19.8 14 14.2 14" /></svg>
+          <!--
+            The same football the board draws, at icon size: a dark pentagon
+            with five seams running out towards the rim. The handoff's own
+            icon was a circle with a shape inside it that reads as a face at
+            18px, and the ball on the pitch looks nothing like it.
+          -->
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <polygon points="12,8.4 15.43,10.89 14.12,14.91 9.88,14.91 8.57,10.89" fill="currentColor" stroke="none" />
+            <path d="M12 8.4V3.9M15.43 10.89 19.7 9.49M14.12 14.91 16.76 18.55M9.88 14.91 7.24 18.55M8.57 10.89 4.3 9.49" />
+          </svg>
         </button>
         <button
           data-add-cone

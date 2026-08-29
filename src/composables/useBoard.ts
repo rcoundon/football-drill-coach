@@ -71,7 +71,16 @@ export const MIN_SEGMENT_LENGTH = 2
 export type BoardSnapshot = {
   frames: Frame[]
   currentFrame: number
+  /** The text labels a coach places with the Text tool. */
   labelsVisible: boolean
+  /**
+   * The number or initials written on a player's own disc.
+   *
+   * Optional, because every drill saved before the setting existed has no
+   * opinion about it and should come back showing them, which is what they
+   * were saved doing. `apply` supplies the default.
+   */
+  counterLabelsVisible?: boolean
   /**
    * Whether the balls are on the pitch at all. Drill-wide, beside the other
    * two visibility settings: it used to ride on the ball itself, which put it
@@ -113,6 +122,7 @@ function emptySnapshot(): BoardSnapshot {
     frames: [emptyFrame()],
     currentFrame: 0,
     labelsVisible: true,
+    counterLabelsVisible: true,
     ballsVisible: true,
     notes: '',
     // Closed on a fresh board: the panel used to hold a quarter of the
@@ -257,6 +267,7 @@ function snapshot(): BoardSnapshot {
     frames: raw.frames,
     currentFrame: raw.currentFrame,
     labelsVisible: raw.labelsVisible,
+    counterLabelsVisible: raw.counterLabelsVisible,
     ballsVisible: raw.ballsVisible,
     notes: raw.notes,
     notesVisible: raw.notesVisible,
@@ -274,6 +285,7 @@ function apply(snap: BoardSnapshot): void {
   state.frames = frames
   state.currentFrame = Math.max(0, Math.min(copy.currentFrame ?? 0, frames.length - 1))
   state.labelsVisible = copy.labelsVisible ?? true
+  state.counterLabelsVisible = copy.counterLabelsVisible ?? true
   state.ballsVisible = copy.ballsVisible ?? true
   state.notes = copy.notes ?? ''
   state.notesVisible = copy.notesVisible ?? true
@@ -819,6 +831,18 @@ function deleteLabel(id: string): void {
 function toggleLabelsVisible(): void {
   commit()
   state.labelsVisible = !state.labelsVisible
+}
+
+/**
+ * Show or hide what is written on the players themselves.
+ *
+ * Separate from the text labels above: one is the drill's annotations, the
+ * other is who each player is, and a coach explaining a shape often wants
+ * the numbers off without losing the notes on the grass.
+ */
+function toggleCounterLabelsVisible(): void {
+  commit()
+  state.counterLabelsVisible = !state.counterLabelsVisible
 }
 
 function markerById(id: string): Marker | undefined {
@@ -1559,6 +1583,7 @@ const board = {
   moveLabel,
   deleteLabel,
   toggleLabelsVisible,
+  toggleCounterLabelsVisible,
   setNotes,
   toggleNotesVisible,
   addMarker,

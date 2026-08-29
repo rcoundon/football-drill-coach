@@ -8,7 +8,9 @@ function makeCounter(): Counter {
 }
 
 function mountCounter(hasBall = false) {
-  return mount(PlayerCounter, { props: { counter: makeCounter(), rotated: false, hasBall } })
+  return mount(PlayerCounter, {
+    props: { counter: makeCounter(), rotated: false, hasBall, labelVisible: true },
+  })
 }
 
 describe('grabbing', () => {
@@ -36,5 +38,26 @@ describe('grabbing', () => {
     await wrapper.vm.$nextTick()
 
     expect(wrapper.emitted('rename')).toBeUndefined()
+  })
+})
+
+/**
+ * The switch that says "player labels" has to reach the players. It used to
+ * name the text a coach places on the grass, so turning it off left every
+ * number exactly where it was.
+ */
+describe('what is written on the disc', () => {
+  it('is drawn when it is wanted', () => {
+    const wrapper = mount(PlayerCounter, {
+      props: { counter: makeCounter(), rotated: false, hasBall: false, labelVisible: true },
+    })
+    expect(wrapper.find('[data-counter-label]').exists()).toBe(true)
+  })
+
+  it('is gone when it is not', () => {
+    const wrapper = mount(PlayerCounter, {
+      props: { counter: makeCounter(), rotated: false, hasBall: false, labelVisible: false },
+    })
+    expect(wrapper.find('[data-counter-label]').exists()).toBe(false)
   })
 })

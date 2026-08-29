@@ -109,7 +109,16 @@ describe('a snapshot is plain data', () => {
   it('does not carry the derived fields, which would be a second copy', () => {
     const snap = board.snapshot() as Record<string, unknown>
     expect(Object.keys(snap).sort()).toEqual(
-      ['ballsVisible', 'currentFrame', 'frames', 'labelsVisible', 'notes', 'notesVisible', 'pitch'].sort(),
+      [
+        'ballsVisible',
+        'counterLabelsVisible',
+        'currentFrame',
+        'frames',
+        'labelsVisible',
+        'notes',
+        'notesVisible',
+        'pitch',
+      ].sort(),
     )
   })
 })

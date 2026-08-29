@@ -3,7 +3,13 @@ import { computed } from 'vue'
 import type { Counter } from '../types'
 import { LABEL_INK, SWATCHES, TOKEN_CASING } from './controls'
 
-const props = defineProps<{ counter: Counter; rotated: boolean; hasBall: boolean }>()
+const props = defineProps<{
+  counter: Counter
+  rotated: boolean
+  hasBall: boolean
+  /** Whether what is written on the disc is drawn at all. */
+  labelVisible: boolean
+}>()
 
 /*
  * There is no `rename` event here. A double press is detected from
@@ -54,6 +60,7 @@ const HIT_RADIUS = 4.2
       stroke-width="0.3"
     />
     <text
+      v-if="labelVisible"
       data-counter-label
       :transform="labelTransform"
       text-anchor="middle"

@@ -188,6 +188,22 @@ function setRotated(rotated: boolean): void {
       -->
       <div v-show="open === 'view'" data-view-panel class="panel" :style="panelStyle" role="menu">
         <span class="eyebrow">Show</span>
+        <!--
+          Two rows, because they are two things. One is what is written on
+          the players; the other is the text a coach places on the grass.
+          A single switch named for the first only ever did the second.
+        -->
+        <button
+          data-toggle-counter-labels
+          class="switch-row"
+          role="menuitemcheckbox"
+          :aria-checked="board.state.counterLabelsVisible"
+          @click="board.toggleCounterLabelsVisible()"
+        >
+          <span>Player labels</span>
+          <span class="switch" :class="{ 'is-on': board.state.counterLabelsVisible }" aria-hidden="true"></span>
+        </button>
+
         <button
           data-toggle-labels
           class="switch-row"
@@ -195,7 +211,7 @@ function setRotated(rotated: boolean): void {
           :aria-checked="board.state.labelsVisible"
           @click="board.toggleLabelsVisible()"
         >
-          <span>Player labels</span>
+          <span>Text labels</span>
           <span class="switch" :class="{ 'is-on': board.state.labelsVisible }" aria-hidden="true"></span>
         </button>
 

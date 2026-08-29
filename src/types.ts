@@ -154,6 +154,7 @@ export type Pattern = {
    */
   drawings?: Drawing[]
   labelsVisible?: boolean
+  counterLabelsVisible?: boolean
   /**
    * Whether the balls are on the pitch at all. A shape or pressing drill has
    * none out; a passing drill does. Hiding them keeps every ball's position

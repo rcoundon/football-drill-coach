@@ -1338,3 +1338,30 @@ describe('a phase note', () => {
     expect(() => parsePattern(raw)).toThrow(/phase note/i)
   })
 })
+
+/**
+ * Whether the players' own labels are showing belongs to the drill, like
+ * every other view setting, so it has to survive being saved.
+ */
+describe('the player-label setting', () => {
+  it('goes round the library and comes back', () => {
+    const store = useStorage()
+    const board = snap()
+    board.counterLabelsVisible = false
+
+    const saved = store.savePattern('Press trigger', board)
+    const back = store.patternToSnapshot(store.listPatterns().find((p) => p.id === saved.id)!)
+
+    expect(back.counterLabelsVisible).toBe(false)
+  })
+
+  /** A drill saved before the setting existed comes back showing them. */
+  it('defaults to showing them for a pattern that has no opinion', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Press trigger', snap())
+    const stored = store.listPatterns().find((p) => p.id === saved.id)!
+    delete (stored as Record<string, unknown>).counterLabelsVisible
+
+    expect(store.patternToSnapshot(stored).counterLabelsVisible).toBe(true)
+  })
+})

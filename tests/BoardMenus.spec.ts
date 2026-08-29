@@ -93,12 +93,25 @@ describe('the pitch menu', () => {
 })
 
 describe('the view menu', () => {
-  it('switches the player labels', async () => {
+  /**
+   * Two switches, because they are two things. The one named for the
+   * players used to be the one that hid the text on the grass, so hiding
+   * "player labels" left every number exactly where it was.
+   */
+  it('switches what is written on the players', async () => {
     const wrapper = mountMenus()
-    expect(wrapper.find('[data-toggle-labels]').attributes('aria-checked')).toBe('true')
+    expect(wrapper.find('[data-toggle-counter-labels]').attributes('aria-checked')).toBe('true')
+    await wrapper.find('[data-toggle-counter-labels]').trigger('click')
+    expect(board.state.counterLabelsVisible).toBe(false)
+    // And nothing else: the text on the grass is its own switch.
+    expect(board.state.labelsVisible).toBe(true)
+  })
+
+  it('switches the text labels on the grass', async () => {
+    const wrapper = mountMenus()
     await wrapper.find('[data-toggle-labels]').trigger('click')
     expect(board.state.labelsVisible).toBe(false)
-    expect(wrapper.find('[data-toggle-labels]').attributes('aria-checked')).toBe('false')
+    expect(board.state.counterLabelsVisible).toBe(true)
   })
 
   it('switches the balls', async () => {

@@ -382,6 +382,7 @@ onBeforeUnmount(() => {
               :frame="frame"
               :pitch="board.state.pitch"
               :labels-visible="false"
+              :counter-labels-visible="board.state.counterLabelsVisible"
               :balls-visible="board.state.ballsVisible"
             />
           </button>

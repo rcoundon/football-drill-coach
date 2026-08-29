@@ -1057,6 +1057,7 @@ function onPointerUp(event: PointerEvent) {
     :frame="view"
     :pitch="board.state.pitch"
     :labels-visible="board.state.labelsVisible"
+    :counter-labels-visible="board.state.counterLabelsVisible"
     :balls-visible="board.state.ballsVisible"
     :selected-drawing-ids="selectedDrawingIds"
     @grab-counter="onCounterGrab"

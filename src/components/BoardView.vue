@@ -25,7 +25,10 @@ import DrawingLayer from './DrawingLayer.vue'
 const props = defineProps<{
   frame: FrameView
   pitch: { type: PitchType; rotated: boolean }
+  /** The text labels a coach places with the Text tool. */
   labelsVisible: boolean
+  /** What is written on the players themselves. */
+  counterLabelsVisible?: boolean
   ballsVisible: boolean
   /** Drawings to draw a halo behind. Absent for a board nobody is editing. */
   selectedDrawingIds?: string[]
@@ -110,6 +113,7 @@ defineExpose({ svgEl })
         :key="counter.id"
         :counter="counter"
         :rotated="pitch.rotated"
+        :label-visible="counterLabelsVisible !== false"
         :has-ball="ballsVisible && frame.balls.some((b) => b.attachedTo === counter.id)"
         @grab="(event: PointerEvent) => emit('grabCounter', counter.id, event)"
       />
