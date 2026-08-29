@@ -76,6 +76,6 @@ function toggle(tag: string) {
 .tags label { font-size: 0.8rem; opacity: 0.7; }
 .input {
   padding: 0.4rem; border-radius: 0.3rem;
-  border: 1px solid #ffffff40; background: #263238; color: inherit;
+  border: 1px solid #ffffff40; background: var(--surface-1); color: inherit;
 }
 </style>

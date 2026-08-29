@@ -3,3 +3,7 @@ dist
 .DS_Store
 *.local
 .worktrees
+
+# The handoff bundle is committed as its unpacked folder; the archive is
+# the same bytes a second time.
+UX/*.zip

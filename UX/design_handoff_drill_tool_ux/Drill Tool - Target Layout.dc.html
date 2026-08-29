@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/on-court-design-system-46663dc0-d637-4e1e-a58f-1d7c798b1c1f/colors_and_type.css">
+  <link rel="stylesheet" href="_ds/on-court-design-system-46663dc0-d637-4e1e-a58f-1d7c798b1c1f/styles.css">
+  <script src="_ds/on-court-design-system-46663dc0-d637-4e1e-a58f-1d7c798b1c1f/_ds_bundle.js"></script>
+  <style>
+    body { margin: 0; background: #140E0A; }
+    a { color: #ff8a5c; }
+    a:hover { color: #ff6b35; }
+    ::placeholder { color: rgba(255,248,243,.34); }
+    @keyframes popIn { from { transform: scale(.86); opacity: 0 } to { transform: scale(1); opacity: 1 } }
+    @keyframes riseIn { from { transform: translateY(6px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+    @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important } }
+  </style>
+</helmet>
+
+<div style="width: 1366px; height: 1024px; display: flex; flex-direction: column; background: #140E0A; font-family: var(--font-sans); color: #FFF8F3; overflow: hidden; position: relative; user-select: none;">
+
+  <header style="height: 56px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 14px; background: #1F1410; border-bottom: 1px solid rgba(255,255,255,.10); position: relative; z-index: 40;">
+    <img src="assets/logo-basketball.png" alt="" style="width: 28px; height: 28px; flex: none; display: block;">
+
+    <input value="{{ drillName }}" onChange="{{ onRename }}" style="background: transparent; border: 2px solid transparent; border-radius: 10px; color: #FFF8F3; font-family: var(--font-sans); font-size: 16px; font-weight: 700; letter-spacing: -0.01em; padding: 6px 8px; width: 190px; outline: none;" style-focus="border-color: #ff6b35; background: rgba(255,255,255,.05); box-shadow: 0 0 0 3px rgba(238,10,36,.22)">
+
+    <button onClick="{{ toggleDrillMenu }}" title="Drill actions" style="width: 34px; height: 34px; flex: none; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.10); background: #2A1810; border-radius: 10px; color: rgba(255,248,243,.72); cursor: pointer;" style-hover="background: #35201a; color: #FFF8F3">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+    </button>
+
+    <span class="mono" style="font-size: 12px; font-weight: 500; color: rgba(255,248,243,.48); letter-spacing: 0; margin-left: 2px;">{{ saveStatus }}</span>
+
+    <div style="flex: 1"></div>
+
+    <div style="display: flex; align-items: center; gap: 6px;">
+      <button onClick="{{ onUndo }}" title="Undo  ⌘Z" style="width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.10); background: #2A1810; border-radius: 12px; color: rgba(255,248,243,.72); cursor: pointer;" style-hover="background: #35201a; color: #FFF8F3">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"></path></svg>
+      </button>
+      <button title="Redo  ⌘⇧Z" style="width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.08); background: #24160f; border-radius: 12px; color: rgba(255,248,243,.26); cursor: default;">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"></path><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"></path></svg>
+      </button>
+
+      <div style="width: 1px; height: 26px; background: rgba(255,255,255,.10); margin: 0 6px;"></div>
+
+      <button onClick="{{ toggleShare }}" style="height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 14px; border: none; border-radius: 12px; background: var(--primary-gradient-btn); box-shadow: var(--glow-ember), inset 0 1px 0 rgba(255,255,255,.25); color: #fff; font-family: var(--font-sans); font-size: 14px; font-weight: 700; cursor: pointer; transition: transform var(--dur-fast) var(--ease-std);" style-hover="transform: translateY(-1px)" style-active="transform: translateY(0)">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="M17 8l-5-5-5 5"></path><path d="M12 3v12"></path></svg>
+        Share
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+      </button>
+
+      <button title="Help &amp; shortcuts" style="width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.10); background: #2A1810; border-radius: 12px; color: rgba(255,248,243,.72); cursor: pointer;" style-hover="background: #35201a; color: #FFF8F3">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"></path><path d="M12 17h.01"></path></svg>
+      </button>
+    </div>
+
+    <sc-if value="{{ drillMenuOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="position: absolute; top: 52px; left: 226px; width: 232px; background: #2A1810; border: 1px solid rgba(255,255,255,.12); border-radius: 16px; box-shadow: 0 16px 40px -12px rgba(0,0,0,.65); padding: 8px; z-index: 60; animation: riseIn var(--dur-base) var(--ease-std);">
+        <sc-for list="{{ drillMenu }}" as="row" hint-placeholder-count="5">
+          <button onClick="{{ row.onClick }}" style="width: 100%; height: 40px; display: flex; align-items: center; padding: 0 12px; border: none; background: transparent; border-radius: 10px; color: {{ row.color }}; font-family: var(--font-sans); font-size: 14px; font-weight: 600; text-align: left; cursor: pointer; margin-top: {{ row.gap }};" style-hover="background: rgba(255,255,255,.07)">{{ row.label }}</button>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ shareOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="position: absolute; top: 52px; right: 60px; width: 210px; background: #2A1810; border: 1px solid rgba(255,255,255,.12); border-radius: 16px; box-shadow: 0 16px 40px -12px rgba(0,0,0,.65); padding: 8px; z-index: 60; animation: riseIn var(--dur-base) var(--ease-std);">
+        <div style="font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,248,243,.48); padding: 6px 12px 8px;">Export</div>
+        <button style="width: 100%; height: 40px; display: flex; align-items: center; padding: 0 12px; border: none; background: transparent; border-radius: 10px; color: #FFF8F3; font-family: var(--font-sans); font-size: 14px; font-weight: 600; text-align: left; cursor: pointer;" style-hover="background: rgba(255,255,255,.07)">Image (PNG)</button>
+        <button style="width: 100%; height: 40px; display: flex; align-items: center; padding: 0 12px; border: none; background: transparent; border-radius: 10px; color: #FFF8F3; font-family: var(--font-sans); font-size: 14px; font-weight: 600; text-align: left; cursor: pointer;" style-hover="background: rgba(255,255,255,.07)">Animation (GIF)</button>
+        <button style="width: 100%; height: 40px; display: flex; align-items: center; padding: 0 12px; border: none; background: transparent; border-radius: 10px; color: #FFF8F3; font-family: var(--font-sans); font-size: 14px; font-weight: 600; text-align: left; cursor: pointer;" style-hover="background: rgba(255,255,255,.07)">Drill file (JSON)</button>
+      </div>
+    </sc-if>
+  </header>
+
+  <div style="flex: 1; min-height: 0; display: flex; position: relative;">
+
+    <nav style="width: 88px; flex: none; background: #1F1410; border-right: 1px solid rgba(255,255,255,.10); display: flex; flex-direction: column; align-items: center; padding: 10px 0 12px; gap: 6px; overflow: hidden;">
+      <div style="flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%;">
+      <div style="font-size: 11px; font-weight: 800; letter-spacing: .08em; color: rgba(255,248,243,.48);">ADD</div>
+      <div style="display: grid; grid-template-columns: repeat(2, 30px); gap: 8px; margin-top: 2px;">
+        <sc-for list="{{ playerSwatches }}" as="sw" hint-placeholder-count="5">
+          <button onClick="{{ sw.onClick }}" title="Add {{ sw.name }} player" style="width: 30px; height: 30px; border-radius: 50%; border: 2px solid {{ sw.ring }}; background: {{ sw.color }}; cursor: pointer; padding: 0; transition: transform var(--dur-fast) var(--ease-pop);" style-hover="transform: scale(1.12)" style-active="transform: scale(.94)"></button>
+        </sc-for>
+      </div>
+      <div style="display: flex; gap: 6px;">
+        <button onClick="{{ addBall }}" title="Add ball" style="width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.12); background: #2A1810; border-radius: 10px; color: rgba(255,248,243,.72); cursor: pointer;" style-hover="background: #35201a; color: #FFF8F3">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7.5 8.5 10l1.3 4h4.4l1.3-4z"></path><path d="M12 3v4.5M4.2 14 9.8 14M19.8 14 14.2 14"></path></svg>
+        </button>
+        <button onClick="{{ addCone }}" title="Add cone" style="width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.12); background: #2A1810; border-radius: 10px; color: rgba(255,248,243,.72); cursor: pointer;" style-hover="background: #35201a; color: #FFF8F3">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.7 4a2 2 0 0 0-3.4 0L2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3z"></path></svg>
+        </button>
+      </div>
+
+      <div style="width: 56px; height: 1px; background: rgba(255,255,255,.12); margin: 12px 0 8px;"></div>
+      <div style="font-size: 11px; font-weight: 800; letter-spacing: .08em; color: rgba(255,248,243,.48); margin-bottom: 2px;">TOOLS</div>
+
+      <sc-for list="{{ tools }}" as="t" hint-placeholder-count="8">
+        <button onClick="{{ t.onClick }}" title="{{ t.tip }}" style="width: 62px; height: 50px; flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border: none; border-radius: 12px; cursor: pointer; background: {{ t.bg }}; color: {{ t.fg }}; box-shadow: {{ t.shadow }}; transition: transform var(--dur-fast) var(--ease-pop), background var(--dur-fast) linear;" style-hover="transform: translateY(-1px)" style-active="transform: translateY(0) scale(.97)">
+          <div style="display: grid; place-items: center;">{{ t.icon }}</div>
+          <span style="font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;">{{ t.label }}</span>
+        </button>
+      </sc-for>
+
+      </div>
+
+      <sc-if value="{{ inkVisible }}" hint-placeholder-val="{{ true }}">
+        <div style="flex: none; display: flex; flex-direction: column; align-items: center; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.12); animation: riseIn var(--dur-base) var(--ease-std);">
+          <div style="font-size: 11px; font-weight: 800; letter-spacing: .08em; color: rgba(255,248,243,.48); margin-bottom: 6px;">INK</div>
+          <div style="display: grid; grid-template-columns: repeat(2, 26px); gap: 8px; justify-content: center;">
+            <sc-for list="{{ inkSwatches }}" as="ink" hint-placeholder-count="4">
+              <button onClick="{{ ink.onClick }}" style="width: 26px; height: 26px; border-radius: 50%; border: 2px solid {{ ink.ring }}; background: {{ ink.color }}; cursor: pointer; padding: 0; transition: transform var(--dur-fast) var(--ease-pop);" style-hover="transform: scale(1.14)"></button>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <div style="display: flex; gap: 6px; flex: none; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.12);">
+        <button onClick="{{ togglePitchMenu }}" title="Pitch" style="width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.12); background: {{ pitchBtnBg }}; border-radius: 10px; color: rgba(255,248,243,.8); cursor: pointer;" style-hover="background: #35201a">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M12 4v16M3 10h3M3 14h3M21 10h-3M21 14h-3"></path></svg>
+        </button>
+        <button onClick="{{ toggleViewMenu }}" title="View" style="width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.12); background: {{ viewBtnBg }}; border-radius: 10px; color: rgba(255,248,243,.8); cursor: pointer;" style-hover="background: #35201a">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+        </button>
+      </div>
+    </nav>
+
+    <main style="flex: 1; min-width: 0; padding: 14px; display: flex;">
+      <div onClick="{{ onPitchClick }}" style="flex: 1; position: relative; border-radius: 16px; background: #2F7D32; border: 3px solid #256827; box-shadow: 0 8px 24px -10px rgba(0,0,0,.7); overflow: hidden;">
+        <div style="position: absolute; inset: 14px; border: 2px solid rgba(255,255,255,.22); border-radius: 4px;"></div>
+        <div style="position: absolute; left: 50%; top: 14px; bottom: 14px; width: 2px; background: rgba(255,255,255,.22);"></div>
+        <div style="position: absolute; left: 50%; top: 50%; width: 132px; height: 132px; border: 2px solid rgba(255,255,255,.22); border-radius: 50%; transform: translate(-50%,-50%);"></div>
+
+        <sc-for list="{{ objects }}" as="o" hint-placeholder-count="3">
+          <div onClick="{{ o.onClick }}" style="position: absolute; left: {{ o.x }}%; top: {{ o.y }}%; transform: translate(-50%,-50%); width: {{ o.size }}; height: {{ o.size }}; border-radius: {{ o.radius }}; background: {{ o.fill }}; border: {{ o.border }}; box-shadow: {{ o.shadow }}; display: grid; place-items: center; cursor: pointer; animation: popIn .18s var(--ease-pop); color: #fff; font-size: 14px; font-weight: 800;">{{ o.label }}</div>
+        </sc-for>
+
+        <sc-if value="{{ pitchEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; pointer-events: none;">
+            <div style="font-size: 24px; font-weight: 800; letter-spacing: -0.02em; color: #fff;">Build your first phase</div>
+            <div style="font-size: 15px; color: rgba(255,255,255,.82); max-width: 380px; line-height: 1.5;">Tap a player colour on the left to drop one on, then use Run and Pass to show movement.</div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+          <div style="position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; padding: 10px 12px 10px 16px; background: rgba(31,20,16,.96); border: 1px solid rgba(255,255,255,.14); border-radius: 12px; box-shadow: 0 16px 40px -12px rgba(0,0,0,.7); animation: riseIn var(--dur-base) var(--ease-std);">
+            <span style="font-size: 14px; font-weight: 600; color: #FFF8F3;">{{ toast }}</span>
+            <button onClick="{{ onUndo }}" style="border: none; background: transparent; color: #ff8a5c; font-family: var(--font-sans); font-size: 14px; font-weight: 800; cursor: pointer; padding: 0;">Undo</button>
+          </div>
+        </sc-if>
+      </div>
+    </main>
+
+    <sc-if value="{{ notesOpen }}" hint-placeholder-val="{{ false }}">
+      <aside style="width: 360px; flex: none; background: #1F1410; border-left: 1px solid rgba(255,255,255,.10); display: flex; flex-direction: column; animation: riseIn var(--dur-base) var(--ease-std);">
+        <div style="height: 52px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; border-bottom: 1px solid rgba(255,255,255,.10);">
+          <span style="font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,248,243,.48);">{{ inspectorTitle }}</span>
+          <button onClick="{{ toggleNotes }}" style="width: 32px; height: 32px; display: grid; place-items: center; border: none; background: transparent; border-radius: 8px; color: rgba(255,248,243,.6); cursor: pointer;" style-hover="background: rgba(255,255,255,.07); color: #FFF8F3">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg>
+          </button>
+        </div>
+
+        <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ false }}">
+          <div style="padding: 16px; display: flex; flex-direction: column; gap: 18px;">
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <span style="font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,248,243,.48);">Colour</span>
+              <div style="display: flex; gap: 10px;">
+                <sc-for list="{{ selColours }}" as="c" hint-placeholder-count="5">
+                  <button onClick="{{ c.onClick }}" style="width: 34px; height: 34px; border-radius: 50%; border: 2px solid {{ c.ring }}; background: {{ c.color }}; cursor: pointer; padding: 0;" style-hover="transform: scale(1.1)"></button>
+                </sc-for>
+              </div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <span style="font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,248,243,.48);">Label</span>
+              <input value="{{ selLabel }}" onChange="{{ onSelLabel }}" placeholder="e.g. 9, GK, CB" style="height: 44px; background: #2A1810; border: 2px solid rgba(255,255,255,.10); border-radius: 12px; color: #FFF8F3; font-family: var(--font-mono); font-size: 15px; font-weight: 700; padding: 0 12px; outline: none;" style-focus="border-color: #ff6b35; box-shadow: 0 0 0 3px rgba(238,10,36,.22)">
+            </div>
+            <div style="display: flex; gap: 10px;">
+              <button onClick="{{ onDuplicate }}" style="flex: 1; height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid rgba(255,255,255,.12); background: #2A1810; border-radius: 12px; color: #FFF8F3; font-family: var(--font-sans); font-size: 14px; font-weight: 700; cursor: pointer;" style-hover="background: #35201a">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg>
+                Duplicate
+              </button>
+              <button onClick="{{ onRemove }}" style="flex: 1; height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid rgba(239,68,68,.35); background: rgba(239,68,68,.10); border-radius: 12px; color: #f87171; font-family: var(--font-sans); font-size: 14px; font-weight: 700; cursor: pointer;" style-hover="background: rgba(239,68,68,.18)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"></path></svg>
+                Remove
+              </button>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ noSelection }}" hint-placeholder-val="{{ true }}">
+          <div style="flex: 1; min-height: 0; padding: 16px; display: flex; flex-direction: column; gap: 16px;">
+            <textarea placeholder="Setup, coaching points, progressions…" style="flex: 1; min-height: 0; resize: none; background: #2A1810; border: 2px solid rgba(255,255,255,.10); border-radius: 12px; color: #FFF8F3; font-family: var(--font-sans); font-size: 15px; line-height: 1.6; padding: 14px; outline: none;" style-focus="border-color: #ff6b35; box-shadow: 0 0 0 3px rgba(238,10,36,.22)"></textarea>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <span style="font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,248,243,.48);">{{ phaseNoteLabel }}</span>
+              <textarea placeholder="What changes in this phase…" style="height: 96px; resize: none; background: #2A1810; border: 2px solid rgba(255,255,255,.10); border-radius: 12px; color: #FFF8F3; font-family: var(--font-sans); font-size: 14px; line-height: 1.55; padding: 12px; outline: none;" style-focus="border-color: #ff6b35; box-shadow: 0 0 0 3px rgba(238,10,36,.22)"></textarea>
+            </div>
+          </div>
+        </sc-if>
+      </aside>
+    </sc-if>
+
+    <sc-if value="{{ notesClosed }}" hint-placeholder-val="{{ true }}">
+      <button onClick="{{ toggleNotes }}" style="width: 44px; flex: none; background: #1F1410; border: none; border-left: 1px solid rgba(255,255,255,.10); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; cursor: pointer; color: rgba(255,248,243,.6); padding: 0;" style-hover="background: #251811; color: #FFF8F3">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>
+        <span style="writing-mode: vertical-rl; font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase;">Notes</span>
+      </button>
+    </sc-if>
+
+    <sc-if value="{{ pitchMenuOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="position: absolute; left: 96px; bottom: 8px; width: 250px; background: #2A1810; border: 1px solid rgba(255,255,255,.12); border-radius: 16px; box-shadow: 0 16px 40px -12px rgba(0,0,0,.65); padding: 14px; z-index: 50; animation: riseIn var(--dur-base) var(--ease-std);">
+        <div style="font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,248,243,.48); margin-bottom: 10px;">Pitch</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <sc-for list="{{ pitchPresets }}" as="p" hint-placeholder-count="3">
+            <button onClick="{{ p.onClick }}" style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px; border: 2px solid {{ p.ring }}; background: transparent; border-radius: 12px; cursor: pointer; color: {{ p.fg }}; font-family: var(--font-sans); font-size: 12px; font-weight: 700;">
+              <div style="width: 88px; height: 56px; border-radius: 6px; background: #2F7D32; position: relative; overflow: hidden;">
+                <div style="position: absolute; inset: 5px; border: 1.5px solid rgba(255,255,255,.3); border-radius: 2px;"></div>
+                <div style="position: absolute; left: 50%; top: 5px; bottom: 5px; width: 1.5px; background: rgba(255,255,255,.3); display: {{ p.centreLine }};"></div>
+                <div style="position: absolute; left: 50%; top: 50%; width: 26px; height: 26px; border: 1.5px solid rgba(255,255,255,.3); border-radius: 50%; transform: translate(-50%,-50%); display: {{ p.circle }};"></div>
+              </div>
+              {{ p.label }}
+            </button>
+          </sc-for>
+        </div>
+        <div style="height: 1px; background: rgba(255,255,255,.10); margin: 14px 0 12px;"></div>
+        <div style="font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,248,243,.48); margin-bottom: 8px;">Orientation</div>
+        <div style="display: flex; gap: 4px; padding: 4px; background: rgba(0,0,0,.35); border-radius: 12px;">
+          <sc-for list="{{ orientations }}" as="or" hint-placeholder-count="2">
+            <button onClick="{{ or.onClick }}" style="flex: 1; height: 36px; border: none; border-radius: 9px; background: {{ or.bg }}; color: {{ or.fg }}; font-family: var(--font-sans); font-size: 13px; font-weight: 700; cursor: pointer;">{{ or.label }}</button>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ viewMenuOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="position: absolute; left: 96px; bottom: 8px; width: 240px; background: #2A1810; border: 1px solid rgba(255,255,255,.12); border-radius: 16px; box-shadow: 0 16px 40px -12px rgba(0,0,0,.65); padding: 8px 12px 12px; z-index: 50; animation: riseIn var(--dur-base) var(--ease-std);">
+        <div style="font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,248,243,.48); padding: 8px 2px 6px;">View</div>
+        <sc-for list="{{ viewToggles }}" as="v" hint-placeholder-count="3">
+          <button onClick="{{ v.onClick }}" style="width: 100%; height: 44px; display: flex; align-items: center; justify-content: space-between; border: none; background: transparent; border-radius: 10px; padding: 0 2px; cursor: pointer; color: #FFF8F3; font-family: var(--font-sans); font-size: 14px; font-weight: 600;">
+            {{ v.label }}
+            <div style="width: 44px; height: 26px; border-radius: 999px; background: {{ v.track }}; position: relative; transition: background var(--dur-fast) linear;">
+              <div style="position: absolute; top: 3px; left: {{ v.knob }}; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.4); transition: left var(--dur-fast) var(--ease-pop);"></div>
+            </div>
+          </button>
+        </sc-for>
+      </div>
+    </sc-if>
+  </div>
+
+  <footer style="height: 104px; flex: none; position: relative; background: #1F1410; border-top: 1px solid rgba(255,255,255,.10); display: flex; align-items: center; gap: 18px; padding: 0 16px;">
+    <sc-if value="{{ phaseMenu }}" hint-placeholder-val="{{ false }}">
+      <div style="position: absolute; bottom: 96px; left: {{ phaseMenuX }}; width: 180px; background: #2A1810; border: 1px solid rgba(255,255,255,.12); border-radius: 14px; box-shadow: 0 16px 40px -12px rgba(0,0,0,.7); padding: 6px; z-index: 80; animation: riseIn var(--dur-base) var(--ease-std);">
+        <sc-for list="{{ phaseMenuItems }}" as="m" hint-placeholder-count="3">
+          <button onClick="{{ m.onClick }}" style="width: 100%; height: 38px; display: flex; align-items: center; padding: 0 10px; border: none; background: transparent; border-radius: 9px; color: {{ m.color }}; font-family: var(--font-sans); font-size: 13px; font-weight: 600; text-align: left; cursor: pointer;" style-hover="background: rgba(255,255,255,.07)">{{ m.label }}</button>
+        </sc-for>
+      </div>
+    </sc-if>
+    <div style="width: 330px; flex: none; display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <button onClick="{{ onRestart }}" title="Restart" style="width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.12); background: #2A1810; border-radius: 12px; color: rgba(255,248,243,.72); cursor: pointer;" style-hover="background: #35201a; color: #FFF8F3">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4"></polygon><line x1="5" y1="19" x2="5" y2="5" fill="none"></line></svg>
+        </button>
+        <button onClick="{{ onPrevPhase }}" title="Previous phase" style="width: 34px; height: 40px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.12); background: #2A1810; border-radius: 12px; color: {{ prevFg }}; cursor: pointer;" style-hover="background: #35201a">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>
+        </button>
+        <button onClick="{{ onNextPhase }}" title="Next phase" style="width: 34px; height: 40px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.12); background: #2A1810; border-radius: 12px; color: {{ nextFg }}; cursor: pointer;" style-hover="background: #35201a">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg>
+        </button>
+        <button onClick="{{ togglePlay }}" title="Play / pause  Space" style="width: 48px; height: 48px; display: grid; place-items: center; border: none; border-radius: 50%; background: var(--primary-gradient-btn); box-shadow: var(--glow-ember), inset 0 1px 0 rgba(255,255,255,.25); color: #fff; cursor: pointer; transition: transform var(--dur-fast) var(--ease-pop);" style-hover="transform: translateY(-1px)" style-active="transform: scale(.95)">
+          <div style="display: grid; place-items: center;">{{ playIcon }}</div>
+        </button>
+        <span class="mono" style="font-size: 15px; font-weight: 700; color: #FFF8F3;">{{ clock }}</span>
+      </div>
+      <div style="position: relative; height: 14px; display: flex; align-items: center;">
+        <div style="position: absolute; left: 0; right: 0; height: 4px; border-radius: 999px; background: rgba(255,255,255,.14);"></div>
+        <div style="position: absolute; left: 0; height: 4px; border-radius: 999px; background: var(--primary-gradient); width: {{ progress }};"></div>
+        <sc-for list="{{ ticks }}" as="tk" hint-placeholder-count="2">
+          <div style="position: absolute; left: {{ tk.at }}; top: 2px; width: 2px; height: 10px; background: rgba(20,14,10,.75);"></div>
+        </sc-for>
+        <div style="position: absolute; left: {{ progress }}; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.5); transform: translateX(-7px);"></div>
+      </div>
+    </div>
+
+    <div style="width: 1px; height: 76px; background: rgba(255,255,255,.10);"></div>
+
+    <div style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; overflow-x: auto;">
+      <sc-for list="{{ phaseCards }}" as="ph" hint-placeholder-count="2">
+        <div onClick="{{ ph.onClick }}" style="width: 104px; height: 78px; flex: none; position: relative; border-radius: 12px; border: 2px solid {{ ph.ring }}; background: #256827; box-shadow: {{ ph.shadow }}; cursor: pointer; overflow: hidden; transition: transform var(--dur-fast) var(--ease-pop);" style-hover="transform: translateY(-2px)">
+          <div style="position: absolute; inset: 2px; border-radius: 9px; background: #2F7D32; overflow: hidden;">
+            <div style="position: absolute; left: 50%; top: 4px; bottom: 4px; width: 1px; background: rgba(255,255,255,.28);"></div>
+            <sc-for list="{{ ph.dots }}" as="d" hint-placeholder-count="2">
+              <div style="position: absolute; left: {{ d.x }}%; top: {{ d.y }}%; width: {{ d.size }}; height: {{ d.size }}; border-radius: 50%; background: {{ d.fill }}; transform: translate(-50%,-50%);"></div>
+            </sc-for>
+          </div>
+          <span class="mono" style="position: absolute; top: 5px; left: 7px; font-size: 11px; font-weight: 800; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6);">{{ ph.n }}</span>
+          <span class="mono" style="position: absolute; bottom: 5px; right: 6px; font-size: 11px; font-weight: 800; color: #1a1207; background: var(--flame-gradient); padding: 1px 6px; border-radius: 999px;">{{ ph.dur }}</span>
+          <button onClick="{{ ph.onMenu }}" title="Phase actions" style="position: absolute; top: 3px; right: 3px; width: 24px; height: 24px; display: grid; place-items: center; border: none; border-radius: 7px; background: rgba(20,14,10,.6); color: #fff; cursor: pointer; padding: 0;" style-hover="background: rgba(20,14,10,.9)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="12" cy="19" r="1.6"></circle></svg>
+          </button>
+        </div>
+      </sc-for>
+
+      <button onClick="{{ addPhase }}" title="New phases start from a copy of the current one" style="width: 104px; height: 78px; flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: 2px dashed rgba(255,255,255,.24); background: transparent; border-radius: 12px; color: rgba(255,248,243,.6); font-family: var(--font-sans); font-size: 12px; font-weight: 700; cursor: pointer; transition: border-color var(--dur-fast) linear, color var(--dur-fast) linear;" style-hover="border-color: #ff6b35; color: #FFF8F3">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+        Add phase
+      </button>
+    </div>
+
+    <div style="flex: none; display: flex; flex-direction: column; gap: 6px; align-items: flex-end;">
+      <span style="font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,248,243,.48);">Duration</span>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <button onClick="{{ decDur }}" style="width: 34px; height: 40px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.12); background: #2A1810; border-radius: 10px; color: #FFF8F3; font-family: var(--font-sans); font-size: 18px; font-weight: 700; cursor: pointer;" style-hover="background: #35201a">−</button>
+        <span class="mono" style="min-width: 46px; text-align: center; font-size: 16px; font-weight: 700; color: #FFF8F3;">{{ activeDur }}</span>
+        <button onClick="{{ incDur }}" style="width: 34px; height: 40px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.12); background: #2A1810; border-radius: 10px; color: #FFF8F3; font-family: var(--font-sans); font-size: 18px; font-weight: 700; cursor: pointer;" style-hover="background: #35201a">+</button>
+      </div>
+    </div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1366,&quot;height&quot;:1024}}">
+const PLAYER_COLORS = [
+  { name: "Red", color: "#EF4444" },
+  { name: "Blue", color: "#3B82F6" },
+  { name: "Yellow", color: "#FACC15" },
+  { name: "Purple", color: "#A855F7" },
+  { name: "Black", color: "#1F2937" },
+];
+const INKS = ["#FFFFFF", "#FACC15", "#1F2937", "#EF4444"];
+
+/* Lucide path geometry (move, pencil, move-right, arrow-right, minus, triangle, type, eraser) */
+const ICONS = {
+  move: "M12 2v20|m15 19-3 3-3-3|m19 9 3 3-3 3|M2 12h20|m5 9-3 3 3 3|m9 5 3-3 3 3",
+  draw: "M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z|m15 5 4 4",
+  run: "M18 8l4 4-4 4|M2 12h20",
+  pass: "M5 12h14|m12 5 7 7-7 7",
+  line: "M5 12h14",
+  cone: "M13.73 4a2 2 0 0 0-3.46 0L2.6 17a2 2 0 0 0 1.73 3h15.34a2 2 0 0 0 1.73-3z",
+  text: "M12 4v16|M4 7V4h16v3|M9 20h6",
+  erase: "m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21|M22 21H7|m5 11 9 9",
+};
+
+let uid = 100;
+
+class Component extends DCLogic {
+  state = {
+    tool: "move",
+    drillName: "Overload 3v2 — wide",
+    saveStatus: "Saved just now",
+    nextColor: "#A855F7",
+    ink: "#FFFFFF",
+    popover: null,
+    notesOpen: false,
+    selection: null,
+    playing: false,
+    elapsed: 0,
+    view: { labels: true, ball: true, grid: false },
+    preset: "full",
+    orientation: "Landscape",
+    toast: null,
+    popover: null,
+    activePhase: "p2",
+    phases: [
+      {
+        id: "p1", dur: 2, objects: [
+          { id: "o1", type: "player", color: "#A855F7", label: "8", x: 38, y: 46 },
+          { id: "o2", type: "player", color: "#FACC15", label: "4", x: 30, y: 62 },
+          { id: "o3", type: "ball", x: 34, y: 58 },
+        ],
+      },
+      {
+        id: "p2", dur: 4, objects: [
+          { id: "o4", type: "player", color: "#A855F7", label: "8", x: 52, y: 42 },
+          { id: "o5", type: "player", color: "#FACC15", label: "4", x: 61, y: 44 },
+          { id: "o6", type: "ball", x: 52, y: 62 },
+        ],
+      },
+    ],
+  };
+
+  componentDidMount() {
+    this.timer = setInterval(() => {
+      if (!this.state.playing) return;
+      const total = this.total();
+      this.setState((s) => ({ elapsed: s.elapsed + 0.1 >= total ? 0 : s.elapsed + 0.1 }));
+    }, 100);
+  }
+  componentWillUnmount() { clearInterval(this.timer); }
+
+  total() { return this.state.phases.reduce((a, p) => a + p.dur, 0); }
+  phase() { return this.state.phases.find((p) => p.id === this.state.activePhase) || this.state.phases[0]; }
+
+  mutate(fn, status) {
+    this.setState((s) => {
+      const phases = s.phases.map((p) => (p.id === s.activePhase ? fn(p) : p));
+      return { phases, saveStatus: status || "Saving…" };
+    });
+    clearTimeout(this.saveT);
+    this.saveT = setTimeout(() => this.setState({ saveStatus: "Saved just now" }), 900);
+  }
+
+  drop(obj) {
+    const jitter = () => (Math.random() - 0.5) * 16;
+    const id = "n" + uid++;
+    this.mutate((p) => ({ ...p, objects: [...p.objects, { ...obj, id, x: 50 + jitter(), y: 50 + jitter() }] }));
+    this.setState({ selection: id });
+  }
+
+  icon(name, size, color) {
+    const parts = ICONS[name].split("|");
+    return React.createElement(
+      "svg",
+      { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color || "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" },
+      parts.map((d, i) => React.createElement("path", { key: i, d, strokeDasharray: name === "run" && i === 1 ? "4 3" : undefined }))
+    );
+  }
+
+  renderVals() {
+    const s = this.state;
+    const ph = this.phase();
+    const total = this.total();
+    const sel = ph.objects.find((o) => o.id === s.selection);
+    const openPhaseMenu = typeof s.popover === "string" && s.popover.indexOf("phase:") === 0 ? s.popover.slice(6) : null;
+    const fmt = (t) => {
+      const m = Math.floor(t / 60), sec = Math.floor(t % 60);
+      return (m < 10 ? "0" : "") + m + ":" + (sec < 10 ? "0" : "") + sec;
+    };
+
+    const tools = [
+      ["move", "Move", "Move  V"], ["draw", "Draw", "Freehand  D"], ["run", "Run", "Run with dashed path  R"],
+      ["pass", "Pass", "Pass  P"], ["line", "Line", "Straight line  L"], ["cone", "Cone", "Cone  C"],
+      ["text", "Text", "Text label  T"], ["erase", "Erase", "Erase  E"],
+    ].map(([id, label, tip]) => {
+      const on = s.tool === id;
+      return {
+        label, tip, onClick: () => this.setState({ tool: id, popover: null }),
+        bg: on ? "linear-gradient(135deg,#ff6b35,#ee0a24)" : "transparent",
+        fg: on ? "#fff" : "rgba(255,248,243,.58)",
+        shadow: on ? "0 6px 16px -8px rgba(238,10,36,.6)" : "none",
+        icon: this.icon(id, 21, on ? "#fff" : "rgba(255,248,243,.58)"),
+      };
+    });
+
+    const objects = ph.objects.map((o) => {
+      const isSel = o.id === s.selection;
+      const ring = isSel ? "3px solid #fff" : o.type === "ball" ? "2px solid #1F2937" : "3px solid rgba(0,0,0,.22)";
+      return {
+        ...o,
+        size: o.type === "ball" ? "22px" : o.type === "cone" ? "24px" : "44px",
+        radius: o.type === "cone" ? "4px" : "50%",
+        fill: o.type === "ball" ? "#fff" : o.type === "cone" ? "#F97316" : o.color,
+        border: ring,
+        shadow: isSel ? "0 0 0 3px rgba(255,107,53,.7), 0 4px 10px rgba(0,0,0,.4)" : "0 3px 8px rgba(0,0,0,.35)",
+        label: o.type === "player" && s.view.labels ? o.label : "",
+        onClick: (e) => { e.stopPropagation(); this.setState({ selection: o.id, notesOpen: true }); },
+      };
+    });
+
+    return {
+      drillName: s.drillName,
+      saveStatus: s.saveStatus,
+      onRename: (e) => this.setState({ drillName: e.target.value, saveStatus: "Unsaved changes" }),
+      drillMenuOpen: s.popover === "drill",
+      shareOpen: s.popover === "share",
+      pitchMenuOpen: s.popover === "pitch",
+      viewMenuOpen: s.popover === "view",
+      toggleDrillMenu: () => this.setState((p) => ({ popover: p.popover === "drill" ? null : "drill" })),
+      toggleShare: () => this.setState((p) => ({ popover: p.popover === "share" ? null : "share" })),
+      togglePitchMenu: () => this.setState((p) => ({ popover: p.popover === "pitch" ? null : "pitch" })),
+      toggleViewMenu: () => this.setState((p) => ({ popover: p.popover === "view" ? null : "view" })),
+      pitchBtnBg: s.popover === "pitch" ? "#3a231b" : "#2A1810",
+      viewBtnBg: s.popover === "view" ? "#3a231b" : "#2A1810",
+
+      drillMenu: [
+        { label: "Save now", gap: "0", color: "#FFF8F3", onClick: () => this.setState({ popover: null, saveStatus: "Saved just now" }) },
+        { label: "Open…", gap: "0", color: "#FFF8F3", onClick: () => this.setState({ popover: null }) },
+        { label: "Save as…", gap: "0", color: "#FFF8F3", onClick: () => this.setState({ popover: null }) },
+        { label: "Duplicate drill", gap: "0", color: "#FFF8F3", onClick: () => this.setState({ popover: null }) },
+        { label: "Import drill file…", gap: "0", color: "#FFF8F3", onClick: () => this.setState({ popover: null }) },
+        { label: "Clear all players", gap: "8px", color: "#f87171", onClick: () => { this.mutate((p) => ({ ...p, objects: p.objects.filter((o) => o.type !== "player") })); this.setState({ popover: null, selection: null, toast: "Cleared 2 players." }); clearTimeout(this.toastT); this.toastT = setTimeout(() => this.setState({ toast: null }), 6000); } },
+        { label: "Clear drawings", gap: "0", color: "#f87171", onClick: () => this.setState({ popover: null, toast: "Cleared drawings." }) },
+        { label: "Reset drill…", gap: "0", color: "#f87171", onClick: () => this.setState({ popover: null }) },
+      ],
+
+      tools,
+      inkVisible: ["draw", "run", "pass", "line", "text"].indexOf(s.tool) >= 0,
+      playerSwatches: PLAYER_COLORS.map((p) => ({
+        name: p.name, color: p.color,
+        ring: s.nextColor === p.color ? "#ff6b35" : "rgba(255,255,255,.18)",
+        onClick: () => { this.setState({ nextColor: p.color }); this.drop({ type: "player", color: p.color, label: String(1 + Math.floor(Math.random() * 11)) }); },
+      })),
+      inkSwatches: INKS.map((c) => ({
+        color: c, ring: s.ink === c ? "#ff6b35" : "rgba(255,255,255,.18)",
+        onClick: () => this.setState({ ink: c }),
+      })),
+      addBall: () => this.drop({ type: "ball" }),
+      addCone: () => this.drop({ type: "cone" }),
+
+      objects,
+      pitchEmpty: ph.objects.length === 0,
+      onPitchClick: () => this.setState({ selection: null, popover: null }),
+
+      toast: s.toast,
+      onUndo: () => this.setState({ toast: null }),
+
+      notesOpen: s.notesOpen,
+      notesClosed: !s.notesOpen,
+      toggleNotes: () => this.setState((p) => ({ notesOpen: !p.notesOpen })),
+      hasSelection: !!sel,
+      noSelection: !sel,
+      inspectorTitle: sel ? (sel.type === "player" ? "Player" : sel.type === "ball" ? "Ball" : "Cone") : "Drill notes",
+      phaseNoteLabel: "Phase " + (s.phases.indexOf(ph) + 1) + " note",
+      selLabel: sel && sel.label ? sel.label : "",
+      selColours: PLAYER_COLORS.map((p) => ({
+        color: p.color, ring: sel && sel.color === p.color ? "#ff6b35" : "rgba(255,255,255,.18)",
+        onClick: () => this.mutate((q) => ({ ...q, objects: q.objects.map((o) => (o.id === s.selection ? { ...o, color: p.color } : o)) })),
+      })),
+      onSelLabel: (e) => { const v = e.target.value; this.mutate((q) => ({ ...q, objects: q.objects.map((o) => (o.id === s.selection ? { ...o, label: v } : o)) })); },
+      onDuplicate: () => { const id = "n" + uid++; this.mutate((q) => ({ ...q, objects: [...q.objects, { ...sel, id, x: sel.x + 7, y: sel.y + 7 }] })); this.setState({ selection: id }); },
+      onRemove: () => { this.mutate((q) => ({ ...q, objects: q.objects.filter((o) => o.id !== s.selection) })); this.setState({ selection: null }); },
+
+      pitchPresets: [
+        { key: "blank", label: "Blank", centreLine: "none", circle: "none" },
+        { key: "full", label: "Full", centreLine: "block", circle: "block" },
+        { key: "half", label: "Half", centreLine: "none", circle: "block" },
+      ].map((p) => ({
+        ...p, ring: s.preset === p.key ? "#ff6b35" : "rgba(255,255,255,.12)",
+        fg: s.preset === p.key ? "#FFF8F3" : "rgba(255,248,243,.6)",
+        onClick: () => this.setState({ preset: p.key }),
+      })),
+      orientations: ["Landscape", "Portrait"].map((o) => ({
+        label: o,
+        bg: s.orientation === o ? "linear-gradient(135deg,#ff6b35,#ee0a24)" : "transparent",
+        fg: s.orientation === o ? "#fff" : "rgba(255,248,243,.6)",
+        onClick: () => this.setState({ orientation: o }),
+      })),
+      viewToggles: [
+        { key: "labels", label: "Player labels" },
+        { key: "ball", label: "Ball" },
+        { key: "grid", label: "Grid" },
+      ].map((v) => ({
+        label: v.label,
+        track: s.view[v.key] ? "linear-gradient(135deg,#ff6b35,#ee0a24)" : "rgba(255,255,255,.16)",
+        knob: s.view[v.key] ? "21px" : "3px",
+        onClick: () => this.setState((p) => ({ view: { ...p.view, [v.key]: !p.view[v.key] } })),
+      })),
+
+      playing: s.playing,
+      togglePlay: () => this.setState((p) => ({ playing: !p.playing })),
+      onRestart: () => this.setState({ elapsed: 0, playing: false }),
+      playIcon: s.playing
+        ? React.createElement("svg", { width: 20, height: 20, viewBox: "0 0 24 24", fill: "currentColor" },
+            React.createElement("rect", { x: 6, y: 5, width: 4, height: 14, rx: 1 }),
+            React.createElement("rect", { x: 14, y: 5, width: 4, height: 14, rx: 1 }))
+        : React.createElement("svg", { width: 20, height: 20, viewBox: "0 0 24 24", fill: "currentColor" },
+            React.createElement("path", { d: "M8 5l11 7-11 7z" })),
+      clock: fmt(s.elapsed) + " / " + fmt(total),
+      progress: Math.min(100, (s.elapsed / total) * 100) + "%",
+      ticks: s.phases.slice(0, -1).map((p, i) => ({
+        at: (s.phases.slice(0, i + 1).reduce((a, q) => a + q.dur, 0) / total) * 100 + "%",
+      })),
+
+      phaseMenu: openPhaseMenu,
+      phaseMenuX: s.phaseMenuX || "12px",
+      phaseMenuItems: (() => {
+        const target = s.phases.find((p) => p.id === openPhaseMenu);
+        if (!target) return [];
+        const i = s.phases.indexOf(target);
+        const bump = (fn) => (e) => { e.stopPropagation(); fn(i, target); };
+        return [
+          { label: "Duplicate phase", color: "#FFF8F3", onClick: bump((i, p) => {
+              const id = "p" + uid++;
+              this.setState((q) => {
+                const next = [...q.phases];
+                next.splice(i + 1, 0, { id, dur: p.dur, objects: p.objects.map((o) => ({ ...o, id: "n" + uid++ })) });
+                return { phases: next, activePhase: id, popover: null, saveStatus: "Saving…" };
+              });
+            }) },
+          { label: "Insert phase after", color: "#FFF8F3", onClick: bump((i) => {
+              const id = "p" + uid++;
+              this.setState((q) => {
+                const next = [...q.phases];
+                next.splice(i + 1, 0, { id, dur: 2, objects: [] });
+                return { phases: next, activePhase: id, popover: null, saveStatus: "Saving…" };
+              });
+            }) },
+          { label: "Delete phase", color: s.phases.length > 1 ? "#f87171" : "rgba(248,113,113,.35)", onClick: bump((i, p) => {
+              if (this.state.phases.length < 2) return;
+              this.setState((q) => {
+                const next = q.phases.filter((x) => x.id !== p.id);
+                return { phases: next, activePhase: next[Math.max(0, i - 1)].id, popover: null, selection: null, toast: "Deleted phase " + (i + 1) + "." };
+              });
+              clearTimeout(this.toastT);
+              this.toastT = setTimeout(() => this.setState({ toast: null }), 6000);
+            }) },
+        ];
+      })(),
+
+      onPrevPhase: () => this.setState((p) => {
+        const i = p.phases.findIndex((q) => q.id === p.activePhase);
+        return i > 0 ? { activePhase: p.phases[i - 1].id, selection: null } : {};
+      }),
+      onNextPhase: () => this.setState((p) => {
+        const i = p.phases.findIndex((q) => q.id === p.activePhase);
+        return i < p.phases.length - 1 ? { activePhase: p.phases[i + 1].id, selection: null } : {};
+      }),
+      prevFg: s.phases.indexOf(ph) > 0 ? "rgba(255,248,243,.72)" : "rgba(255,248,243,.24)",
+      nextFg: s.phases.indexOf(ph) < s.phases.length - 1 ? "rgba(255,248,243,.72)" : "rgba(255,248,243,.24)",
+
+      phaseCards: s.phases.map((p, i) => ({
+        n: String(i + 1), dur: p.dur + "s",
+        onMenu: (e) => {
+          e.stopPropagation();
+          const btn = e.currentTarget.getBoundingClientRect();
+          const foot = e.currentTarget.closest("footer").getBoundingClientRect();
+          const x = Math.max(12, Math.min(btn.left - foot.left - 156, foot.width - 192));
+          const key = "phase:" + p.id;
+          this.setState((q) => ({ popover: q.popover === key ? null : key, phaseMenuX: x + "px", activePhase: p.id }));
+        },
+        ring: p.id === s.activePhase ? "#ff6b35" : "rgba(255,255,255,.12)",
+        shadow: p.id === s.activePhase ? "0 6px 18px -8px rgba(238,10,36,.6)" : "0 2px 8px rgba(0,0,0,.4)",
+        dots: p.objects.map((o) => ({
+          x: o.x, y: o.y, size: o.type === "ball" ? "5px" : "9px",
+          fill: o.type === "ball" ? "#fff" : o.type === "cone" ? "#F97316" : o.color,
+        })),
+        onClick: () => this.setState({ activePhase: p.id, selection: null, popover: null }),
+      })),
+      addPhase: () => {
+        const id = "p" + uid++;
+        this.setState((p) => ({
+          phases: [...p.phases, { id, dur: ph.dur, objects: ph.objects.map((o) => ({ ...o, id: "n" + uid++ })) }],
+          activePhase: id, selection: null, saveStatus: "Saving…",
+        }));
+      },
+      activeDur: ph.dur.toFixed(1) + "s",
+      incDur: () => this.mutate((p) => ({ ...p, dur: Math.min(30, p.dur + 0.5) })),
+      decDur: () => this.mutate((p) => ({ ...p, dur: Math.max(0.5, p.dur - 0.5) })),
+    };
+  }
+}
+</script>
+</body>
+</html>

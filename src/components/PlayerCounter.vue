@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Counter } from '../types'
+import { LABEL_INK, SWATCHES, TOKEN_CASING } from './controls'
 
 const props = defineProps<{ counter: Counter; rotated: boolean; hasBall: boolean }>()
 
@@ -13,16 +14,13 @@ const props = defineProps<{ counter: Counter; rotated: boolean; hasBall: boolean
  */
 defineEmits<{ grab: [event: PointerEvent] }>()
 
-const FILLS: Record<Counter['color'], string> = {
-  red: '#e53935',
-  blue: '#1e88e5',
-  yellow: '#fdd835',
-  purple: '#8e24aa',
-  black: '#212121',
-}
-
-const fill = computed(() => FILLS[props.counter.color])
-const textFill = computed(() => (props.counter.color === 'yellow' ? '#212121' : '#ffffff'))
+/*
+ * Both read from the shared palette rather than restating it. A counter
+ * drawn in one red and a swatch offering another is the kind of drift two
+ * copies of a colour eventually produce.
+ */
+const fill = computed(() => SWATCHES[props.counter.color])
+const textFill = computed(() => LABEL_INK[props.counter.color])
 
 /** Labels stay upright when the board is rotated. */
 const labelTransform = computed(() => (props.rotated ? 'rotate(-90)' : ''))
@@ -42,7 +40,19 @@ const HIT_RADIUS = 4.2
       stroke="#ffffff"
       stroke-width="0.5"
     />
-    <circle :r="RADIUS" :fill="fill" />
+    <!--
+      A casing, so a player has an edge whatever colour they are. The flat
+      discs this restores read cleanly against grass by hue, but hue is the
+      one channel a colour-blind coach, bright sunlight or a cheap screen
+      takes away: red sits at 1.03:1 against the pitch by luminance, blue at
+      1.11:1. The ring is what makes the shape survive all three.
+    -->
+    <circle
+      :r="RADIUS"
+      :fill="fill"
+      :stroke="TOKEN_CASING"
+      stroke-width="0.3"
+    />
     <text
       data-counter-label
       :transform="labelTransform"

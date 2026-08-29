@@ -87,12 +87,31 @@ describe('what it covers', () => {
     expect(text.toLowerCase()).not.toContain('frame')
     expect(text.toLowerCase()).not.toContain('moment')
     // The idea, in the coach's own words, has to come before the first
-    // control name — "Add a phase" — or this section is just another list
+    // control name — "Add phase" — or this section is just another list
     // of buttons.
     const ideaAt = text.search(/play.*back|sequence|slides/i)
-    const firstControlAt = text.indexOf('Add a phase')
+    const firstControlAt = text.indexOf('Add phase')
     expect(ideaAt).toBeGreaterThanOrEqual(0)
     expect(firstControlAt).toBeGreaterThan(ideaAt)
+  })
+
+  it('explains the destructive actions: where they are, and the way back', () => {
+    const section = mountHelp(true).get('[data-help-section="destructive"]')
+    expect(section.text()).toMatch(/undo/i)
+    expect(section.text()).toMatch(/reset/i)
+  })
+
+  it('explains the pitch and view menus: presets, orientation, switches', () => {
+    const section = mountHelp(true).get('[data-help-section="board-menus"]')
+    expect(section.text()).toMatch(/half/i)
+    expect(section.text()).toMatch(/portrait/i)
+    expect(section.text()).toMatch(/switch/i)
+  })
+
+  it('explains the notes panel: the drill, the phase, and where it lives', () => {
+    const section = mountHelp(true).get('[data-help-section="notes"]')
+    expect(section.text()).toMatch(/phase/i)
+    expect(section.text()).toMatch(/strip|edge/i)
   })
 
   it('explains saving and sharing: patterns, PNG, GIF, Export/Import, browser-only storage', () => {

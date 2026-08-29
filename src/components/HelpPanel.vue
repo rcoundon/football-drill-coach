@@ -20,9 +20,10 @@ const emit = defineEmits<{ close: [] }>()
       <section data-help-section="board" class="section">
         <h3>The board</h3>
         <p>
-          Press a colour under Players to drop a counter, then drag it into position. Adding a new
-          player switches you to Move, since dragging it somewhere is almost always the next
-          thing you do.
+          Drag a colour out of the rail's Add group straight onto the spot you want, or press
+          it to drop a player in the middle and drag them into position from there. Either way you end up
+          holding Move, since dragging a new player somewhere is almost always the next thing
+          you do. Balls, cones and text labels are placed the same way, from the same group.
         </p>
         <p>
           Counters arrive unlabelled — most drills read fine from colour and position alone.
@@ -42,8 +43,8 @@ const emit = defineEmits<{ close: [] }>()
         </p>
         <p>
           A drill can have up to eight balls: one per rondo grid, per queue, per lane.
-          <strong>+ Ball</strong> puts another out, and Erase takes one off the way it takes off
-          a cone. A drill with none at all is fine — a shape or pressing session has no ball in
+          The ball in the rail's <strong>Add</strong> group puts another out, and Erase takes
+          one off the way it takes off a cone. A drill with none at all is fine — a shape or pressing session has no ball in
           it. Balls look alike, because footballs do: in a rondo it does not matter which is
           which.
         </p>
@@ -90,11 +91,14 @@ const emit = defineEmits<{ close: [] }>()
           whole group slides together, formation intact.
         </p>
         <p>
-          Copy duplicates whatever the group is holding, drops the copy a little down and to
-          the right, and leaves you holding the copy — ready to drag straight into place.
-          Delete takes the whole group off in one press. Both sit beside Undo rather than
-          behind ☰ More, because a tablet has no <kbd>Cmd+D</kbd> and no Delete key, and
-          those buttons are the only way in on the device this board is mostly used on.
+          Picking anything up opens the panel at the right-hand edge, and the panel is about
+          whatever you are holding: a player's colour and label, what a text label says, and
+          <strong>Duplicate</strong> and <strong>Remove</strong> for the whole selection.
+          Duplicate drops the copy a little down and to the right and leaves you holding it,
+          ready to drag into place; Remove takes everything held off in one press. They live
+          there rather than in the bar across the top so that they always say what they would
+          act on — and because a tablet has no <kbd>Cmd+D</kbd> and no Delete key, so on the
+          device this board is mostly used on they are the only way in.
         </p>
         <p>
           A plain press on grass, <kbd>Escape</kbd>, or switching tool puts the group down
@@ -114,9 +118,11 @@ const emit = defineEmits<{ close: [] }>()
           still image.
         </p>
         <p>
-          <strong>+ Add a phase</strong> adds one, an exact copy of the phase you're on — same
-          players, same positions, same balls — so you're moving things from where they already
-          are rather than starting again from nothing.
+          The dashed <strong>Add phase</strong> card at the end of the strip adds one, an exact
+          copy of the phase you're on — same players, same positions, same balls — so you're
+          moving things from where they already are rather than starting again from nothing.
+          Every other card in the strip is a phase, drawn as it stands, with its number in one
+          corner and how long it takes in the other.
         </p>
         <p>
           Moving a player, drawing on the board, or dropping a ball only changes the phase
@@ -134,32 +140,82 @@ const emit = defineEmits<{ close: [] }>()
           original happens to stand right now.
         </p>
         <p>
-          Every phase after the first has a <strong>Takes</strong> field: how long, in seconds,
-          the move into that phase takes. There's nothing to move into the very first phase, so
-          the field is hidden there. It accepts anything from a tenth of a second to ten
-          seconds, and if you never set it, a phase takes one second to arrive.
+          Every phase after the first carries its duration in the corner of its card: how long,
+          in seconds, the move into that phase takes. Type over it on the phase you're on to
+          change it. There's nothing to move into the very first phase, so it has no duration at
+          all. It accepts anything from a tenth of a second to ten seconds, and if you never set
+          it, a phase takes one second to arrive.
         </p>
         <p>
-          Play (▶) watches the drill from where you are; the numbered chips jump straight to a
-          phase, ◀ and ▶ move the phase you're on earlier or later, and Delete phase removes
-          it — a drill always keeps at least one. Rewind returns to the start, and the scrub
-          slider lets you park on any point by hand. While the drill is playing, or while
-          you're dragging the slider, the board is showing a blend between two phases rather
-          than a phase itself, so it won't take an edit until you land back on one.
+          Play watches the drill from where you are, and the clock beside it says where the
+          playhead is and how long the whole drill runs. Press a card to jump to that phase, or
+          drag it onto another card to reorder the two. Each card's <kbd>⋯</kbd> button holds
+          Duplicate phase, Move earlier, Move later and Delete phase, and acts on that card
+          rather than on whichever phase you happen to be on — a drill always keeps at least
+          one. Rewind returns to the start, and the scrub bar parks the drill on any point by
+          hand; the ticks along it are where each phase begins. While the drill is playing, or
+          while you're dragging the scrub bar, the board is showing a blend between two phases
+          rather than a phase itself, so it won't take an edit until you land back on one.
+        </p>
+      </section>
+
+      <section data-help-section="destructive" class="section">
+        <h3>Taking things off</h3>
+        <p>
+          <strong>Clear players</strong>, <strong>Clear drawings</strong> and
+          <strong>Reset the board…</strong> sit in the red group at the foot of the drill menu,
+          away from the controls you use while drawing. The two clears do it straight away and
+          say what they took — <em>Cleared 5 players</em> — with an Undo you have six seconds to
+          press; it is the board's own undo, so <kbd>Ctrl+Z</kbd> does the same thing afterwards.
+          Reset asks first, because it takes everything at once and the board stops being the
+          drill it was saved as.
+        </p>
+      </section>
+
+      <section data-help-section="board-menus" class="section">
+        <h3>The pitch, and what is drawn on it</h3>
+        <p>
+          <strong>Pitch</strong> holds the three pitches — blank, full and half — shown as
+          pictures rather than named, because what you are choosing between is what the board
+          will look like. Under them, Landscape and Portrait say which way round the board
+          currently is rather than offering to turn it.
+        </p>
+        <p>
+          <strong>View</strong> is what is drawn on that pitch: switches for the player labels,
+          the balls, and the notes panel at the right-hand edge.
+        </p>
+      </section>
+
+      <section data-help-section="notes" class="section">
+        <h3>Notes</h3>
+        <p>
+          The panel at the right-hand edge is a strip until you press it, so the pitch starts
+          with the room. With nothing held it holds two fields: notes for the whole drill —
+          setup, coaching points, progressions — and a note for the phase you are standing on,
+          for the point that applies there and nowhere else. Whether the panel is open is saved
+          with the drill, so a drill you work on with the notes up comes back that way.
         </p>
       </section>
 
       <section data-help-section="saving" class="section">
         <h3>Saving and sharing</h3>
         <p>
-          Save writes the drill you have open back to itself; if the board has never been
-          saved, it asks for a name first. Save as… forks the board into a new drill under a
-          new name, leaving the original as it was. Open lists every saved drill, for loading,
-          renaming or deleting.
+          A drill that has been saved once keeps saving itself: a second after you stop
+          changing it, the library has what is on screen, and the line beside the drill's name
+          in the header says so. Rename it by typing over that name.
         </p>
         <p>
-          PNG exports the phase you're looking at as an image — drill notes come with it, in a
-          band under the pitch, if the notes panel is showing. GIF exports the whole drill as a
+          Everything else about the drill lives in the <kbd>▾</kbd> menu beside its name.
+          Save now writes it back immediately rather than waiting; on a board that has never
+          been saved it asks for a name first. Save as… forks the board into a new drill under
+          a new name, leaving the original as it was, and Duplicate does the same without
+          asking, naming the copy for you. Open lists every saved drill, for loading, renaming
+          or deleting. Delete drill removes the drill you have open from the library and asks
+          first — what is on the board stays there.
+        </p>
+        <p>
+          The Share menu takes a drill out of the app. PNG exports the phase you're looking at as an image — drill notes come with it, in a
+          band under the pitch, if the notes panel is open. GIF exports the whole drill as a
           looping animation instead, so it plays inline in a message or a document; it appears
           once there's more than one phase, since a single phase is what PNG is for.
         </p>
@@ -199,9 +255,9 @@ const emit = defineEmits<{ close: [] }>()
           </thead>
           <tbody>
             <tr><td><kbd>V</kbd></td><td>Move — drag players, cones, labels and balls; bend and reshape drawings</td></tr>
-            <tr><td><kbd>P</kbd></td><td>Draw — freehand pen</td></tr>
+            <tr><td><kbd>D</kbd></td><td>Draw — freehand pen</td></tr>
             <tr><td><kbd>R</kbd></td><td>Run — solid arrow</td></tr>
-            <tr><td><kbd>S</kbd></td><td>Pass — dashed arrow</td></tr>
+            <tr><td><kbd>P</kbd></td><td>Pass — dashed arrow</td></tr>
             <tr><td><kbd>L</kbd></td><td>Line — straight edge</td></tr>
             <tr><td><kbd>C</kbd></td><td>Cone</td></tr>
             <tr><td><kbd>T</kbd></td><td>Text</td></tr>
@@ -222,17 +278,17 @@ const emit = defineEmits<{ close: [] }>()
 
 <style scoped>
 .overlay {
-  position: fixed; inset: 0; background: #000000aa;
+  position: fixed; inset: 0; background: var(--scrim);
   display: flex; align-items: center; justify-content: center; padding: 1rem;
 }
 .panel {
-  background: #263238; color: #eceff1; border-radius: 0.6rem;
+  background: var(--surface-1); color: var(--ink-1); border-radius: 0.6rem;
   width: min(38rem, 100%); max-height: 80vh; overflow: auto; padding: 1rem;
 }
 .head {
   display: flex; justify-content: space-between; align-items: center;
   position: sticky; top: -1rem; margin: -1rem -1rem 0.75rem; padding: 1rem 1rem 0.75rem;
-  background: #263238;
+  background: var(--surface-1);
 }
 .head h2 { margin: 0; font-size: 1.1rem; }
 .section { margin-bottom: 1.25rem; }
@@ -241,12 +297,12 @@ const emit = defineEmits<{ close: [] }>()
 .section p { margin: 0 0 0.6rem; line-height: 1.45; font-size: 0.9rem; }
 .section p:last-child { margin-bottom: 0; }
 kbd {
-  font-family: inherit; font-size: 0.85em; background: #37474f; border: 1px solid #ffffff40;
+  font-family: inherit; font-size: 0.85em; background: var(--surface-2); border: 1px solid #ffffff40;
   border-radius: 0.25rem; padding: 0.05rem 0.35rem;
 }
 table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-th, td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid #ffffff26; }
-.chip { border: 1px solid #ffffff40; background: #455a64; color: inherit; border-radius: 0.4rem; padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.8rem; }
+th, td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); }
+.chip { border: 1px solid #ffffff40; background: var(--surface-3); color: inherit; border-radius: 0.4rem; padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.8rem; }
 
 /*
  * A finger is far bigger than a mouse pointer, and this gets used at the

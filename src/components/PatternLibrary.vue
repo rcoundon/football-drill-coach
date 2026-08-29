@@ -196,21 +196,21 @@ function saveTags(id: string) {
 
 <style scoped>
 .overlay {
-  position: fixed; inset: 0; background: #000000aa;
+  position: fixed; inset: 0; background: var(--scrim);
   display: flex; align-items: center; justify-content: center; padding: 1rem;
 }
 .panel {
-  background: #263238; color: #eceff1; border-radius: 0.6rem;
+  background: var(--surface-1); color: var(--ink-1); border-radius: 0.6rem;
   width: min(38rem, 100%); max-height: 80vh; overflow: auto; padding: 1rem;
 }
 .head { display: flex; justify-content: space-between; align-items: center; }
 .head h2 { margin: 0; font-size: 1.1rem; }
 .empty { opacity: 0.7; }
 .list { list-style: none; margin: 0.75rem 0 0; padding: 0; display: grid; gap: 0.4rem; }
-.row { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; background: #37474f; padding: 0.45rem 0.6rem; border-radius: 0.4rem; }
+.row { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; background: var(--surface-2); padding: 0.45rem 0.6rem; border-radius: 0.4rem; }
 .name { flex: 1; }
 .date { opacity: 0.6; font-size: 0.8rem; }
-.input { flex: 1; padding: 0.35rem; border-radius: 0.3rem; border: 1px solid #ffffff40; background: #263238; color: inherit; }
-.chip { border: 1px solid #ffffff40; background: #455a64; color: inherit; border-radius: 0.4rem; padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.8rem; }
+.input { flex: 1; padding: 0.35rem; border-radius: 0.3rem; border: 1px solid #ffffff40; background: var(--surface-1); color: inherit; }
+.chip { border: 1px solid #ffffff40; background: var(--surface-3); color: inherit; border-radius: 0.4rem; padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.8rem; }
 .chip--danger { background: #c62828; }
 </style>

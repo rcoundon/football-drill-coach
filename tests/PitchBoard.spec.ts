@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, type DOMWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import PitchBoard, { DOUBLE_PRESS_MS, STALE_DRAG_MS } from '../src/components/PitchBoard.vue'
+import { TOKEN_CASING } from '../src/components/controls'
 import { useBoard, __resetBoardForTests } from '../src/composables/useBoard'
 import { BALL_HIT_RADIUS_ATTACHED } from '../src/components/BallToken.vue'
 import { PITCH_H, PITCH_W } from '../src/geometry'
@@ -722,19 +723,27 @@ describe('cones', () => {
 })
 
 describe('appearance', () => {
-  it('draws players without an outline', async () => {
+  /**
+   * Players and cones were flattened onto the grass deliberately, and the
+   * casing is deliberately back: a red disc is 1.03:1 against the pitch by
+   * luminance and a blue one 1.11:1, so both are told apart from the grass
+   * by hue alone — the one channel colour blindness, bright sunlight and a
+   * cheap screen each take away. The ring clears 3:1 against the pitch and
+   * against its markings, so the shape survives all three.
+   */
+  it('gives players a casing, so the shape does not depend on hue', async () => {
     useBoard().addCounter('red')
     const wrapper = mountBoard()
     await wrapper.vm.$nextTick()
     const disc = wrapper.find('[data-counter] circle')
-    expect(disc.attributes('stroke')).toBeUndefined()
+    expect(disc.attributes('stroke')).toBe(TOKEN_CASING)
   })
 
-  it('draws cones without an outline', async () => {
+  it('gives cones the same casing', async () => {
     useBoard().addMarker({ x: 20, y: 20 })
     const wrapper = mountBoard()
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('[data-marker] polygon').attributes('stroke')).toBeUndefined()
+    expect(wrapper.find('[data-marker] polygon').attributes('stroke')).toBe(TOKEN_CASING)
   })
 
   /**

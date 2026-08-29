@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import {
   useViewport,
-  NARROW_MAX_PX,
-  RAIL_MAX_PX,
+  COMPACT_MAX_PX,
   __resetViewportForTests,
 } from '../src/composables/useViewport'
 
@@ -32,45 +31,34 @@ function stubMatchMedia(initial: Record<string, boolean>) {
   }
 }
 
-const NARROW = `(max-width: ${NARROW_MAX_PX}px)`
+const COMPACT = `(max-width: ${COMPACT_MAX_PX}px)`
 const PORTRAIT = '(orientation: portrait)'
-const RAIL = `(min-width: ${NARROW_MAX_PX + 1}px) and (max-width: ${RAIL_MAX_PX}px)`
 
 beforeEach(() => __resetViewportForTests())
 afterEach(() => vi.unstubAllGlobals())
 
 describe('useViewport', () => {
-  it('reports a narrow portrait screen', () => {
-    stubMatchMedia({ [NARROW]: true, [PORTRAIT]: true })
+  it('reports a small portrait screen, where the rail lies down', () => {
+    stubMatchMedia({ [COMPACT]: true, [PORTRAIT]: true })
     const viewport = useViewport()
-    expect(viewport.isNarrow.value).toBe(true)
+    expect(viewport.isCompact.value).toBe(true)
     expect(viewport.isPortrait.value).toBe(true)
   })
 
-  it('reports a wide landscape screen', () => {
-    stubMatchMedia({ [NARROW]: false, [PORTRAIT]: false })
+  it('reports a wide landscape screen, where the rail stands up', () => {
+    stubMatchMedia({ [COMPACT]: false, [PORTRAIT]: false })
     const viewport = useViewport()
-    expect(viewport.isNarrow.value).toBe(false)
+    expect(viewport.isCompact.value).toBe(false)
     expect(viewport.isPortrait.value).toBe(false)
   })
 
   it('follows the screen when it changes', () => {
-    const media = stubMatchMedia({ [NARROW]: false, [PORTRAIT]: false })
+    const media = stubMatchMedia({ [COMPACT]: false, [PORTRAIT]: false })
     const viewport = useViewport()
-    media.set(NARROW, true)
-    expect(viewport.isNarrow.value).toBe(true)
-    media.set(NARROW, false)
-    expect(viewport.isNarrow.value).toBe(false)
-  })
-
-  it('reports a tablet-sized screen, where the rail layout applies', () => {
-    stubMatchMedia({ [NARROW]: false, [RAIL]: true })
-    expect(useViewport().isRail.value).toBe(true)
-  })
-
-  it('does not use the rail on a phone or a wide desktop', () => {
-    stubMatchMedia({ [NARROW]: true, [RAIL]: false })
-    expect(useViewport().isRail.value).toBe(false)
+    media.set(COMPACT, true)
+    expect(viewport.isCompact.value).toBe(true)
+    media.set(COMPACT, false)
+    expect(viewport.isCompact.value).toBe(false)
   })
 
   /**
@@ -82,8 +70,7 @@ describe('useViewport', () => {
     // @ts-expect-error deliberately removing it
     delete window.matchMedia
     const viewport = useViewport()
-    expect(viewport.isNarrow.value).toBe(false)
+    expect(viewport.isCompact.value).toBe(false)
     expect(viewport.isPortrait.value).toBe(false)
-    expect(viewport.isRail.value).toBe(false)
   })
 })

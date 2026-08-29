@@ -128,6 +128,12 @@ export type Frame = {
   balls: Ball[]
   drawings: Drawing[]
   /**
+   * What this phase alone is about — the coaching point that applies here
+   * and not to the drill as a whole. Optional: most phases have none, and a
+   * pattern saved before per-phase notes existed has none either.
+   */
+  note?: string
+  /**
    * How long the move INTO this frame takes, in milliseconds. Absent means
    * DEFAULT_FRAME_MS. The first frame's value is ignored: nothing moves into
    * the start of a drill.

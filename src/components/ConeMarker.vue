@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Marker } from '../types'
+import { TOKEN_CASING } from './controls'
 
 const props = defineProps<{ marker: Marker; rotated: boolean }>()
 defineEmits<{ grab: [event: PointerEvent] }>()
@@ -24,7 +25,8 @@ const uprightTransform = computed(() => (props.rotated ? 'rotate(-90)' : ''))
 <template>
   <g data-marker :transform="`translate(${marker.pos.x} ${marker.pos.y})`" style="cursor: grab">
     <g :transform="uprightTransform">
-      <polygon :points="shape" fill="#fb8c00" />
+      <!-- The same casing a player gets: orange on grass is 1.9:1. -->
+      <polygon :points="shape" fill="#fb8c00" :stroke="TOKEN_CASING" stroke-width="0.25" />
     </g>
     <circle :r="HIT_RADIUS" fill="transparent" @pointerdown="$emit('grab', $event as PointerEvent)" />
   </g>

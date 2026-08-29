@@ -1,22 +1,27 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import type { Pattern, ToolMode, Vec } from './types'
+import type { Pattern, SelectionRef, ToolMode, Vec } from './types'
 import { gifSchedule } from './animation'
-import Toolbar from './components/Toolbar.vue'
+import { PITCH_H, PITCH_W } from './geometry'
+import ActionToast from './components/ActionToast.vue'
+import DrillHeader from './components/DrillHeader.vue'
 import ToolRail from './components/ToolRail.vue'
 import PitchBoard from './components/PitchBoard.vue'
+import PitchEmptyState from './components/PitchEmptyState.vue'
+import PlacementGhost from './components/PlacementGhost.vue'
 import PatternLibrary from './components/PatternLibrary.vue'
 import HelpPanel from './components/HelpPanel.vue'
+import Inspector from './components/Inspector.vue'
 import TagInput from './components/TagInput.vue'
-import FrameStrip from './components/FrameStrip.vue'
-import { MAX_LABEL_LENGTH, MAX_NOTES_LENGTH, useBoard } from './composables/useBoard'
+import PhaseTimeline from './components/PhaseTimeline.vue'
+import { MAX_LABEL_LENGTH, useBoard } from './composables/useBoard'
 import { useStorage } from './composables/useStorage'
 import { useExport } from './composables/useExport'
 import { useViewport } from './composables/useViewport'
 
 const board = useBoard()
 const storage = useStorage()
-const { isPortrait, isRail } = useViewport()
+const { isPortrait, isCompact } = useViewport()
 const exporter = useExport()
 
 const tool = ref<ToolMode>('select')
@@ -30,6 +35,74 @@ const boardRef = ref<InstanceType<typeof PitchBoard> | null>(null)
  */
 const selectionSize = ref(0)
 const notice = ref<string | null>(null)
+
+/**
+ * What the coach is holding, which is what the inspector is about.
+ *
+ * Held here rather than read back out of the board for the same reason the
+ * count is: the panel is driven by plain props, the way every other
+ * component in this app already is.
+ */
+const selection = ref<SelectionRef[]>([])
+
+/**
+ * Whether the panel beside the pitch is open.
+ *
+ * Closed by default, and stored with the drill the way it always was — a
+ * coach who wants the notes up while they work says so once, and gets them
+ * back next time they open that drill.
+ */
+const inspectorOpen = computed({
+  get: () => board.state.notesVisible,
+  set: (open: boolean) => {
+    if (board.state.notesVisible !== open) board.toggleNotesVisible()
+  },
+})
+
+/**
+ * Whether the panel was open before something was selected, so putting the
+ * selection down gives the pitch its room back rather than leaving a notes
+ * panel the coach never asked for.
+ */
+let openedForSelection = false
+
+/**
+ * Anything held populates the panel, which is no use behind a closed one.
+ * Opening it is what makes Duplicate and Remove reachable at all on a
+ * tablet, where there is no Cmd+D and no Delete key.
+ */
+function onSelectionChanged(held: SelectionRef[]): void {
+  const had = selection.value.length
+  selection.value = held
+  if (held.length > 0 && had === 0 && !inspectorOpen.value) {
+    openedForSelection = true
+    inspectorOpen.value = true
+    return
+  }
+  if (held.length === 0 && openedForSelection) {
+    openedForSelection = false
+    inspectorOpen.value = false
+  }
+}
+
+/**
+ * Whether the pitch has ever had anything on it this session.
+ *
+ * The prompt telling a coach how to place their first player goes for good
+ * the moment one lands — including on a drill loaded from the library, which
+ * arrives with its players already on. An instruction that comes back every
+ * time the board is cleared is one the coach has already read.
+ */
+const everPlaced = ref(false)
+watch(
+  () => board.state.counters.length + board.state.markers.length + board.state.labels.length,
+  (count) => {
+    if (count > 0) everPlaced.value = true
+  },
+  { immediate: true },
+)
+
+const showEmptyState = computed(() => !everPlaced.value)
 
 const libraryOpen = ref(false)
 const helpOpen = ref(false)
@@ -45,6 +118,142 @@ const currentName = ref('')
 
 const savePromptOpen = ref(false)
 const saveNameDraft = ref('')
+
+/**
+ * What the header says about the library. 'unsaved' is a board that has
+ * never been saved, 'dirty' the gap between a change and the autosave that
+ * follows it, 'saved' once the library holds what is on screen.
+ */
+const saveStatus = ref<'unsaved' | 'dirty' | 'saved'>('unsaved')
+const lastSavedAt = ref<number | null>(null)
+
+/** Note that the open drill and the library now agree. */
+function markSaved(): void {
+  saveStatus.value = 'saved'
+  lastSavedAt.value = Date.now()
+}
+
+/**
+ * Write the open drill back to the library.
+ *
+ * A drill that has never been saved has nowhere to go, so it stays a draft
+ * until the coach names it — autosave can update a drill in place, but it
+ * cannot decide what a new one is called.
+ */
+function autosavePattern(): void {
+  const id = currentPatternId.value
+  if (!id || board.isDerived.value) return
+  const saved = storage.savePattern(currentName.value, board.snapshot(), id)
+  if (!storage.lastWriteSucceeded.value) return
+  currentName.value = saved.name
+  markSaved()
+}
+
+let autosaveTimer: ReturnType<typeof setTimeout> | undefined
+
+/**
+ * Debounced, because a drag is hundreds of changes and the library is a
+ * single localStorage key. A second of quiet is the coach having stopped.
+ */
+function scheduleAutosave(): void {
+  if (!currentPatternId.value) return
+  saveStatus.value = 'dirty'
+  clearTimeout(autosaveTimer)
+  autosaveTimer = setTimeout(autosavePattern, 1000)
+}
+
+/**
+ * The name is edited in the header itself, so there is no rename dialog to
+ * confirm: typing a new one is the change, and the autosave that follows
+ * files it.
+ */
+function onHeaderRename(name: string): void {
+  currentName.value = name
+  if (currentPatternId.value) scheduleAutosave()
+}
+
+/**
+ * Duplicate: file a copy under its own name and leave the original where it
+ * was. Unlike Save as… this asks nothing — the name is derived and can be
+ * edited in the header straight afterwards, which is faster than a dialog
+ * for the thing a coach does when adapting a saved drill for today.
+ */
+function duplicateDrill(): void {
+  const from = currentPatternId.value
+  if (!from) return
+  const saved = storage.savePattern(`${currentName.value} copy`, board.snapshot(), undefined, from)
+  if (!storage.lastWriteSucceeded.value) return
+  currentPatternId.value = saved.id
+  currentName.value = saved.name
+  markSaved()
+  notice.value = `Working on “${saved.name}”. The original is untouched.`
+}
+
+/**
+ * Deleting the open drill throws work away that no undo on the board can
+ * bring back, so it is the one header action that asks first.
+ */
+const deleteDrillPromptOpen = ref(false)
+
+/**
+ * What was just taken off the board, and the offer to put it back.
+ *
+ * Preferred over asking first: a confirmation costs a press every time to
+ * protect against the once it was a mistake. The undo entry is the board's
+ * own, so pressing Undo here and pressing Undo in the header do the same
+ * thing.
+ */
+const toast = ref<string | null>(null)
+
+function clearPlayers(): void {
+  const count = board.state.counters.length
+  if (count === 0) return
+  board.clearCounters()
+  toast.value = `Cleared ${count} ${count === 1 ? 'player' : 'players'}.`
+}
+
+function clearDrawings(): void {
+  const count = board.state.frames.reduce((total, frame) => total + frame.drawings.length, 0)
+  if (count === 0) return
+  board.clearDrawings()
+  toast.value = `Cleared ${count} ${count === 1 ? 'drawing' : 'drawings'}.`
+}
+
+function undoFromToast(): void {
+  board.undo()
+  toast.value = null
+}
+
+/**
+ * Reset is the one that asks first.
+ *
+ * It is not one thing taken off the board but all of them at once, and it
+ * also detaches the board from the drill it was saved as — more than a
+ * six-second window is worth resting on.
+ */
+const resetPromptOpen = ref(false)
+
+function confirmReset(): void {
+  resetPromptOpen.value = false
+  // Reset refuses while the view is derived, same as every other mutator.
+  // Without this check the board no-ops but the app still forgets the open
+  // pattern, and the next save writes a duplicate under a new id.
+  if (board.isDerived.value) return
+  board.resetBoard()
+  onBoardReset()
+}
+
+function confirmDeleteDrill(): void {
+  const id = currentPatternId.value
+  deleteDrillPromptOpen.value = false
+  if (!id) return
+  const name = currentName.value
+  storage.deletePattern(id)
+  if (!storage.lastWriteSucceeded.value) return
+  // The board keeps what is on it — only its place in the library is gone.
+  onPatternDeleted(id)
+  notice.value = `Deleted “${name}”. What is on the board is still here.`
+}
 
 /**
  * The tags the drill will be filed under, and every tag already in use to
@@ -87,6 +296,7 @@ function openSavePrompt() {
     // error banner is the message in that case.
     if (!storage.lastWriteSucceeded.value) return
     currentName.value = saved.name
+    markSaved()
     notice.value = `Saved “${saved.name}”.`
     return
   }
@@ -128,6 +338,7 @@ function confirmSave() {
   if (!storage.lastWriteSucceeded.value) return
   currentPatternId.value = saved.id
   currentName.value = saved.name
+  markSaved()
 
   // A second write, and only when there is something to say: `setTags` owns
   // normalisation, the unreadable-library guard and the quota message, so
@@ -151,10 +362,13 @@ function onPatternLoaded(pattern: Pattern) {
   board.loadSnapshot(storage.patternToSnapshot(pattern))
   currentPatternId.value = pattern.id
   currentName.value = pattern.name
+  markSaved()
 }
 
 function onPatternRenamed(change: { id: string; name: string }) {
-  if (change.id === currentPatternId.value) currentName.value = change.name
+  if (change.id !== currentPatternId.value) return
+  currentName.value = change.name
+  markSaved()
 }
 
 /**
@@ -167,6 +381,7 @@ function onPatternDeleted(id: string) {
   notice.value = `“${currentName.value}” was deleted. This board is no longer saved.`
   currentPatternId.value = null
   currentName.value = ''
+  saveStatus.value = 'unsaved'
 }
 
 /**
@@ -177,6 +392,7 @@ function onPatternDeleted(id: string) {
 function onBoardReset() {
   currentPatternId.value = null
   currentName.value = ''
+  saveStatus.value = 'unsaved'
 }
 
 /**
@@ -190,6 +406,11 @@ const labelInput = ref<HTMLInputElement | null>(null)
 function promptNewLabel(at: Vec) {
   labelDraft.value = ''
   labelTarget.value = { kind: 'new', at }
+}
+
+/** A label pressed for in the rail rather than dragged: it lands mid-pitch. */
+function promptCentreLabel() {
+  promptNewLabel({ x: PITCH_W / 2, y: PITCH_H / 2 })
 }
 
 function promptEditLabel(id: string) {
@@ -341,6 +562,8 @@ watch(renameCounterId, (id) => focusWhenOpen(id !== null, () => renameLabelInput
 const isDialogOpen = computed(
   () =>
     savePromptOpen.value ||
+    deleteDrillPromptOpen.value ||
+    resetPromptOpen.value ||
     libraryOpen.value ||
     helpOpen.value ||
     renameCounterId.value !== null ||
@@ -357,6 +580,14 @@ const isDialogOpen = computed(
 function closeTopmostDialog(): boolean {
   if (savePromptOpen.value) {
     savePromptOpen.value = false
+    return true
+  }
+  if (deleteDrillPromptOpen.value) {
+    deleteDrillPromptOpen.value = false
+    return true
+  }
+  if (resetPromptOpen.value) {
+    resetPromptOpen.value = false
     return true
   }
   if (renamePromptOpen.value) {
@@ -482,7 +713,7 @@ function onKeydown(event: KeyboardEvent) {
     return
   }
 
-  const byKey: Record<string, ToolMode> = { v: 'select', p: 'pen', r: 'arrow-run', s: 'arrow-pass', l: 'line', c: 'cone', t: 'text', e: 'erase' }
+  const byKey: Record<string, ToolMode> = { v: 'select', d: 'pen', r: 'arrow-run', p: 'arrow-pass', l: 'line', c: 'cone', t: 'text', e: 'erase' }
   const next = byKey[event.key.toLowerCase()]
   if (next) tool.value = next
 }
@@ -507,7 +738,10 @@ onMounted(() => {
   window.addEventListener('keydown', onKeydown)
 })
 
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
+  clearTimeout(autosaveTimer)
+})
 
 // Autosave the working board, debounced, so a refresh does not lose work.
 let saveTimer: ReturnType<typeof setTimeout> | undefined
@@ -520,6 +754,10 @@ watch(
     if (board.isDerived.value) return
     clearTimeout(saveTimer)
     saveTimer = setTimeout(() => storage.saveDraft(board.snapshot()), 400)
+    // The draft keeps the working board across a refresh; this keeps the
+    // drill itself up to date in the library, so Save is something a coach
+    // may press rather than something they must remember.
+    scheduleAutosave()
   },
   { deep: true },
 )
@@ -527,58 +765,78 @@ watch(
 
 <template>
   <div class="app">
-    <Toolbar
-      v-model:tool="tool"
-      v-model:drawColor="drawColor"
+    <DrillHeader
       :pattern-name="currentName"
-      :railed="isRail"
-      :selection-size="selectionSize"
+      :save-status="saveStatus"
+      :last-saved-at="lastSavedAt"
       :exporting="exporting"
-      @duplicate="boardRef?.duplicateSelected()"
-      @deleteSelection="boardRef?.deleteSelected()"
+      @rename="onHeaderRename"
       @save="openSavePrompt"
       @saveAs="openSaveAsPrompt"
+      @duplicateDrill="duplicateDrill"
+      @deleteDrill="deleteDrillPromptOpen = true"
+      @clearPlayers="clearPlayers"
+      @clearDrawings="clearDrawings"
+      @resetBoard="resetPromptOpen = true"
       @open="libraryOpen = true"
       @exportPng="exportPng"
       @exportGif="exportGif"
       @exportJson="exportJson"
       @importJson="importJson"
-      @reset="onBoardReset"
       @help="helpOpen = true"
     />
     <div class="workspace">
+      <!--
+        One rail, at every width. A coach who plans a session on a desktop
+        and runs it from a tablet at the side of a pitch used to learn the
+        tool twice: the same controls sat in a bar across the top on one and
+        down the edge on the other. There is no bar now.
+      -->
       <ToolRail
-        v-if="isRail"
+        v-if="!isCompact"
         v-model:tool="tool"
         v-model:drawColor="drawColor"
+        @add-label="promptCentreLabel"
       />
 
       <div class="stage">
-        <PitchBoard
-          ref="boardRef"
-          :tool="tool"
-          :draw-color="drawColor"
-          @rename="openRenamePrompt"
-          @add-label="promptNewLabel"
-          @edit-label="promptEditLabel"
-          @selection-size="selectionSize = $event"
+        <div class="board-wrap">
+          <PitchBoard
+            ref="boardRef"
+            :tool="tool"
+            :draw-color="drawColor"
+            @rename="openRenamePrompt"
+            @add-label="promptNewLabel"
+            @edit-label="promptEditLabel"
+            @selection-size="selectionSize = $event"
+            @selection-changed="onSelectionChanged"
+          />
+          <PitchEmptyState v-if="showEmptyState" />
+        </div>
+        <!--
+          The same rail, lying down: directly above the timeline, where the
+          hand holding a phone already is.
+        -->
+        <ToolRail
+          v-if="isCompact"
+          horizontal
+          v-model:tool="tool"
+          v-model:drawColor="drawColor"
+          @add-label="promptCentreLabel"
         />
-        <FrameStrip :exporting="exporting" />
+
+        <PhaseTimeline :exporting="exporting" />
       </div>
 
-      <aside v-if="board.state.notesVisible" class="notes">
-        <label class="notes-label" for="drill-notes">Drill notes</label>
-        <textarea
-          id="drill-notes"
-          data-notes
-          class="notes-field"
-          :maxlength="MAX_NOTES_LENGTH"
-          placeholder="Setup, coaching points, progressions…"
-          :value="board.state.notes"
-          @input="board.setNotes(($event.target as HTMLTextAreaElement).value)"
-        ></textarea>
-      </aside>
+      <Inspector
+        v-model:open="inspectorOpen"
+        :selection="selection"
+        @duplicate="boardRef?.duplicateSelected()"
+        @remove-selection="boardRef?.deleteSelected()"
+      />
     </div>
+
+    <PlacementGhost />
 
     <PatternLibrary
       :open="libraryOpen"
@@ -654,6 +912,39 @@ watch(
       </div>
     </div>
 
+    <div v-if="resetPromptOpen" class="overlay" @click.self="resetPromptOpen = false">
+      <div class="prompt" role="dialog" aria-label="Reset the board">
+        <p class="prompt-text">Start again on an empty board?</p>
+        <p class="hint">
+          Every player, drawing and phase goes. The pitch you are on stays, and this board stops
+          being the drill it was saved as.
+        </p>
+        <div class="prompt-actions">
+          <button data-confirm-reset class="chip chip--danger" @click="confirmReset">Reset</button>
+          <button class="chip" @click="resetPromptOpen = false">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="deleteDrillPromptOpen"
+      class="overlay"
+      @click.self="deleteDrillPromptOpen = false"
+    >
+      <div class="prompt" role="dialog" aria-label="Delete this drill">
+        <p class="prompt-text">Delete “{{ currentName }}” from your saved drills?</p>
+        <p class="hint">What is on the board stays. The saved drill does not come back.</p>
+        <div class="prompt-actions">
+          <button data-confirm-delete-drill class="chip chip--danger" @click="confirmDeleteDrill">
+            Delete
+          </button>
+          <button class="chip" @click="deleteDrillPromptOpen = false">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <ActionToast :message="toast" @undo="undoFromToast" @dismiss="toast = null" />
+
     <!-- Both messages dismiss on click; an error the coach cannot clear is worse than a notice. -->
     <p v-if="notice" class="notice" role="status" @click="notice = null">{{ notice }}</p>
     <p
@@ -667,9 +958,115 @@ watch(
 </template>
 
 <style>
+/*
+ * The board's tokens, in one place.
+ *
+ * Warm charcoal rather than blue-grey: the tool stays dark, because a
+ * bright screen at the side of a pitch is unreadable and a coach's own
+ * drill is the only thing on it worth looking at — but the greys are warm
+ * enough to belong to the same family as the pitch and the ember the
+ * active tool is painted in.
+ */
+:root {
+  --bg-app: #140E0A;
+  --surface-1: #1F1410;
+  --surface-2: #2A1810;
+  --surface-3: #35201A;
+  --surface-4: #43281F;
+  --field-bg: #17100D;
+
+  --border: #ffffff1a;
+  --border-strong: #ff6b354d;
+  --ring: #ffffff40;
+
+  --ink-1: #FFF8F3;
+  --ink-2: #fff8f3b8;
+  --ink-3: #fff8f37a;
+
+  /*
+   * Two embers, and the difference between them is white text.
+   *
+   * `--brand` is the bright one, for borders, glows and focus rings — light
+   * on a dark board, and never asked to carry a word. `--brand-gradient` is
+   * where white text sits: an active tool's label, the Play button, the
+   * segmented control. Its lightest point clears 4.5:1 against white, which
+   * the brighter orange does not manage at any point along it (2.84:1), so
+   * the tool a coach is holding used to be the least readable thing on the
+   * board.
+   */
+  --brand: #ff6b35;
+  --brand-deep: #ee0a24;
+  --brand-gradient: linear-gradient(135deg, #d1400c, #c8091d);
+  --button-gradient: linear-gradient(180deg, #d1400c, #c8091d);
+  --brand-glow: 0 8px 18px -8px #ee0a2473;
+
+  /* The bright red reads as red on a dark surface; the deep one carries white. */
+  --error: #EF4444;
+  --error-solid: #cc2626;
+  --error-ink: #ff8a80;
+
+  --radius-control: 0.75rem;
+  --radius-card: 1rem;
+  --radius-sheet: 1.5rem;
+
+  --shadow-ink: #000000a6;
+  --scrim: #0b0705d1;
+  --shadow-card: 0 4px 12px -4px #00000080;
+  --shadow-popover: 0 16px 40px -12px var(--shadow-ink);
+
+  /*
+   * Satoshi and JetBrains Mono are asked for in index.html and fall back to
+   * the platform's own faces, so a coach on a pitch with no signal gets a
+   * board that reads the same, in a different typeface.
+   */
+  --font-ui: 'Satoshi', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --dur-fast: 160ms;
+  --dur-base: 200ms;
+  /* Overshoots, so a tool taking hold reads as a thing landing. */
+  --ease-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
 * { box-sizing: border-box; }
 html, body, #app { height: 100%; margin: 0; }
-body { font-family: system-ui, sans-serif; background: #102010; }
+body { font-family: var(--font-ui); background: var(--bg-app); }
+
+/*
+ * Where the keyboard is, said once for the whole board.
+ *
+ * Most controls here had no focus style of their own, which leaves a
+ * keyboard user tabbing blind through a rail of eight tools and two menus.
+ * `:focus-visible` rather than `:focus`, so a coach pressing a button with
+ * a finger or a mouse is not given a ring they did not ask for.
+ */
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 0.35rem;
+}
+
+/* Every number the board shows, in figures that do not change width. */
+[data-clock], [data-frame-duration], .badge {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Honoured everywhere at once rather than component by component. Only the
+ * timing is dropped: several layouts here are built on transforms — a
+ * centred toast, the knob in a switch — and removing those would not calm
+ * the interface, it would break it.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
 </style>
 
 <style scoped>
@@ -683,52 +1080,43 @@ body { font-family: system-ui, sans-serif; background: #102010; }
  */
 .stage { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 0.5rem; }
 .stage > :first-child { flex: 1; min-height: 0; }
+/*
+ * Only so the first-run prompt has something to be positioned against. The
+ * board itself is the svg, and an overlay inside it would end up in the PNG.
+ */
+.board-wrap { position: relative; display: flex; min-height: 0; min-width: 0; }
+.board-wrap > :first-child { flex: 1; min-height: 0; min-width: 0; }
 
 /*
- * Beside the board on a wide screen, beneath it on a narrow one — a coach
- * on a phone at the side of a pitch needs the board to stay the priority.
+ * The notes used to be a permanent column roughly a quarter of the screen
+ * wide, which on a tablet left the pitch 663x430 of a 1194px screen. The
+ * panel is a 40px strip until a coach asks for it, so the same tablet gives
+ * the board the whole middle — and the board is the only thing on this page
+ * anyone is actually looking at.
  */
-.notes { display: flex; flex-direction: column; gap: 0.35rem; width: min(22rem, 32vw); }
-.notes-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.65; color: #eceff1; }
-.notes-field {
-  flex: 1; min-height: 8rem; resize: none; padding: 0.6rem;
-  border-radius: 0.4rem; border: 1px solid #ffffff26; background: #1b2429;
-  color: #eceff1; font: inherit; font-size: 0.9rem; line-height: 1.45;
-}
-/*
- * Wherever the rail is in use, the notes go under the board rather than
- * beside it. Measured on a 1194px tablet: side by side, the rail and a
- * 352px notes column left the pitch 663x430; stacked, it gets 919x597.
- * The board is what a coach is manipulating, so it takes the room.
- */
-@media (max-width: 80rem) {
-  /*
-   * Grid rather than a wrapping flex row: a wrapped line takes its content
-   * height, which let the board grow past the bottom of the screen. The
-   * explicit 1fr row keeps it inside the viewport.
-   */
-  .workspace {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) auto;
-  }
-  .stage { min-height: 0; }
-  .notes { grid-column: 1 / -1; width: auto; }
-  .notes-field { min-height: 5rem; max-height: 9rem; }
-}
-
-/* No rail below this, so the board simply sits above the notes. */
-@media (max-width: 48rem) {
-  .workspace { grid-template-columns: minmax(0, 1fr); }
-}
 .error {
-  margin: 0; padding: 0.6rem 0.9rem; background: #b71c1c; color: #fff; font-size: 0.85rem; cursor: pointer;
+  margin: 0; padding: 0.6rem 0.9rem; background: var(--error); color: #fff; font-size: 0.85rem; cursor: pointer;
 }
 .hint { margin: 0; font-size: 0.8rem; opacity: 0.7; }
-.notice { margin: 0; padding: 0.6rem 0.9rem; background: #1565c0; color: #fff; font-size: 0.85rem; cursor: pointer; }
-.overlay { position: fixed; inset: 0; background: #000000aa; display: flex; align-items: center; justify-content: center; }
-.prompt { background: #263238; color: #eceff1; padding: 1rem; border-radius: 0.6rem; display: grid; gap: 0.5rem; min-width: 18rem; }
+/* Quieter than the error bar beneath it: this one is only ever good news. */
+.notice {
+  margin: 0; padding: 0.6rem 0.9rem;
+  background: var(--surface-2); color: var(--ink-1);
+  border-left: 3px solid var(--brand);
+  font-size: 0.85rem; cursor: pointer;
+}
+.overlay { position: fixed; inset: 0; background: var(--scrim); display: flex; align-items: center; justify-content: center; }
+.prompt {
+  background: var(--surface-1); color: var(--ink-1);
+  padding: 1.1rem; border-radius: var(--radius-sheet);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-popover);
+  display: grid; gap: 0.5rem; min-width: 18rem; max-width: min(26rem, calc(100vw - 2rem));
+}
 .prompt-actions { display: flex; gap: 0.4rem; }
-.input { padding: 0.4rem; border-radius: 0.3rem; border: 1px solid #ffffff40; background: #37474f; color: inherit; }
-.chip { border: 1px solid #ffffff40; background: #455a64; color: inherit; border-radius: 0.4rem; padding: 0.35rem 0.7rem; cursor: pointer; }
+.input { padding: 0.4rem; border-radius: 0.3rem; border: 1px solid #ffffff40; background: var(--surface-2); color: inherit; }
+.chip { border: 1px solid #ffffff40; background: var(--surface-3); color: inherit; border-radius: 0.4rem; padding: 0.35rem 0.7rem; cursor: pointer; }
+.chip--danger { background: var(--error-solid); border-color: transparent; color: #ffffff; }
+.chip--danger:hover { background: #b81f1f; }
+.prompt-text { margin: 0; font-size: 0.95rem; }
 </style>

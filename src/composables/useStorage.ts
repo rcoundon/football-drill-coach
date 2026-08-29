@@ -296,6 +296,9 @@ export function parsePattern(value: unknown): Pattern {
         throw new Error('That pattern has a damaged frame duration.')
       }
     }
+    if (frame.note !== undefined && typeof frame.note !== 'string') {
+      throw new Error('That pattern has a damaged phase note.')
+    }
   }
 
   return value as unknown as Pattern
@@ -446,6 +449,7 @@ function frameWithDefaults(
     balls: ballsOf(frame, ballId),
     drawings: (frame.drawings ?? legacyDrawings) as Drawing[],
     ...(typeof frame.duration === 'number' ? { duration: frame.duration } : {}),
+    ...(typeof frame.note === 'string' && frame.note !== '' ? { note: frame.note } : {}),
   }
 }
 
@@ -646,7 +650,8 @@ function isValidFrame(value: unknown): boolean {
     // has to be one `durationOf` can actually use, exactly as `parsePattern`
     // already requires for a saved pattern's frames.
     (value.duration === undefined ||
-      (typeof value.duration === 'number' && Number.isFinite(value.duration) && value.duration > 0))
+      (typeof value.duration === 'number' && Number.isFinite(value.duration) && value.duration > 0)) &&
+    (value.note === undefined || typeof value.note === 'string')
   )
 }
 

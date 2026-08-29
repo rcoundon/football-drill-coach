@@ -1310,3 +1310,31 @@ describe('a draft whose balls list is damaged', () => {
     expect(useStorage().loadDraft()).toBeNull()
   })
 })
+
+/**
+ * A note that belongs to one phase has to survive being saved, or it is a
+ * note the coach loses the moment they close the drill.
+ */
+describe('a phase note', () => {
+  it('goes round the library and comes back', () => {
+    const store = useStorage()
+    const board = snap()
+    board.frames[0].note = 'Overload arrives late.'
+
+    const saved = store.savePattern('Press trigger', board)
+    const back = store.patternToSnapshot(store.listPatterns().find((p) => p.id === saved.id)!)
+
+    expect(back.frames[0].note).toBe('Overload arrives late.')
+  })
+
+  it('is rejected when it is not text', () => {
+    const raw = {
+      version: 3,
+      id: 'p1',
+      name: 'Broken',
+      pitch: { type: 'full', rotated: false },
+      frames: [{ counters: [], markers: [], labels: [], balls: [], drawings: [], note: 7 }],
+    }
+    expect(() => parsePattern(raw)).toThrow(/phase note/i)
+  })
+})

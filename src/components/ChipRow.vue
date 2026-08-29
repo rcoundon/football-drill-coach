@@ -36,7 +36,7 @@ defineEmits<{ toggle: [tag: string] }>()
 <style scoped>
 .row { display: flex; flex-wrap: wrap; gap: 0.3rem; }
 .chip {
-  border: 1px solid #ffffff40; background: #455a64; color: inherit;
+  border: 1px solid #ffffff40; background: var(--surface-3); color: inherit;
   border-radius: 0.8rem; padding: 0.25rem 0.6rem; cursor: pointer; font-size: 0.8rem;
 }
 .chip--on { background: #2e7d32; border-color: #ffffff80; }
