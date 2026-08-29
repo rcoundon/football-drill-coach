@@ -381,6 +381,22 @@ describe('a phase card menu', () => {
     expect(wrapper.find('[data-frame="0"] [data-delete-frame]').isVisible()).toBe(true)
   })
 
+  /**
+   * Placed against the window, not the card. The strip of cards scrolls
+   * sideways and clips what hangs out of it, and the menu opens upwards —
+   * every pixel of it was outside the clip box, which no test that asks
+   * whether an element is "visible" can see, because clipping by an
+   * ancestor is not visibility.
+   */
+  it('is positioned against the window rather than inside the scrolling strip', async () => {
+    const wrapper = mount(PhaseTimeline, { attachTo: document.body })
+    await wrapper.find('[data-frame-menu="0"]').trigger('click')
+
+    const style = wrapper.find('[data-frame="0"] .menu').attributes('style') ?? ''
+    expect(style).toMatch(/left:\s*-?\d/)
+    expect(style).toMatch(/top:\s*-?\d/)
+  })
+
   it('closes behind whatever was chosen', async () => {
     const wrapper = mount(PhaseTimeline, { attachTo: document.body })
     await wrapper.find('[data-frame-menu="0"]').trigger('click')

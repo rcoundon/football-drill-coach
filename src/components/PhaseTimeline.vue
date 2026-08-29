@@ -96,8 +96,37 @@ const boundaries = computed(() => {
  */
 const openMenu = ref<number | null>(null)
 
-function toggleMenu(index: number): void {
-  openMenu.value = openMenu.value === index ? null : index
+/**
+ * Where the open menu sits, in viewport coordinates.
+ *
+ * Positioned against the window rather than against its card, because the
+ * strip of cards scrolls sideways and therefore clips what hangs out of it:
+ * the menu opens upwards, and every pixel of it was above the clip box.
+ */
+const menuAt = ref<{ left: number; top: number } | null>(null)
+
+const menuStyle = computed(() =>
+  menuAt.value ? { left: `${menuAt.value.left}px`, top: `${menuAt.value.top}px` } : {},
+)
+
+const MENU_WIDTH = 160
+const MENU_HEIGHT = 148
+const MENU_GAP = 6
+
+function toggleMenu(index: number, event: MouseEvent): void {
+  if (openMenu.value === index) {
+    openMenu.value = null
+    return
+  }
+  const r = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  // Above the card where there is room, which is where the strip usually
+  // sits; below it when the strip is near the top of the screen.
+  const above = r.top - MENU_GAP - MENU_HEIGHT
+  menuAt.value = {
+    left: Math.max(MENU_GAP, Math.min(r.right - MENU_WIDTH, window.innerWidth - MENU_WIDTH - MENU_GAP)),
+    top: above > MENU_GAP ? above : r.bottom + MENU_GAP,
+  }
+  openMenu.value = index
 }
 
 function choose(run: () => void): void {
@@ -395,12 +424,12 @@ onBeforeUnmount(() => {
             :aria-expanded="openMenu === index"
             :aria-label="`Phase ${index + 1} options`"
             :title="`Phase ${index + 1} options`"
-            @click="toggleMenu(index)"
+            @click="toggleMenu(index, $event)"
           >
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="5" r="0.5" /><circle cx="12" cy="12" r="0.5" /><circle cx="12" cy="19" r="0.5" /></svg>
           </button>
 
-          <div v-show="openMenu === index" class="menu" role="menu">
+          <div v-show="openMenu === index" class="menu" :style="menuStyle" role="menu">
             <button
               data-duplicate-frame
               class="menu-item"
@@ -626,8 +655,8 @@ onBeforeUnmount(() => {
 .overflow[aria-expanded='true'] { opacity: 1; }
 
 .menu {
-  position: absolute; bottom: calc(100% + 0.3rem); right: 0; z-index: 30;
-  min-width: 10rem;
+  position: fixed; z-index: 30;
+  width: 10rem;
   display: flex; flex-direction: column;
   padding: 0.25rem;
   background: var(--surface-2);

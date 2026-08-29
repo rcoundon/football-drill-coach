@@ -109,6 +109,24 @@ describe('a phase note', () => {
     expect(board.frameNote(0)).toBe('')
   })
 
+  /**
+   * Coalescing runs per phase. Typing into one phase's note and then into
+   * another's shared an undo entry, because moving between phases commits
+   * nothing and so leaves the first run's entry on top of the stack — one
+   * undo took back both notes.
+   */
+  it('does not share an undo entry with another phase’s note', () => {
+    const board = useBoard()
+    board.addFrame()
+
+    board.setFrameNote(0, 'First phase')
+    board.setFrameNote(1, 'Second phase')
+
+    board.undo()
+    expect(board.frameNote(1)).toBe('')
+    expect(board.frameNote(0)).toBe('First phase')
+  })
+
   /** Cleared is indistinguishable from never typed into. */
   it('is dropped rather than stored empty', () => {
     const board = useBoard()

@@ -726,8 +726,15 @@ function frameNote(index: number): string {
   return state.frames[index]?.note ?? ''
 }
 
-/** The last commit made by phase-note typing, for the same coalescing. */
+/**
+ * The last commit made by phase-note typing, and the phase it was made for.
+ *
+ * The phase matters: moving between them commits nothing, so without it a
+ * run of typing in one phase's note and a run in another's shared an entry,
+ * and one undo took back both.
+ */
 let frameNoteUndoEntry: BoardSnapshot | null = null
+let frameNoteUndoIndex: number | null = null
 
 /**
  * A note that belongs to one phase rather than to the drill.
@@ -743,8 +750,9 @@ function setFrameNote(index: number, text: string): void {
   const clean = text.slice(0, MAX_NOTES_LENGTH)
   if (clean === (frame.note ?? '')) return
   const top = undoStack.value.at(-1)
-  if (!top || toRaw(top) !== frameNoteUndoEntry) {
+  if (!top || toRaw(top) !== frameNoteUndoEntry || frameNoteUndoIndex !== index) {
     frameNoteUndoEntry = commit()
+    frameNoteUndoIndex = index
   }
   // Stored only while there is something to store, so a phase a coach typed
   // into and then cleared is indistinguishable from one they never touched.
@@ -1588,6 +1596,7 @@ export function useBoard() {
 export function __resetBoardForTests(): void {
   notesUndoEntry = null
   frameNoteUndoEntry = null
+  frameNoteUndoIndex = null
   apply(emptySnapshot())
   undoStack.value = []
   redoStack.value = []
