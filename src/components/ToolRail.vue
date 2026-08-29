@@ -307,6 +307,8 @@ function placeText(event: PointerEvent): void {
   flex: none;
   padding: 0.6rem 0.5rem;
   background: var(--surface-1);
+  /* Everything in here that inherits a colour inherits this one. */
+  color: var(--ink-1);
   border-radius: var(--radius-card);
   /*
    * Visible, so the Pitch and View popovers can stand clear of an 88px

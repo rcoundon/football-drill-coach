@@ -188,7 +188,13 @@ function setRotated(rotated: boolean): void {
 </template>
 
 <style scoped>
-.menus { display: flex; gap: 0.3rem; align-items: center; }
+/*
+ * The colour is set here, on the root, because nearly everything below it
+ * asks to inherit one. Without it the thumbnails' names and the inactive
+ * half of the orientation control fell back to the browser's black on a
+ * near-black panel — around 1.2:1, which is no contrast at all.
+ */
+.menus { display: flex; gap: 0.3rem; align-items: center; color: var(--ink-1); }
 .menus--vertical { flex-direction: row; justify-content: center; }
 
 .menu-wrap { position: relative; flex: none; }
