@@ -1,4 +1,5 @@
 import { mount, type VueWrapper } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import { beforeEach, describe, expect, it } from 'vitest'
 import PhaseTimeline from '../src/components/PhaseTimeline.vue'
 import { useBoard, __resetBoardForTests } from '../src/composables/useBoard'
@@ -509,6 +510,28 @@ describe('dragging a phase into a new place', () => {
     await dragCard(wrapper, 0, 900)
 
     expect(board.state.frames.indexOf(moved)).toBe(0)
+  })
+
+  /**
+   * A drag installs its listeners on the window, so they outlive the strip.
+   * Unmounted mid-drag, the pointerup that followed reordered a phase on a
+   * board nobody was looking at.
+   */
+  it('lets go of a drag the strip is unmounted in the middle of', async () => {
+    const wrapper = mount(PhaseTimeline, { attachTo: document.body })
+    layOutCards(wrapper)
+    const order = [...board.state.frames]
+
+    const face = wrapper.find('[data-frame-select="0"]').element
+    face.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 30 }))
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 250, clientY: 30 }))
+    await wrapper.vm.$nextTick()
+
+    wrapper.unmount()
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 250, clientY: 30 }))
+    await nextTick()
+
+    expect(board.state.frames).toEqual(order)
   })
 
   /**

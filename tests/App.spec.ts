@@ -954,7 +954,8 @@ describe('autosaving the open drill', () => {
       expect(listed).toHaveLength(1)
       expect(listed[0].id).toBe(saved.id)
       expect(listed[0].frames[0].counters).toHaveLength(before + 1)
-      expect(wrapper.find('[data-save-status]').text()).toMatch(/saved/i)
+      // Not a bare /saved/, which "Not saved yet" satisfies too.
+      expect(wrapper.find('[data-save-status]').text()).toMatch(/saved (just now|\d+m ago)/i)
     } finally {
       vi.useRealTimers()
     }
@@ -1090,10 +1091,14 @@ describe('duplicating the open drill', () => {
  */
 describe('dragging a player onto the pitch', () => {
   /** A drag, as a browser produces it: press, travel, release. */
-  async function dragTo(app: VueWrapper, selector: string, to: { clientX: number; clientY: number }) {
+  async function dragTo(
+    app: VueWrapper,
+    selector: string,
+    to: { clientX: number; clientY: number; pointerId?: number },
+  ) {
     const from = app.find(selector).element
-    from.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0 }))
-    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 40, clientY: 40 }))
+    from.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0, pointerId: 1 }))
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 40, clientY: 40, pointerId: 1 }))
     await nextTick()
     window.dispatchEvent(new PointerEvent('pointermove', to))
     await nextTick()
@@ -1117,12 +1122,12 @@ describe('dragging a player onto the pitch', () => {
     wrapper = mountApp()
     const from = wrapper.find('[data-add-counter="red"]').element
 
-    from.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0 }))
-    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 60, clientY: 60 }))
+    from.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0, pointerId: 1 }))
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 60, clientY: 60, pointerId: 1 }))
     await nextTick()
     expect(wrapper.find('[data-placement-ghost]').exists()).toBe(true)
 
-    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 60, clientY: 60 }))
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 60, clientY: 60, pointerId: 1 }))
     await nextTick()
     expect(wrapper.find('[data-placement-ghost]').exists()).toBe(false)
   })
@@ -1132,7 +1137,7 @@ describe('dragging a player onto the pitch', () => {
     const board = useBoard()
     wrapper = mountApp()
 
-    await dragTo(wrapper, '[data-add-counter="blue"]', { clientX: 900, clientY: 900 })
+    await dragTo(wrapper, '[data-add-counter="blue"]', { clientX: 900, clientY: 900, pointerId: 1 })
 
     expect(board.state.counters).toHaveLength(0)
   })
@@ -1147,14 +1152,47 @@ describe('dragging a player onto the pitch', () => {
     wrapper = mountApp()
 
     const from = wrapper.find('[data-add-counter="blue"]').element
-    from.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0 }))
+    from.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0, pointerId: 1 }))
     window.dispatchEvent(new PointerEvent('pointermove', clientFor(20, 10)))
     await nextTick()
-    window.dispatchEvent(new PointerEvent('pointercancel'))
+    window.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 1 }))
     await nextTick()
 
     expect(board.state.counters).toHaveLength(0)
     expect(wrapper.find('[data-placement-ghost]').exists()).toBe(false)
+  })
+
+  /**
+   * A tablet has as many pointers as the coach has fingers. A second one
+   * used to be able to start its own placement over the first, or end the
+   * first one's gesture somewhere the first finger had never been.
+   */
+  it('belongs to the finger that started it', async () => {
+    const board = useBoard()
+    wrapper = mountApp()
+
+    const from = wrapper.find('[data-add-counter="blue"]').element
+    from.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0, pointerId: 1 }),
+    )
+    // A second finger presses another swatch and lets go somewhere else.
+    wrapper
+      .find('[data-add-counter="red"]')
+      .element.dispatchEvent(
+        new PointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0, pointerId: 2 }),
+      )
+    window.dispatchEvent(new PointerEvent('pointermove', { ...clientFor(20, 10), pointerId: 2 }))
+    window.dispatchEvent(new PointerEvent('pointerup', { ...clientFor(20, 10), pointerId: 2 }))
+    await nextTick()
+
+    expect(board.state.counters).toHaveLength(0)
+
+    // The first finger's own release still places, and places once.
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 0, clientY: 0, pointerId: 1 }))
+    await nextTick()
+
+    expect(board.state.counters).toHaveLength(1)
+    expect(board.state.counters[0].color).toBe('blue')
   })
 
   /**
@@ -1167,9 +1205,9 @@ describe('dragging a player onto the pitch', () => {
     wrapper = mountApp()
 
     const from = wrapper.find('[data-add-counter="blue"]').element
-    from.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0 }))
-    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 3, clientY: 2 }))
-    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 3, clientY: 2 }))
+    from.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0, pointerId: 1 }))
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 3, clientY: 2, pointerId: 1 }))
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 3, clientY: 2, pointerId: 1 }))
     await nextTick()
 
     expect(board.state.counters).toHaveLength(1)
@@ -1248,6 +1286,25 @@ describe('the inspector and the selection', () => {
     await nextTick()
 
     expect(wrapper.find('[data-inspector]').exists()).toBe(false)
+  })
+
+  /**
+   * Picking a player up is not an edit to the drill. Routing the panel
+   * through the board's own toggle put an entry on the undo stack, marked
+   * the drill dirty and set the autosave going, all for a panel opening.
+   */
+  it('does not count as a change to the drill', async () => {
+    const board = useBoard()
+    wrapper = mountApp()
+    await chooseAnArrow(wrapper)
+    const undoDepth = board.canUndo.value
+
+    board.undo()
+    await nextTick()
+
+    // The undo that follows takes back the drawing, not the panel.
+    expect(undoDepth).toBe(true)
+    expect(board.state.drawings).toHaveLength(0)
   })
 
   /**

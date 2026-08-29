@@ -39,6 +39,17 @@ const dragging = ref<PlacementKind | null>(null)
 const pointer = ref<PlacementPoint | null>(null)
 
 /**
+ * The pointer a placement belongs to, from the press until the release.
+ *
+ * A tablet has as many pointers as the coach has fingers, and until this
+ * was tracked a second one could start its own placement over the first, or
+ * end the first one's gesture in a place the first finger had never been.
+ * `dragging` alone was not enough: it stays null until a gesture travels
+ * far enough to count as a drag.
+ */
+let activePointer: number | null = null
+
+/**
  * The pitch registers itself as the place things can be dropped. Only the
  * pitch knows how to turn a client point into a point on the grass, and only
  * one pitch is ever on screen.
@@ -61,16 +72,23 @@ export function startPlacementDrag(
   event: PointerEvent,
   onTap: () => void,
 ): void {
-  // Only the primary button, and never a drag that is already running.
-  // Written as a comparison against 0 rather than an equality check, so a
-  // synthetic event carrying no button at all still counts as a press.
-  if (event.button > 0 || dragging.value) return
+  // Only the primary button, and only one gesture at a time. Written as a
+  // comparison against 0 rather than an equality check, so a synthetic
+  // event carrying no button at all still counts as a press.
+  if (event.button > 0 || activePointer !== null) return
 
+  activePointer = event.pointerId ?? 0
   const startX = event.clientX
   const startY = event.clientY
   let travelled = false
 
+  /** True for events belonging to some other finger, which are not ours. */
+  function isOther(event: PointerEvent): boolean {
+    return (event.pointerId ?? 0) !== activePointer
+  }
+
   function onMove(move: PointerEvent): void {
+    if (isOther(move)) return
     if (!travelled) {
       const far =
         Math.abs(move.clientX - startX) > DRAG_THRESHOLD_PX ||
@@ -83,6 +101,7 @@ export function startPlacementDrag(
   }
 
   function onUp(up: PointerEvent): void {
+    if (isOther(up)) return
     stop()
     if (!travelled) {
       onTap()
@@ -97,7 +116,8 @@ export function startPlacementDrag(
    * notification — and a player appearing wherever that happened is not
    * something the coach asked for.
    */
-  function onCancel(): void {
+  function onCancel(cancelled: PointerEvent): void {
+    if (isOther(cancelled)) return
     stop()
   }
 
@@ -105,6 +125,7 @@ export function startPlacementDrag(
     window.removeEventListener('pointermove', onMove)
     window.removeEventListener('pointerup', onUp)
     window.removeEventListener('pointercancel', onCancel)
+    activePointer = null
     dragging.value = null
     pointer.value = null
   }
@@ -124,6 +145,7 @@ export function usePlacement() {
 
 /** Test-only: drop any drag left running by a test that ended mid-gesture. */
 export function __resetPlacementForTests(): void {
+  activePointer = null
   dragging.value = null
   pointer.value = null
   dropHandler = null

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { viewBoxOf } from '../geometry'
 import { useBoard } from '../composables/useBoard'
 import { PITCHES } from './controls'
@@ -22,8 +22,42 @@ const board = useBoard()
 
 const open = ref<'pitch' | 'view' | null>(null)
 
-function toggle(menu: 'pitch' | 'view'): void {
-  open.value = open.value === menu ? null : menu
+/**
+ * Where the open panel sits, in viewport coordinates.
+ *
+ * The panels are positioned against the window rather than against their
+ * button, because the rail they live in has to be able to scroll: anything
+ * positioned inside a scrolling box is clipped by it, and a 240px panel
+ * hanging off an 88px rail is almost entirely outside.
+ */
+const panelAt = ref<{ left: number; top: number } | null>(null)
+
+const panelStyle = computed(() =>
+  panelAt.value ? { left: `${panelAt.value.left}px`, top: `${panelAt.value.top}px` } : {},
+)
+
+const PANEL_WIDTH = 240
+const GAP = 6
+
+function place(trigger: HTMLElement): void {
+  const r = trigger.getBoundingClientRect()
+  // Above the button where there is room above and not below, which is
+  // where the rail's own menus sit; below it otherwise.
+  const below = r.bottom + GAP
+  const room = window.innerHeight - below
+  panelAt.value = {
+    left: Math.max(GAP, Math.min(r.left, window.innerWidth - PANEL_WIDTH - GAP)),
+    top: room > 260 ? below : Math.max(GAP, r.top - GAP - 260),
+  }
+}
+
+function toggle(menu: 'pitch' | 'view', event: MouseEvent): void {
+  if (open.value === menu) {
+    open.value = null
+    return
+  }
+  place(event.currentTarget as HTMLElement)
+  open.value = menu
 }
 
 const rootEl = ref<HTMLElement | null>(null)
@@ -71,13 +105,13 @@ function setRotated(rotated: boolean): void {
         :aria-expanded="open === 'pitch'"
         aria-label="Pitch"
         title="Which pitch, and which way round"
-        @click="toggle('pitch')"
+        @click="toggle('pitch', $event)"
       >
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M12 4v16M3 10h3M3 14h3M21 10h-3M21 14h-3" /></svg>
         <span class="trigger-label">Pitch</span>
       </button>
 
-      <div v-show="open === 'pitch'" data-pitch-panel class="panel" role="menu">
+      <div v-show="open === 'pitch'" data-pitch-panel class="panel" :style="panelStyle" role="menu">
         <span class="eyebrow">Pitch</span>
         <!--
           Pictures of the three pitches rather than the words Blank, Full and
@@ -142,7 +176,7 @@ function setRotated(rotated: boolean): void {
         :aria-expanded="open === 'view'"
         aria-label="View"
         title="What is drawn on the board"
-        @click="toggle('view')"
+        @click="toggle('view', $event)"
       >
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></svg>
         <span class="trigger-label">View</span>
@@ -152,7 +186,7 @@ function setRotated(rotated: boolean): void {
         Switches, not pills. A pill that is on and a pill that is off differ
         by a border, which is not a difference a coach reads across a pitch.
       -->
-      <div v-show="open === 'view'" data-view-panel class="panel" role="menu">
+      <div v-show="open === 'view'" data-view-panel class="panel" :style="panelStyle" role="menu">
         <span class="eyebrow">Show</span>
         <button
           data-toggle-labels
@@ -217,8 +251,7 @@ function setRotated(rotated: boolean): void {
 .menus--vertical .trigger { padding: 0.25rem; width: 34px; justify-content: center; }
 
 .panel {
-  position: absolute; z-index: 25;
-  bottom: calc(100% + 0.35rem); left: 0;
+  position: fixed; z-index: 25;
   width: 240px;
   display: flex; flex-direction: column; gap: 0.35rem;
   padding: 0.5rem;
@@ -227,12 +260,6 @@ function setRotated(rotated: boolean): void {
   border-radius: var(--radius-sheet);
   box-shadow: 0 16px 40px -12px var(--shadow-ink);
 }
-/*
- * In the bar the menus sit at the top of the screen, so their panels hang
- * below rather than above.
- */
-.menus:not(.menus--vertical) .panel { bottom: auto; top: calc(100% + 0.35rem); }
-
 .eyebrow {
   font-size: 0.65rem; font-weight: 800; letter-spacing: 0.08em;
   text-transform: uppercase; color: var(--ink-2);

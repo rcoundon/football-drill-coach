@@ -250,3 +250,64 @@ describe('the rail lying down', () => {
     expect(mountRail().find('.rail').classes()).not.toContain('rail--horizontal')
   })
 })
+
+/**
+ * Enter and Space on a focused button, and every assistive technology that
+ * activates one, produce a click and no pointerdown at all. A palette that
+ * only listened for pointers could be reached by keyboard but never used
+ * from one.
+ */
+describe('placing without a pointer', () => {
+  it('adds a player when the swatch is activated', async () => {
+    const board = useBoard()
+    const wrapper = mountRail()
+    await wrapper.find('[data-add-counter="blue"]').trigger('click')
+    expect(board.state.counters).toHaveLength(1)
+    expect(board.state.counters[0].color).toBe('blue')
+  })
+
+  it('adds a ball, a cone and a label the same way', async () => {
+    const board = useBoard()
+    const wrapper = mountRail()
+    const balls = board.state.balls.length
+
+    await wrapper.find('[data-add-ball]').trigger('click')
+    await wrapper.find('[data-add-cone]').trigger('click')
+    await wrapper.find('[data-add-text]').trigger('click')
+
+    expect(board.state.balls).toHaveLength(balls + 1)
+    expect(board.state.markers).toHaveLength(1)
+    expect(wrapper.emitted('addLabel')).toHaveLength(1)
+  })
+
+  /**
+   * A press with a pointer behind it produces a click too, and the two
+   * routes must not both place.
+   */
+  it('places once for a press, not twice', async () => {
+    const board = useBoard()
+    const wrapper = mountRail()
+    const swatch = wrapper.find('[data-add-counter="red"]')
+
+    await swatch.trigger('pointerdown')
+    window.dispatchEvent(new Event('pointerup'))
+    await wrapper.vm.$nextTick()
+    await swatch.trigger('click')
+
+    expect(board.state.counters).toHaveLength(1)
+  })
+
+  it('refuses while the drill is mid-move', async () => {
+    const board = useBoard()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+    board.scrubTo(500)
+
+    const wrapper = mountRail()
+    await wrapper.find('[data-add-counter="blue"]').trigger('click')
+
+    expect(board.state.counters).toHaveLength(0)
+    board.endScrub()
+  })
+})

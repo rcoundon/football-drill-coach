@@ -129,9 +129,35 @@ const lockedTitle = 'A player appearing mid-drill is never what anyone meant'
  * started by the same press, so the coach does not have to decide which
  * gesture they are making before they make it.
  */
+/**
+ * Set by a pointer gesture that has already placed something, so the click
+ * the browser synthesises after it does not place a second one.
+ */
+let placedByPointer = false
+
 function beginPlacement(what: PlacementKind, event: PointerEvent, onTap: () => void): void {
   if (board.isDerived.value) return
-  startPlacementDrag(what, event, onTap)
+  startPlacementDrag(what, event, () => {
+    placedByPointer = true
+    onTap()
+  })
+}
+
+/**
+ * The same drop, for a press that had no pointer behind it.
+ *
+ * Enter and Space on a focused button, and every assistive technology that
+ * activates one, produce a click and no pointerdown at all — so a palette
+ * that only listened for pointers could be reached by keyboard but never
+ * used from one.
+ */
+function activate(place: () => void): void {
+  if (placedByPointer) {
+    placedByPointer = false
+    return
+  }
+  if (board.isDerived.value) return
+  place()
 }
 
 function placePlayer(color: CounterColor, event: PointerEvent): void {
@@ -143,14 +169,18 @@ function placeBall(event: PointerEvent): void {
   beginPlacement({ kind: 'ball' }, event, () => board.addBall())
 }
 
+/**
+ * Straight to Move afterwards, like a player: a cone dropped on the pitch is
+ * one the coach is about to nudge into place, and the Cone tool is for
+ * laying out a line of them rather than for the one just placed.
+ */
+function dropCentreCone(): void {
+  board.addMarker({ x: PITCH_W / 2, y: PITCH_H / 2 })
+  if (props.tool !== 'select') emit('update:tool', 'select')
+}
+
 function placeCone(event: PointerEvent): void {
-  // Straight to Move afterwards, like a player: a cone dropped on the pitch
-  // is one the coach is about to nudge into place, and the Cone tool is for
-  // laying out a line of them rather than for the one just placed.
-  beginPlacement({ kind: 'cone' }, event, () => {
-    board.addMarker({ x: PITCH_W / 2, y: PITCH_H / 2 })
-    if (props.tool !== 'select') emit('update:tool', 'select')
-  })
+  beginPlacement({ kind: 'cone' }, event, dropCentreCone)
 }
 
 function placeText(event: PointerEvent): void {
@@ -188,6 +218,7 @@ function placeText(event: PointerEvent): void {
           :title="board.isDerived.value ? lockedTitle : `Drag a ${color} player onto the pitch, or press for the middle`"
           :aria-label="`Add a ${color} player`"
           @pointerdown="placePlayer(color, $event)"
+          @click="activate(() => addPlayer(color))"
         />
       </div>
 
@@ -199,6 +230,7 @@ function placeText(event: PointerEvent): void {
           :title="addBallTitle"
           aria-label="Add a ball"
           @pointerdown="placeBall($event)"
+          @click="activate(() => board.addBall())"
         >
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7.5 8.5 10l1.3 4h4.4l1.3-4z" /><path d="M12 3v4.5M4.2 14 9.8 14M19.8 14 14.2 14" /></svg>
         </button>
@@ -209,6 +241,7 @@ function placeText(event: PointerEvent): void {
           title="Drag a cone onto the pitch, or press for the middle"
           aria-label="Add a cone"
           @pointerdown="placeCone($event)"
+          @click="activate(dropCentreCone)"
         >
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.73 4a2 2 0 0 0-3.46 0L2.6 17a2 2 0 0 0 1.73 3h15.34a2 2 0 0 0 1.73-3z" /></svg>
         </button>
@@ -219,6 +252,7 @@ function placeText(event: PointerEvent): void {
           title="Drag a text label onto the pitch, or press for the middle"
           aria-label="Add a text label"
           @pointerdown="placeText($event)"
+          @click="activate(() => emit('addLabel'))"
         >
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v16" /><path d="M4 7V4h16v3" /><path d="M9 20h6" /></svg>
         </button>
@@ -318,9 +352,13 @@ function placeText(event: PointerEvent): void {
 }
 
 /*
- * Only the tools and the things you can add scroll. Ink and the two board
- * menus are pinned below them, because a control that scrolls off the
- * bottom of a rail is a control a coach cannot find.
+ * One scroll region for the whole rail, and nothing pinned.
+ *
+ * Ink and the two menus used to be held below the scrolling part so they
+ * could not scroll away. On a phone turned on its side that cost the
+ * scrolling part 120px of the 300 it had, and the tools — 300px of content
+ * — were left with 184px and no way to know they were there. A rail that
+ * scrolls as one list shows less at once and hides nothing.
  */
 .rail-scroll {
   flex: 1; min-height: 0; width: 100%;
@@ -396,6 +434,7 @@ function placeText(event: PointerEvent): void {
  * above them.
  */
 .rail-group--menus { flex: none; padding-top: 0.5rem; border-top: 1px solid var(--border); width: 100%; }
+.rail-group--colors { flex: none; }
 
 .rail-tool {
   position: relative;
@@ -548,6 +587,12 @@ function placeText(event: PointerEvent): void {
  */
 @media (max-height: 900px) {
   .rail { gap: 0.35rem; }
+  /*
+   * The wrapper stops being a box of its own, so ink and the menus join the
+   * same scroll as the tools instead of standing outside it.
+   */
+  .rail-scroll { display: contents; }
+  .rail { overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--ring) transparent; }
   .rail-scroll { gap: 0.35rem; }
   /*
    * The icon and the padding set a tool's height, not `min-height`, so both

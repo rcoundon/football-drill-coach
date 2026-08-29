@@ -63,19 +63,25 @@ const selection = ref<SelectionRef[]>([])
  * coach who wants the notes up while they work says so once, and gets them
  * back next time they open that drill.
  */
+/**
+ * Open because something is held, rather than because the coach asked.
+ *
+ * Kept out of the board deliberately. Picking a player up is not an edit to
+ * the drill: routing it through `toggleNotesVisible` put an entry on the
+ * undo stack, marked the drill dirty and set the autosave going, all for a
+ * panel sliding open.
+ */
+const heldOpen = ref(false)
+
 const inspectorOpen = computed({
-  get: () => board.state.notesVisible,
+  get: () => board.state.notesVisible || heldOpen.value,
   set: (open: boolean) => {
+    // Asking for it either way settles it: a panel the coach closes while
+    // still holding something stays closed.
+    heldOpen.value = false
     if (board.state.notesVisible !== open) board.toggleNotesVisible()
   },
 })
-
-/**
- * Whether the panel was open before something was selected, so putting the
- * selection down gives the pitch its room back rather than leaving a notes
- * panel the coach never asked for.
- */
-let openedForSelection = false
 
 /**
  * Anything held populates the panel, which is no use behind a closed one.
@@ -83,17 +89,8 @@ let openedForSelection = false
  * tablet, where there is no Cmd+D and no Delete key.
  */
 function onSelectionChanged(held: SelectionRef[]): void {
-  const had = selection.value.length
   selection.value = held
-  if (held.length > 0 && had === 0 && !inspectorOpen.value) {
-    openedForSelection = true
-    inspectorOpen.value = true
-    return
-  }
-  if (held.length === 0 && openedForSelection) {
-    openedForSelection = false
-    inspectorOpen.value = false
-  }
+  heldOpen.value = held.length > 0 && !board.state.notesVisible
 }
 
 /**
@@ -749,13 +746,15 @@ onMounted(() => {
   window.addEventListener('keydown', onKeydown)
 })
 
-onBeforeUnmount(() => {
-  window.removeEventListener('keydown', onKeydown)
-  clearTimeout(autosaveTimer)
-})
-
 // Autosave the working board, debounced, so a refresh does not lose work.
 let saveTimer: ReturnType<typeof setTimeout> | undefined
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
+  // Both debounces, or a board torn down mid-keystroke writes after it is gone.
+  clearTimeout(autosaveTimer)
+  clearTimeout(saveTimer)
+})
 watch(
   () => board.state,
   () => {

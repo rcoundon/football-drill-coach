@@ -184,11 +184,18 @@ describe('recolouring a player', () => {
     expect(board.state.frames.every((f) => f.counters[0].color === 'red')).toBe(true)
   })
 
+  /**
+   * Checked by undoing rather than by reading `canUndo`, which was already
+   * true from adding the player and stayed true either way.
+   */
   it('commits nothing when the colour is already what was asked for', () => {
     const board = useBoard()
     const counter = board.addCounter('red')
-    const before = board.canUndo.value
+
     board.setCounterColor(counter.id, 'red')
-    expect(board.canUndo.value).toBe(before)
+    board.undo()
+
+    // One undo reaches past the colour that never changed to the player.
+    expect(board.state.counters).toHaveLength(0)
   })
 })

@@ -134,6 +134,15 @@ const overIndex = ref<number | null>(null)
 /** Set while a drag is finishing, so the click it produces selects nothing. */
 let dragJustEnded = false
 
+/**
+ * How to end the drag that is running, if one is.
+ *
+ * The listeners a drag installs are on the window, so they outlive this
+ * component: a strip unmounted mid-drag left them behind, and the pointerup
+ * that followed reordered a phase on a board nobody was looking at.
+ */
+let endDrag: (() => void) | null = null
+
 function cardIndexAt(clientX: number, clientY: number): number | null {
   const strip = stripEl.value
   if (!strip) return null
@@ -188,10 +197,12 @@ function startCardDrag(index: number, event: PointerEvent): void {
     window.removeEventListener('pointermove', onMove)
     window.removeEventListener('pointerup', onUp)
     window.removeEventListener('pointercancel', onCancel)
+    endDrag = null
     dragIndex.value = null
     overIndex.value = null
   }
 
+  endDrag = stop
   window.addEventListener('pointermove', onMove)
   window.addEventListener('pointerup', onUp)
   window.addEventListener('pointercancel', onCancel)
@@ -216,6 +227,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onDocumentPointerDown)
   window.removeEventListener('keydown', onKeydown)
+  endDrag?.()
 })
 </script>
 

@@ -264,10 +264,13 @@ describe('the destructive group', () => {
     const id = board.startArrow({ x: 20, y: 30 }, '#ffffff', 'pass')
     board.updateSegment(id, { x: 60, y: 30 })
     board.finishDrawing(id)
+    // The new phase copies the drawing; rubbing it out here leaves the coach
+    // standing on a phase with nothing on it and the first phase still drawn.
     board.addFrame()
-    board.clearDrawings()
-    board.undo()
-    board.goToFrame(1)
+    board.deleteDrawing(id)
+
+    expect(board.state.drawings).toHaveLength(0)
+    expect(board.state.frames[0].drawings).toHaveLength(1)
 
     const wrapper = mountHeader()
     await wrapper.vm.$nextTick()
