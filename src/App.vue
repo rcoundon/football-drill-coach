@@ -22,6 +22,17 @@ import { useViewport } from './composables/useViewport'
 const board = useBoard()
 const storage = useStorage()
 const { isPortrait, isCompact } = useViewport()
+
+/**
+ * Which way the rail lies.
+ *
+ * By whichever dimension is scarce, not by width alone. A phone held
+ * upright has width to spare nowhere and height to spare everywhere, so
+ * the rail lies along the bottom; the same phone turned on its side has
+ * 800px of width and barely 300 of height once the header is off, and a
+ * rail lying down there took the pitch away entirely.
+ */
+const railLiesDown = computed(() => isCompact.value && isPortrait.value)
 const exporter = useExport()
 
 const tool = ref<ToolMode>('select')
@@ -793,7 +804,7 @@ watch(
         down the edge on the other. There is no bar now.
       -->
       <ToolRail
-        v-if="!isCompact"
+        v-if="!railLiesDown"
         v-model:tool="tool"
         v-model:drawColor="drawColor"
         @add-label="promptCentreLabel"
@@ -818,7 +829,7 @@ watch(
           hand holding a phone already is.
         -->
         <ToolRail
-          v-if="isCompact"
+          v-if="railLiesDown"
           horizontal
           v-model:tool="tool"
           v-model:drawColor="drawColor"
@@ -1084,7 +1095,12 @@ body { font-family: var(--font-ui); background: var(--bg-app); }
  * Only so the first-run prompt has something to be positioned against. The
  * board itself is the svg, and an overlay inside it would end up in the PNG.
  */
-.board-wrap { position: relative; display: flex; min-height: 0; min-width: 0; }
+/*
+ * A floor under the pitch. Everything else in the column can be given room
+ * by shrinking, and the board is `flex: 1`, so on a short screen it was the
+ * one thing that gave way until there was none of it left.
+ */
+.board-wrap { position: relative; display: flex; min-height: 8rem; min-width: 0; }
 .board-wrap > :first-child { flex: 1; min-height: 0; min-width: 0; }
 
 /*

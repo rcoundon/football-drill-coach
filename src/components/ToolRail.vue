@@ -457,6 +457,13 @@ function placeText(event: PointerEvent): void {
   justify-content: center;
   width: 100%;
   height: auto;
+  /*
+   * Capped, so the strip can never take so much of a short screen that the
+   * pitch has nowhere left to be. Past the cap it scrolls, which is the
+   * lesser of the two evils.
+   */
+  max-height: 40vh;
+  overflow-y: auto;
   padding: 0.5rem 0.6rem;
 }
 /*

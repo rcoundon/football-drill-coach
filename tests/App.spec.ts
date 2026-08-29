@@ -1583,9 +1583,9 @@ describe('a fresh board on a portrait screen', () => {
  * in a bar across the top on one and down the edge on the other.
  */
 describe('the rail at every width', () => {
-  function stubWidth(compact: boolean) {
+  function stubScreen({ compact, portrait = false }: { compact: boolean; portrait?: boolean }) {
     window.matchMedia = ((query: string) => ({
-      matches: query.includes('max-width') ? compact : false,
+      matches: query.includes('orientation') ? portrait : compact,
       addEventListener: () => {},
       removeEventListener: () => {},
     })) as unknown as typeof window.matchMedia
@@ -1595,7 +1595,7 @@ describe('the rail at every width', () => {
   afterEach(() => __resetViewportForTests())
 
   it('stands beside the board on a wide screen', async () => {
-    stubWidth(false)
+    stubScreen({ compact: false })
     wrapper = mount(App)
     await nextTick()
     const rail = wrapper.find('.rail')
@@ -1603,9 +1603,9 @@ describe('the rail at every width', () => {
     expect(rail.classes()).not.toContain('rail--horizontal')
   })
 
-  /** Below a tablet an 88px column is a fifth of the screen. */
-  it('lies along the bottom on a small screen', async () => {
-    stubWidth(true)
+  /** Held upright, an 88px column is a fifth of a phone's width. */
+  it('lies along the bottom on a small screen held upright', async () => {
+    stubScreen({ compact: true, portrait: true })
     wrapper = mount(App)
     await nextTick()
     const rail = wrapper.find('.rail')
@@ -1613,9 +1613,21 @@ describe('the rail at every width', () => {
     expect(rail.classes()).toContain('rail--horizontal')
   })
 
+  /**
+   * Turned on its side the same phone has width to spare and barely 300px
+   * of height once the header is off, and a rail lying down there took the
+   * pitch away entirely.
+   */
+  it('stands back up on a small screen turned on its side', async () => {
+    stubScreen({ compact: true, portrait: false })
+    wrapper = mount(App)
+    await nextTick()
+    expect(wrapper.find('.rail').classes()).not.toContain('rail--horizontal')
+  })
+
   it('carries the same controls either way round', async () => {
-    for (const compact of [false, true]) {
-      stubWidth(compact)
+    for (const portrait of [false, true]) {
+      stubScreen({ compact: true, portrait })
       wrapper = mount(App)
       await nextTick()
       for (const hook of ['[data-tool="pen"]', '[data-add-counter="red"]', '[data-add-ball]', '[data-pitch-menu]']) {
@@ -1626,7 +1638,7 @@ describe('the rail at every width', () => {
   })
 
   it('changes tool from the rail', async () => {
-    stubWidth(false)
+    stubScreen({ compact: false })
     wrapper = mount(App)
     await nextTick()
     await wrapper.find('[data-tool="cone"]').trigger('click')
