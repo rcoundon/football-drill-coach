@@ -159,6 +159,23 @@ const emit = defineEmits<{ close: [] }>()
         </p>
       </section>
 
+      <section data-help-section="presenting" class="section">
+        <h3>Showing it to players</h3>
+        <p>
+          The expand button in the corner of the pitch, or <kbd>F</kbd>, gives the pitch the
+          whole screen — and the whole display too, where the browser allows it. Everything
+          that edits leaves: no rail, no header, no phases, no notes, and the pitch itself
+          stops answering the pointer, so a tablet held out to a group cannot lose a player to
+          somebody's thumb.
+        </p>
+        <p>
+          What is left floats at the bottom of a drill with more than one phase: the way back,
+          <kbd>‹</kbd> and <kbd>›</kbd> to step between phases, the phase you are on, and Play.
+          A single-phase drill has nothing to run, so only the corner button stays.
+          <kbd>Escape</kbd> comes back, and so does leaving full screen by any other route.
+        </p>
+      </section>
+
       <section data-help-section="destructive" class="section">
         <h3>Taking things off</h3>
         <p>
@@ -263,6 +280,7 @@ const emit = defineEmits<{ close: [] }>()
             <tr><td><kbd>T</kbd></td><td>Text</td></tr>
             <tr><td><kbd>E</kbd></td><td>Erase</td></tr>
             <tr><td><kbd>B</kbd></td><td>Show or hide every ball</td></tr>
+            <tr><td><kbd>F</kbd></td><td>Show the pitch full screen, and come back</td></tr>
             <tr><td><kbd>Space</kbd></td><td>Play or pause the drill (see above)</td></tr>
             <tr><td><kbd>Ctrl+Z</kbd> / <kbd>Cmd+Z</kbd></td><td>Undo</td></tr>
             <tr><td><kbd>Ctrl+Shift+Z</kbd> / <kbd>Cmd+Shift+Z</kbd></td><td>Redo</td></tr>

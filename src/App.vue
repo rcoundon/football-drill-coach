@@ -9,6 +9,7 @@ import ToolRail from './components/ToolRail.vue'
 import PitchBoard from './components/PitchBoard.vue'
 import PitchEmptyState from './components/PitchEmptyState.vue'
 import PlacementGhost from './components/PlacementGhost.vue'
+import PresentationBar from './components/PresentationBar.vue'
 import PatternLibrary from './components/PatternLibrary.vue'
 import HelpPanel from './components/HelpPanel.vue'
 import Inspector from './components/Inspector.vue'
@@ -111,6 +112,50 @@ watch(
 )
 
 const showEmptyState = computed(() => !everPlaced.value)
+
+/**
+ * Whether the drill is being shown rather than built.
+ *
+ * Everything that edits leaves the screen and the pitch stops taking
+ * pointer events at all: a coach holding a tablet out to a group should not
+ * be able to drag a player off it with their thumb.
+ */
+const presenting = ref(false)
+
+/**
+ * Ask the browser for the screen as well, where it will give it. Without
+ * this the app fills its own window and the browser's chrome stays, which
+ * on a tablet is most of what is in the way.
+ */
+async function askForFullscreen(want: boolean): Promise<void> {
+  try {
+    const root = document.documentElement
+    if (want && !document.fullscreenElement) await root.requestFullscreen?.()
+    else if (!want && document.fullscreenElement) await document.exitFullscreen?.()
+  } catch {
+    // Refused — by policy, or because there is no gesture behind it. The
+    // app-filling half of presenting is the half that matters, and it has
+    // already happened.
+  }
+}
+
+function setPresenting(on: boolean): void {
+  if (presenting.value === on) return
+  presenting.value = on
+  // Nothing is selected while presenting: the rings and handles belong to
+  // editing, and there is no way to act on a selection from here.
+  if (on) boardRef.value?.clearSelection()
+  void askForFullscreen(on)
+}
+
+/**
+ * Leaving through the browser's own control — Escape out of fullscreen, or
+ * the button some browsers float over the top — has to leave presenting
+ * too, or the app sits chromeless in a window with no way back.
+ */
+function onFullscreenChange(): void {
+  if (!document.fullscreenElement) presenting.value = false
+}
 
 const libraryOpen = ref(false)
 const helpOpen = ref(false)
@@ -634,6 +679,12 @@ function onKeydown(event: KeyboardEvent) {
       event.preventDefault()
       return
     }
+    // Nothing else is open, so Escape is the way out of presenting.
+    if (presenting.value) {
+      event.preventDefault()
+      setPresenting(false)
+      return
+    }
   }
 
   const target = event.target as HTMLElement | null
@@ -716,6 +767,17 @@ function onKeydown(event: KeyboardEvent) {
     return
   }
 
+  if (event.key.toLowerCase() === 'f') {
+    setPresenting(!presenting.value)
+    return
+  }
+
+  /*
+   * Past here is editing, and presenting is not for editing: the tools it
+   * would switch between are not on screen to say what happened.
+   */
+  if (presenting.value) return
+
   if (event.key.toLowerCase() === 'b') {
     board.toggleBallsVisible()
     return
@@ -727,6 +789,7 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 onMounted(() => {
+  document.addEventListener('fullscreenchange', onFullscreenChange)
   // restoreSnapshot, not loadSnapshot: putting the draft back is not
   // something the coach did, so it must not become the one undo entry a
   // freshly opened app offers.
@@ -750,6 +813,7 @@ onMounted(() => {
 let saveTimer: ReturnType<typeof setTimeout> | undefined
 
 onBeforeUnmount(() => {
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
   window.removeEventListener('keydown', onKeydown)
   // Both debounces, or a board torn down mid-keystroke writes after it is gone.
   clearTimeout(autosaveTimer)
@@ -776,6 +840,7 @@ watch(
 <template>
   <div class="app">
     <DrillHeader
+      v-if="!presenting"
       :pattern-name="currentName"
       :save-status="saveStatus"
       :last-saved-at="lastSavedAt"
@@ -803,14 +868,14 @@ watch(
         down the edge on the other. There is no bar now.
       -->
       <ToolRail
-        v-if="!railLiesDown"
+        v-if="!presenting && !railLiesDown"
         v-model:tool="tool"
         v-model:drawColor="drawColor"
         @add-label="promptCentreLabel"
       />
 
       <div class="stage">
-        <div class="board-wrap">
+        <div class="board-wrap" :class="{ 'is-presenting': presenting }">
           <PitchBoard
             ref="boardRef"
             :tool="tool"
@@ -821,24 +886,52 @@ watch(
             @selection-size="selectionSize = $event"
             @selection-changed="onSelectionChanged"
           />
-          <PitchEmptyState v-if="showEmptyState" />
+          <PitchEmptyState v-if="showEmptyState && !presenting" />
+
+          <!--
+            On the pitch, because it is the pitch it expands. Small and
+            quiet: it is not something a coach reaches for while drawing.
+          -->
+          <button
+            data-present-toggle
+            class="expand"
+            :title="presenting ? 'Back to the board (Escape)' : 'Show the pitch full screen (F)'"
+            :aria-label="presenting ? 'Back to the board' : 'Show the pitch full screen'"
+            :aria-pressed="presenting"
+            @click="setPresenting(!presenting)"
+          >
+            <svg v-if="presenting" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M16 21v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" /></svg>
+            <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>
+          </button>
+
+          <!--
+            Only where there is a drill to run. A single phase has nothing
+            to play or step through, and a bar holding one button floating
+            over the middle of the pitch says less than the corner control
+            that put it there.
+          -->
+          <PresentationBar
+            v-if="presenting && board.state.frames.length > 1"
+            @exit="setPresenting(false)"
+          />
         </div>
         <!--
           The same rail, lying down: directly above the timeline, where the
           hand holding a phone already is.
         -->
         <ToolRail
-          v-if="railLiesDown"
+          v-if="!presenting && railLiesDown"
           horizontal
           v-model:tool="tool"
           v-model:drawColor="drawColor"
           @add-label="promptCentreLabel"
         />
 
-        <PhaseTimeline :exporting="exporting" />
+        <PhaseTimeline v-if="!presenting" :exporting="exporting" />
       </div>
 
       <Inspector
+        v-if="!presenting"
         v-model:open="inspectorOpen"
         :selection="selection"
         @duplicate="boardRef?.duplicateSelected()"
@@ -1100,6 +1193,27 @@ body { font-family: var(--font-ui); background: var(--bg-app); }
  * one thing that gave way until there was none of it left.
  */
 .board-wrap { position: relative; display: flex; min-height: 8rem; min-width: 0; }
+/*
+ * The board takes no pointer events while it is being shown. A coach
+ * holding a tablet out to a group should not be able to drag a player off
+ * it with their thumb, and nothing on screen would say that they had.
+ */
+.board-wrap.is-presenting > :first-child { pointer-events: none; }
+
+.expand {
+  position: absolute; top: 0.5rem; right: 0.5rem; z-index: 20;
+  width: 32px; height: 32px; display: grid; place-items: center;
+  border: 1px solid var(--border); border-radius: var(--radius-control);
+  background: #14100ea6; color: var(--ink-1);
+  cursor: pointer; padding: 0; opacity: 0.55;
+  transition: opacity var(--dur-fast) linear, background var(--dur-fast) linear;
+}
+.expand:hover, .expand:focus-visible { opacity: 1; background: #14100ee6; }
+
+@media (pointer: coarse) {
+  /* No hover to reveal it, so it stays legible. */
+  .expand { width: 44px; height: 44px; opacity: 0.85; }
+}
 .board-wrap > :first-child { flex: 1; min-height: 0; min-width: 0; }
 
 /*

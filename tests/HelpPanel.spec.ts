@@ -95,6 +95,12 @@ describe('what it covers', () => {
     expect(firstControlAt).toBeGreaterThan(ideaAt)
   })
 
+  it('explains presenting: how in, what is left, how out', () => {
+    const section = mountHelp(true).get('[data-help-section="presenting"]')
+    expect(section.text()).toMatch(/full screen/i)
+    expect(section.text()).toMatch(/escape/i)
+  })
+
   it('explains the destructive actions: where they are, and the way back', () => {
     const section = mountHelp(true).get('[data-help-section="destructive"]')
     expect(section.text()).toMatch(/undo/i)

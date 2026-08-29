@@ -1435,6 +1435,125 @@ describe('taking things off the board', () => {
  * rail carries the tools, the colours and the two board menus, and what was
  * left of the bar was an empty stripe of chrome over the pitch.
  */
+/**
+ * Showing a drill to players rather than building one. Everything that
+ * edits leaves the screen, and the pitch stops taking pointer events at
+ * all: a tablet held out to a group should not lose a player to a thumb.
+ */
+describe('presenting the drill', () => {
+  /** A drill with phases, so the bar has something to run. */
+  function aDrillWithPhases() {
+    const board = useBoard()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+  }
+
+  it('is reached from the pitch itself, and from F', async () => {
+    aDrillWithPhases()
+    wrapper = mountApp()
+    expect(wrapper.find('[data-presentation-bar]').exists()).toBe(false)
+
+    await wrapper.find('[data-present-toggle]').trigger('click')
+    expect(wrapper.find('[data-presentation-bar]').exists()).toBe(true)
+
+    await wrapper.find('[data-present-toggle]').trigger('click')
+    expect(wrapper.find('[data-presentation-bar]').exists()).toBe(false)
+
+    fire({ key: 'f' })
+    await nextTick()
+    expect(wrapper.find('[data-presentation-bar]').exists()).toBe(true)
+  })
+
+  it('takes everything that edits off the screen', async () => {
+    wrapper = mountApp()
+    await wrapper.find('[data-present-toggle]').trigger('click')
+
+    expect(wrapper.find('.rail').exists()).toBe(false)
+    expect(wrapper.find('[data-add-frame]').exists()).toBe(false)
+    expect(wrapper.find('[data-drill-menu]').exists()).toBe(false)
+    expect(wrapper.find('[data-inspector-open]').exists()).toBe(false)
+  })
+
+  it('keeps the drill playable and steppable', async () => {
+    const board = useBoard()
+    board.addFrame()
+    board.setFrameDuration(1, 1000)
+    board.goToFrame(0)
+    wrapper = mountApp()
+    await wrapper.find('[data-present-toggle]').trigger('click')
+
+    expect(wrapper.find('[data-present-phase]').text()).toBe('1 / 2')
+
+    await wrapper.find('[data-present-next]').trigger('click')
+    expect(board.state.currentFrame).toBe(1)
+    expect(wrapper.find('[data-present-phase]').text()).toBe('2 / 2')
+
+    await wrapper.find('[data-present-play]').trigger('click')
+    expect(board.playback.playing).toBe(true)
+    board.pause()
+  })
+
+  /**
+   * A single phase has nothing to play or step through, and a bar holding
+   * one button over the middle of the pitch says less than the corner
+   * control that put it there.
+   */
+  it('shows no bar at all for a single-phase drill', async () => {
+    wrapper = mountApp()
+    await wrapper.find('[data-present-toggle]').trigger('click')
+    expect(wrapper.find('[data-presentation-bar]').exists()).toBe(false)
+    // Still a way back, and the same control that opened it.
+    expect(wrapper.find('[data-present-toggle]').attributes('aria-pressed')).toBe('true')
+  })
+
+  it('leaves on Escape and on the bar’s own button', async () => {
+    aDrillWithPhases()
+    wrapper = mountApp()
+    await wrapper.find('[data-present-toggle]').trigger('click')
+    fire({ key: 'Escape' })
+    await nextTick()
+    expect(wrapper.find('[data-presentation-bar]').exists()).toBe(false)
+
+    await wrapper.find('[data-present-toggle]').trigger('click')
+    await wrapper.find('[data-present-exit]').trigger('click')
+    expect(wrapper.find('[data-presentation-bar]').exists()).toBe(false)
+  })
+
+  /**
+   * The tools it would switch between are not on screen to say what
+   * happened, so a stray key must not change one.
+   */
+  it('ignores the tool shortcuts while it is up', async () => {
+    wrapper = mountApp()
+    await wrapper.find('[data-present-toggle]').trigger('click')
+
+    fire({ key: 'd' })
+    await nextTick()
+    await wrapper.find('[data-present-toggle]').trigger('click')
+
+    expect(wrapper.find('[data-tool="select"]').classes()).toContain('is-active')
+  })
+
+  it('puts down whatever was held before it started', async () => {
+    const board = useBoard()
+    const id = board.startArrow({ x: 20, y: 30 }, '#ffffff', 'pass')
+    board.updateSegment(id, { x: 60, y: 30 })
+    board.finishDrawing(id)
+    wrapper = mountApp()
+
+    const path = wrapper.find('[data-drawing]').element
+    await firePointer(path, 'pointerdown', clientFor(40, 30))
+    await firePointer(wrapper.find('.stage svg').element, 'pointerup', clientFor(40, 30))
+    expect(wrapper.find('[data-inspector]').exists()).toBe(true)
+
+    await wrapper.find('[data-present-toggle]').trigger('click')
+    await wrapper.find('[data-present-toggle]').trigger('click')
+
+    expect(wrapper.find('[data-inspector]').exists()).toBe(false)
+  })
+})
+
 describe('the ball shortcut', () => {
   it('toggles the ball on b', async () => {
     const board = useBoard()
