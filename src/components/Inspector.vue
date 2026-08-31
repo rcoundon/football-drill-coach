@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { CounterColor, SelectionRef } from '../types'
 import { COUNTER_COLORS } from '../geometry'
 import { MAX_NOTES_LENGTH, useBoard } from '../composables/useBoard'
+import { useViewport } from '../composables/useViewport'
 import { SWATCHES } from './controls'
 
 const props = withDefaults(
@@ -22,6 +23,18 @@ const emit = defineEmits<{
 }>()
 
 const board = useBoard()
+
+const { isCompact, isPortrait } = useViewport()
+
+/**
+ * Whether the panel comes up from the bottom rather than in from the side.
+ *
+ * The same condition the stylesheet switches on, kept in step with it by
+ * COMPACT_MAX_PX, because the arrows have to point the way the panel
+ * actually moves — a chevron pointing left above a sheet that rises from
+ * the bottom edge describes a panel this one is not.
+ */
+const asSheet = computed(() => isCompact.value && isPortrait.value)
 
 /**
  * The panel has one job at a time, and which one is decided by the board
@@ -105,7 +118,7 @@ const heldLabel = computed(() => (held.value === 1 ? subject.value.toLowerCase()
       :aria-expanded="false"
       @click="emit('update:open', true)"
     >
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="asSheet ? 'm18 15-6-6-6 6' : 'm15 18-6-6 6-6'" /></svg>
       <span class="tab-label">Notes</span>
     </button>
   </aside>
@@ -121,7 +134,7 @@ const heldLabel = computed(() => (held.value === 1 ? subject.value.toLowerCase()
         :aria-expanded="true"
         @click="emit('update:open', false)"
       >
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="asSheet ? 'm6 9 6 6 6-6' : 'm9 18 6-6-6-6'" /></svg>
       </button>
     </header>
 
