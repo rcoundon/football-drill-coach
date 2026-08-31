@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { CounterColor, SelectionRef } from '../types'
 import { COUNTER_COLORS } from '../geometry'
 import { MAX_NOTES_LENGTH, useBoard } from '../composables/useBoard'
+import { useViewport } from '../composables/useViewport'
 import { SWATCHES } from './controls'
 
 const props = withDefaults(
@@ -22,6 +23,18 @@ const emit = defineEmits<{
 }>()
 
 const board = useBoard()
+
+const { isCompact, isPortrait } = useViewport()
+
+/**
+ * Whether the panel comes up from the bottom rather than in from the side.
+ *
+ * The same condition the stylesheet switches on, kept in step with it by
+ * COMPACT_MAX_PX, because the arrows have to point the way the panel
+ * actually moves — a chevron pointing left above a sheet that rises from
+ * the bottom edge describes a panel this one is not.
+ */
+const asSheet = computed(() => isCompact.value && isPortrait.value)
 
 /**
  * The panel has one job at a time, and which one is decided by the board
@@ -105,7 +118,7 @@ const heldLabel = computed(() => (held.value === 1 ? subject.value.toLowerCase()
       :aria-expanded="false"
       @click="emit('update:open', true)"
     >
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="asSheet ? 'm18 15-6-6-6 6' : 'm15 18-6-6 6-6'" /></svg>
       <span class="tab-label">Notes</span>
     </button>
   </aside>
@@ -121,7 +134,7 @@ const heldLabel = computed(() => (held.value === 1 ? subject.value.toLowerCase()
         :aria-expanded="true"
         @click="emit('update:open', false)"
       >
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="asSheet ? 'm6 9 6 6 6-6' : 'm9 18 6-6-6-6'" /></svg>
       </button>
     </header>
 
@@ -221,17 +234,27 @@ const heldLabel = computed(() => (held.value === 1 ? subject.value.toLowerCase()
 
 <style scoped>
 /*
- * Collapsed: a strip at the edge of the pitch, wide enough for a finger and
- * nothing more.
+ * Closed: a tab against the right edge, over the pitch rather than beside
+ * it. The notes were a permanent column, then a permanent 40px strip, and
+ * both took room from the one thing on this page anyone is looking at. On
+ * a phone held upright there is no room to take.
  */
-.rail-strip { flex: none; width: 40px; display: flex; align-items: flex-start; }
+.rail-strip {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 22;
+}
 
 .tab {
   width: 40px;
   display: flex; flex-direction: column; align-items: center; gap: 0.4rem;
   padding: 0.5rem 0;
-  border: 1px solid var(--border); border-radius: var(--radius-control);
+  border: 1px solid var(--border); border-right: none;
+  border-radius: var(--radius-control) 0 0 var(--radius-control);
   background: var(--surface-1); color: var(--ink-1); cursor: pointer;
+  box-shadow: var(--shadow-card);
 }
 .tab:hover { background: var(--surface-2); }
 /*
@@ -243,15 +266,40 @@ const heldLabel = computed(() => (held.value === 1 ? subject.value.toLowerCase()
   font-size: 0.65rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
 }
 
+/*
+ * Open: a card floating over the pitch, not a column carved out of it.
+ * Nothing behind it is dimmed and nothing behind it is blocked — a coach
+ * can drag a player with the notes still up, which is the point of a panel
+ * that follows what is held.
+ */
 .panel {
-  flex: none;
+  position: absolute;
+  top: 0.75rem; right: 0.75rem; bottom: 0.75rem;
+  z-index: 24;
   width: min(300px, 34vw);
   display: flex; flex-direction: column; gap: 0.6rem;
   padding: 0.6rem;
   background: var(--surface-1);
+  border: 1px solid var(--border);
   border-radius: var(--radius-card);
+  box-shadow: var(--shadow-popover);
   color: var(--ink-1);
   min-height: 0;
+  overflow-y: auto;
+}
+
+/*
+ * Upright on a phone there is no width to float into, so it comes up from
+ * the bottom edge instead, over the rail and the timeline, and no taller
+ * than it has to be.
+ */
+@media (max-width: 1023px) and (orientation: portrait) {
+  .panel {
+    top: auto; left: 0; right: 0; bottom: 0;
+    width: auto;
+    max-height: min(60vh, 22rem);
+    border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+  }
 }
 
 .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }

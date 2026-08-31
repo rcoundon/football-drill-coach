@@ -1174,7 +1174,12 @@ body { font-family: var(--font-ui); background: var(--bg-app); }
 
 <style scoped>
 .app { display: flex; flex-direction: column; height: 100%; }
-.workspace { flex: 1; min-height: 0; display: flex; gap: 0.75rem; padding: 0.75rem; }
+/*
+ * Positioned, because the inspector is positioned against it. The notes
+ * float over the pitch rather than standing beside it, so nothing in this
+ * row gives up width for a panel that is usually shut.
+ */
+.workspace { position: relative; flex: 1; min-height: 0; display: flex; gap: 0.75rem; padding: 0.75rem; }
 /*
  * A column, so the frame strip is always on screen and the board gives up the
  * room for it. The board used to take the whole height and push the strip off
@@ -1218,10 +1223,11 @@ body { font-family: var(--font-ui); background: var(--bg-app); }
 
 /*
  * The notes used to be a permanent column roughly a quarter of the screen
- * wide, which on a tablet left the pitch 663x430 of a 1194px screen. The
- * panel is a 40px strip until a coach asks for it, so the same tablet gives
- * the board the whole middle — and the board is the only thing on this page
- * anyone is actually looking at.
+ * wide, which on a tablet left the pitch 663x430 of a 1194px screen. Then a
+ * permanent 40px strip, which on a phone held upright is still a strip. They
+ * are an overlay now: the pitch has the full width at every size, and the
+ * panel is over it only while a coach has asked for it or is holding
+ * something.
  */
 .error {
   margin: 0; padding: 0.6rem 0.9rem; background: var(--error); color: #fff; font-size: 0.85rem; cursor: pointer;

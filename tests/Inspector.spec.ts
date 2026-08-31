@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import type { SelectionRef } from '../src/types'
 import Inspector from '../src/components/Inspector.vue'
 import { useBoard, __resetBoardForTests } from '../src/composables/useBoard'
+import { __resetViewportForTests } from '../src/composables/useViewport'
 import { COUNTER_COLORS } from '../src/geometry'
 
 const board = useBoard()
@@ -168,5 +169,81 @@ describe('while the drill is mid-move', () => {
     const wrapper = mountInspector()
     expect(wrapper.find('[data-phase-note]').attributes('disabled')).toBeDefined()
     board.endScrub()
+  })
+})
+
+/**
+ * The panel is an overlay, and that is a fact about its CSS rather than its
+ * markup — which jsdom does not apply, so this reads the rule itself.
+ *
+ * It has been a column a quarter of the screen wide and a permanent 40px
+ * strip, and both took room from the pitch whether a coach was using the
+ * notes or not. On a phone held upright there is no room to take. Either
+ * rule falling back into normal flow puts that width back without anything
+ * else failing.
+ */
+describe('the room the notes take', () => {
+  const source = (
+    import.meta.glob('../src/components/Inspector.vue', {
+      query: '?raw',
+      import: 'default',
+      eager: true,
+    }) as Record<string, string>
+  )['../src/components/Inspector.vue']
+
+  function rule(selector: string): string {
+    return source.match(new RegExp(`\\${selector} \\{([^}]*)\\}`))![1]
+  }
+
+  it('is none, open or shut', () => {
+    expect(rule('.panel')).toContain('position: absolute')
+    expect(rule('.rail-strip')).toContain('position: absolute')
+  })
+})
+
+/**
+ * Which way the chevrons point.
+ *
+ * The panel is a card sliding in from the right on a wide screen and a
+ * sheet rising from the bottom edge on a phone held upright, and an arrow
+ * pointing left above a sheet that comes up describes neither.
+ */
+describe('the arrow on the tab', () => {
+  const UP = 'm18 15-6-6-6 6'
+  const DOWN = 'm6 9 6 6 6-6'
+  const LEFT = 'm15 18-6-6 6-6'
+  const RIGHT = 'm9 18 6-6-6-6'
+
+  function stub(compact: boolean, portrait: boolean) {
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes('orientation') ? portrait : compact,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia
+    __resetViewportForTests()
+  }
+
+  afterEach(() => __resetViewportForTests())
+
+  function chevron(wrapper: ReturnType<typeof mountInspector>): string {
+    return wrapper.find('path').attributes('d')!
+  }
+
+  it('points at the edge the panel comes from', () => {
+    stub(false, false)
+    expect(chevron(mountInspector([], false))).toBe(LEFT)
+    expect(chevron(mountInspector([], true))).toBe(RIGHT)
+  })
+
+  it('points up and down where the panel is a sheet', () => {
+    stub(true, true)
+    expect(chevron(mountInspector([], false))).toBe(UP)
+    expect(chevron(mountInspector([], true))).toBe(DOWN)
+  })
+
+  /** A phone on its side keeps the card, so it keeps the sideways arrows. */
+  it('stays sideways on a landscape phone', () => {
+    stub(true, false)
+    expect(chevron(mountInspector([], false))).toBe(LEFT)
   })
 })
