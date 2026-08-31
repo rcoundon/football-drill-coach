@@ -170,3 +170,32 @@ describe('while the drill is mid-move', () => {
     board.endScrub()
   })
 })
+
+/**
+ * The panel is an overlay, and that is a fact about its CSS rather than its
+ * markup — which jsdom does not apply, so this reads the rule itself.
+ *
+ * It has been a column a quarter of the screen wide and a permanent 40px
+ * strip, and both took room from the pitch whether a coach was using the
+ * notes or not. On a phone held upright there is no room to take. Either
+ * rule falling back into normal flow puts that width back without anything
+ * else failing.
+ */
+describe('the room the notes take', () => {
+  const source = (
+    import.meta.glob('../src/components/Inspector.vue', {
+      query: '?raw',
+      import: 'default',
+      eager: true,
+    }) as Record<string, string>
+  )['../src/components/Inspector.vue']
+
+  function rule(selector: string): string {
+    return source.match(new RegExp(`\\${selector} \\{([^}]*)\\}`))![1]
+  }
+
+  it('is none, open or shut', () => {
+    expect(rule('.panel')).toContain('position: absolute')
+    expect(rule('.rail-strip')).toContain('position: absolute')
+  })
+})
