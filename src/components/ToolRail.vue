@@ -665,6 +665,19 @@ function placeText(event: PointerEvent): void {
   .rail-tool { min-height: 44px; }
   .swatch { width: 44px; height: 44px; }
   .swatch--sm { width: 36px; height: 36px; }
+  /*
+   * And two of those side by side do not fit an 88px rail. 44 + 44 plus the
+   * grid's 5.6px gap is 93.6, against 66px of content once the rail's own
+   * 16px of padding and the 6px scrollbar gutter are taken off — so the
+   * outer edge of each disc was cropped by the scroller's overflow, on the
+   * one row of controls a coach drags from most.
+   *
+   * The rail is as wide as the targets it carries rather than the discs
+   * being shrunk below the size a finger needs. It costs a tablet 28px of
+   * pitch. Lying down it is already full width, and setting a width there
+   * would take the strip apart.
+   */
+  .rail:not(.rail--horizontal) { width: 116px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -346,3 +346,45 @@ describe('the scrollbar in the rail', () => {
     expect(source.match(/scrollbar-gutter: stable/g)!.length).toBe(2)
   })
 })
+
+/**
+ * The colour discs have to fit between the rail's edges.
+ *
+ * They did not: under a coarse pointer a finger's 44px twice over, plus the
+ * grid's gap, came to more than an 88px rail has room for once its padding
+ * and the scrollbar gutter are taken off, and `overflow-x: hidden` cropped
+ * the outer edge of both discs. Arithmetic rather than a rendered page,
+ * because jsdom lays nothing out — but it is the arithmetic that was wrong.
+ */
+describe('the room the colour discs have', () => {
+  const source = (
+    import.meta.glob('../src/components/ToolRail.vue', {
+      query: '?raw',
+      import: 'default',
+      eager: true,
+    }) as Record<string, string>
+  )['../src/components/ToolRail.vue']
+
+  const px = (value: string) => (value.endsWith('rem') ? parseFloat(value) * 16 : parseFloat(value))
+
+  function after(marker: string, pattern: RegExp): string {
+    const from = source.indexOf(marker)
+    return source.slice(from).match(pattern)![1]
+  }
+
+  it('is enough for two of them at the size a finger needs', () => {
+    // The coarse override where there is one, and the rail's own width where
+    // there is not — so this measures what a finger actually meets.
+    const widened = source
+      .slice(source.indexOf('@media (pointer: coarse)'))
+      .match(/\.rail:not\(\.rail--horizontal\) \{ width: ([\d.]+px)/)
+    const railWidth = px(widened ? widened[1] : source.match(/\.rail \{[^}]*width: ([\d.]+px)/)![1])
+    const disc = px(after('@media (pointer: coarse)', /\.swatch \{ width: ([\d.]+px)/))
+    const gap = px(source.match(/\.disc-grid \{[^}]*gap: ([\d.]+rem)/)![1])
+    // `padding: 0.6rem 0.5rem` — the second value is the side the discs meet.
+    const padding = px(source.match(/\.rail \{[^}]*padding: [\d.]+rem ([\d.]+rem)/)![1])
+    const gutter = px(source.match(/\.rail-scroll::-webkit-scrollbar \{ width: ([\d.]+px)/)![1])
+
+    expect(disc * 2 + gap + padding * 2 + gutter).toBeLessThanOrEqual(railWidth)
+  })
+})
