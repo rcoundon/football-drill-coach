@@ -311,3 +311,38 @@ describe('placing without a pointer', () => {
     board.endScrub()
   })
 })
+
+/**
+ * The rail scrolls on a short screen, and on a Mac set to show scrollbars
+ * always that drew a permanent light stripe down the swatches — furniture
+ * beside the row of controls a coach uses most. The bar is painted only
+ * while the pointer or the keyboard is in the rail; the gutter it sits in
+ * is reserved either way, so revealing it shifts nothing.
+ */
+describe('the scrollbar in the rail', () => {
+  const source = (
+    import.meta.glob('../src/components/ToolRail.vue', {
+      query: '?raw',
+      import: 'default',
+      eager: true,
+    }) as Record<string, string>
+  )['../src/components/ToolRail.vue']
+
+  function rule(selector: string): string {
+    return source.match(new RegExp(`\\${selector} \\{([^}]*)\\}`))![1]
+  }
+
+  it('is unpainted until the rail is hovered or focused', () => {
+    for (const scroller of ['.rail-scroll', '.rail']) {
+      expect(rule(`${scroller}::-webkit-scrollbar-thumb`)).toContain('background: transparent')
+      expect(source).toContain(`${scroller}:hover::-webkit-scrollbar-thumb`)
+      expect(source).toContain(`${scroller}:focus-within { scrollbar-color: var(--ring)`)
+    }
+  })
+
+  /** Without the gutter, revealing the bar shunts an 88px rail sideways. */
+  it('keeps its gutter reserved in both scroll regions', () => {
+    expect(rule('.rail-scroll')).toContain('scrollbar-gutter: stable')
+    expect(source.match(/scrollbar-gutter: stable/g)!.length).toBe(2)
+  })
+})

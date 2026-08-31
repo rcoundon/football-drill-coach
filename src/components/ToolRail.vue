@@ -391,16 +391,29 @@ function placeText(event: PointerEvent): void {
    * moment it is.
    */
   scrollbar-width: thin;
-  scrollbar-color: var(--ring) transparent;
+  /*
+   * Unpainted until the pointer is in the rail.
+   *
+   * A Mac set to show scrollbars always drew a permanent stripe down the
+   * swatches — a piece of furniture beside the one row of controls a coach
+   * looks at most. The gutter stays reserved whether the thumb is painted
+   * or not, so revealing it shifts nothing sideways, and focus-within is
+   * what shows it to a coach who is on the keyboard rather than the mouse.
+   */
+  scrollbar-color: transparent transparent;
   scrollbar-gutter: stable;
 }
+.rail-scroll:hover,
+.rail-scroll:focus-within { scrollbar-color: var(--ring) transparent; }
 .rail-scroll::-webkit-scrollbar { width: 6px; }
 .rail-scroll::-webkit-scrollbar-track { background: transparent; }
 .rail-scroll::-webkit-scrollbar-thumb {
-  background: var(--ring);
+  background: transparent;
   border-radius: 3px;
 }
-.rail-scroll::-webkit-scrollbar-thumb:hover { background: var(--ink-3); }
+.rail-scroll:hover::-webkit-scrollbar-thumb,
+.rail-scroll:focus-within::-webkit-scrollbar-thumb { background: var(--ring); }
+.rail-scroll:hover::-webkit-scrollbar-thumb:hover { background: var(--ink-3); }
 
 .rail-group { display: flex; flex-direction: column; gap: 0.35rem; align-items: stretch; }
 
@@ -621,11 +634,19 @@ function placeText(event: PointerEvent): void {
     overflow-x: hidden;
     overflow-y: auto;
     scrollbar-width: thin;
-    scrollbar-color: var(--ring) transparent;
+    /* Hidden until the rail is under the pointer, as above — and the gutter
+     * is reserved here too, or revealing it would shunt an 88px column of
+     * controls 6px sideways. */
+    scrollbar-color: transparent transparent;
+    scrollbar-gutter: stable;
   }
+  .rail:hover,
+  .rail:focus-within { scrollbar-color: var(--ring) transparent; }
   .rail::-webkit-scrollbar { width: 6px; }
   .rail::-webkit-scrollbar-track { background: transparent; }
-  .rail::-webkit-scrollbar-thumb { background: var(--ring); border-radius: 3px; }
+  .rail::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+  .rail:hover::-webkit-scrollbar-thumb,
+  .rail:focus-within::-webkit-scrollbar-thumb { background: var(--ring); }
   .rail-scroll { gap: 0.35rem; }
   /*
    * The icon and the padding set a tool's height, not `min-height`, so both
