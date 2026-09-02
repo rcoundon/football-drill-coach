@@ -91,6 +91,24 @@ describe('pitch settings', () => {
     board.undo()
     expect(board.state.pitch.type).toBe('blank')
   })
+
+  /**
+   * A bend is held against the chord it bows, not against the pitch, exactly
+   * so that turning the pitch around does not have to know anything about
+   * it. Rotating must leave it untouched rather than merely unbroken.
+   */
+  it('leaves a bent run alone when the board is rotated', () => {
+    const board = useBoard()
+    const counter = board.addCounter('red')
+    board.addFrame()
+    board.moveCounter(counter.id, { x: 30, y: 10 })
+    board.setCounterBend(counter.id, 6, -0.2)
+
+    board.toggleRotated()
+
+    expect(board.counterById(counter.id)!.bend).toBe(6)
+    expect(board.counterById(counter.id)!.bendAlong).toBe(-0.2)
+  })
 })
 
 describe('undo and redo', () => {

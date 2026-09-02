@@ -253,4 +253,31 @@ describe('bending a run', () => {
     board.pause()
     expect(board.counterById(id)!.bend).toBeUndefined()
   })
+
+  /**
+   * A duplicated phase starts with nobody having moved into it — its cast
+   * stands exactly where the original's does, so there is no run yet to
+   * describe a curve for. A bend copied along with the rest of the counter
+   * would sit there unseen until the coach drags the player, at which point
+   * it would bow the new run into a shape nobody drew.
+   */
+  describe('duplicating a phase that has a bent run', () => {
+    it('addFrame gives the copy a straight run once the player moves', () => {
+      const { board, id } = playerWithARun()
+      board.setCounterBend(id, 8, 0.3)
+      board.addFrame()
+      board.moveCounter(id, { x: 60, y: 40 })
+      expect(board.counterById(id)!.bend).toBeUndefined()
+      expect(board.counterById(id)!.bendAlong).toBeUndefined()
+    })
+
+    it('duplicateFrame does the same, being the same operation', () => {
+      const { board, id } = playerWithARun()
+      board.setCounterBend(id, 8, 0.3)
+      board.duplicateFrame(board.state.currentFrame)
+      board.moveCounter(id, { x: 60, y: 40 })
+      expect(board.counterById(id)!.bend).toBeUndefined()
+      expect(board.counterById(id)!.bendAlong).toBeUndefined()
+    })
+  })
 })
