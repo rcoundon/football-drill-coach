@@ -638,12 +638,16 @@ async function exportSessionPdf(session: Session) {
 
 function exportJson() {
   const patterns = storage.listPatterns()
-  if (patterns.length === 0) {
-    notice.value = 'There are no saved patterns to export.'
+  const sessionList = sessions.listSessions()
+  // The file is a bundle of both, so a coach with sessions but no drills (or
+  // drills but no sessions) still has something worth exporting — only bail
+  // when there is truly nothing in either list.
+  if (patterns.length === 0 && sessionList.length === 0) {
+    notice.value = 'There are no saved patterns or sessions to export.'
     return
   }
   exporter.downloadText(
-    storage.exportBundleJson(patterns, sessions.listSessions()),
+    storage.exportBundleJson(patterns, sessionList),
     'tactics-patterns.json',
   )
 }
@@ -1063,6 +1067,7 @@ watch(
     />
     <SessionPlan
       :session="openSession"
+      :exporting="exporting"
       @close="openSession = null"
       @exportPdf="exportSessionPdf"
     />
