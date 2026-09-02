@@ -5,7 +5,9 @@ import { useSessions } from '../composables/useSessions'
 import { matchesTags, useStorage } from '../composables/useStorage'
 import TagFilter from './TagFilter.vue'
 
-const props = defineProps<{ session: Session | null }>()
+const props = withDefaults(defineProps<{ session: Session | null; exporting?: boolean }>(), {
+  exporting: false,
+})
 
 /**
  * The PDF is not built here. App owns the export lock, the progress notice
@@ -173,7 +175,13 @@ function currentSession(): Session {
 
       <div class="row row--actions">
         <button data-add-drill class="chip" @click="picking = !picking">Add drill</button>
-        <button data-export-pdf class="chip" @click="emit('exportPdf', currentSession())">Export PDF</button>
+        <button
+          data-export-pdf
+          class="chip"
+          :disabled="exporting"
+          :title="exporting ? 'Already building a PDF' : 'Save this session as a PDF'"
+          @click="emit('exportPdf', currentSession())"
+        >Export PDF</button>
       </div>
 
       <div v-if="picking" class="picker">

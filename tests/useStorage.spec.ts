@@ -492,6 +492,20 @@ describe('import and export', () => {
     expect(store.listPatterns()[0].tags).toEqual(['rondo', 'warm up'])
   })
 
+  it('keeps tags absent, rather than an empty array, for an incoming pattern that had none', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Drill', snap())
+    const { tags: _tags, ...withoutTags } = saved
+    const json = JSON.stringify({ patterns: [withoutTags], sessions: [] })
+    localStorage.clear()
+
+    const { patterns: imported } = store.importBundle(json)
+
+    expect(imported[0].tags).toBeUndefined()
+    expect(store.listPatterns()[0].tags).toBeUndefined()
+    expect(JSON.parse(localStorage.getItem(PATTERNS_KEY)!)[0]).not.toHaveProperty('tags')
+  })
+
   it('refuses to import over an unreadable library, leaving the bad bytes intact', () => {
     const store = useStorage()
     const saved = store.savePattern('Drill', snap())

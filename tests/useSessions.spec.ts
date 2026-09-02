@@ -81,13 +81,16 @@ describe('sessions storage', () => {
 })
 
 describe('sessionsUsing', () => {
-  it('finds every session holding a drill, counting it once per session', () => {
+  it('finds every session holding a drill, counting it once per session, and across two', () => {
     const a = sessions.createSession('Tuesday')
     withEntries(a, [{ patternId: 'p1', minutes: 10 }, { patternId: 'p1', minutes: 5 }])
     const b = sessions.createSession('Thursday')
-    withEntries(b, [{ patternId: 'p2', minutes: 10 }])
+    withEntries(b, [{ patternId: 'p1', minutes: 10 }, { patternId: 'p2', minutes: 10 }])
 
-    expect(sessions.sessionsUsing('p1').map((s) => s.name)).toEqual(['Tuesday'])
+    // p1 is in both sessions — twice in Tuesday's, once in Thursday's — and
+    // comes back once per session, not once per appearance.
+    expect(sessions.sessionsUsing('p1').map((s) => s.name).sort()).toEqual(['Thursday', 'Tuesday'])
+    expect(sessions.sessionsUsing('p2').map((s) => s.name)).toEqual(['Thursday'])
     expect(sessions.sessionsUsing('p3')).toEqual([])
   })
 })

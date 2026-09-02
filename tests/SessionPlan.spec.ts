@@ -188,4 +188,13 @@ describe('SessionPlan', () => {
 
     expect(wrapper.emitted('exportPdf')?.[0]?.[0]).toMatchObject({ id: session.id })
   })
+
+  it('disables Export PDF while App reports an export is already running', () => {
+    const a = storage.savePattern('Rondo', useBoard().snapshot())
+    const session = sessionWith([{ patternId: a.id, minutes: 12 }])
+
+    const wrapper = mount(SessionPlan, { props: { session, exporting: true } })
+
+    expect(wrapper.find('[data-export-pdf]').attributes('disabled')).toBeDefined()
+  })
 })

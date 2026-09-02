@@ -48,8 +48,15 @@ export function createCollectionErrors(): CollectionErrors {
   return { lastError: ref<string | null>(null), lastWriteSucceeded: ref(true) }
 }
 
-export function damagedMessage(count: number): string {
-  return `${count} saved item(s) could not be read. They have been left untouched so they can be recovered.`
+/**
+ * The one spelling of "some rows could not be read" every stored collection
+ * uses. `noun` names what was damaged — "pattern" for the library, "session"
+ * for the sessions store — so the coach reads "saved pattern(s)" or "saved
+ * session(s)" rather than a store hand-rolling its own copy of the sentence,
+ * or a shared generic "item(s)" that names neither.
+ */
+export function damagedMessage(count: number, noun: string): string {
+  return `${count} saved ${noun}(s) could not be read. They have been left untouched so they can be recovered.`
 }
 
 export function readCollection<T>(key: string, parse: (value: unknown) => T): CollectionRead<T> {

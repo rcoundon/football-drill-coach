@@ -342,7 +342,7 @@ function listPatterns(): Pattern[] {
     return []
   }
 
-  if (damaged.length > 0) lastError.value = damagedMessage(damaged.length)
+  if (damaged.length > 0) lastError.value = damagedMessage(damaged.length, 'pattern')
   return patterns
 }
 
@@ -452,7 +452,7 @@ function savePattern(name: string, snap: BoardSnapshot, id?: string, forkFromId?
   else patterns[index] = pattern
 
   if (recordWrite(errors, writeLibrary(patterns, damaged), damaged)) {
-    lastError.value = damagedMessage(damaged.length)
+    lastError.value = damagedMessage(damaged.length, 'pattern')
   }
   return pattern
 }
@@ -466,7 +466,7 @@ function deletePattern(id: string): void {
     return
   }
   if (recordWrite(errors, writeLibrary(patterns.filter((p) => p.id !== id), damaged), damaged)) {
-    lastError.value = damagedMessage(damaged.length)
+    lastError.value = damagedMessage(damaged.length, 'pattern')
   }
 }
 
@@ -483,7 +483,7 @@ function renamePattern(id: string, name: string): void {
   pattern.name = name
   pattern.updatedAt = nowIso()
   if (recordWrite(errors, writeLibrary(patterns, damaged), damaged)) {
-    lastError.value = damagedMessage(damaged.length)
+    lastError.value = damagedMessage(damaged.length, 'pattern')
   }
 }
 
@@ -500,7 +500,7 @@ function setTags(id: string, tags: string[]): void {
   pattern.tags = normaliseTags(tags)
   pattern.updatedAt = nowIso()
   if (recordWrite(errors, writeLibrary(patterns, damaged), damaged)) {
-    lastError.value = damagedMessage(damaged.length)
+    lastError.value = damagedMessage(damaged.length, 'pattern')
   }
 }
 
@@ -709,7 +709,12 @@ function importBundle(json: string): { patterns: Pattern[]; sessions: Session[] 
   // here, the same way `setTags` normalises a tag typed by hand.
   const incoming = raw.patterns.map((entry) => {
     const pattern = parsePattern(entry)
-    return { ...pattern, tags: normaliseTags(pattern.tags ?? []) }
+    // `tags?` is absent-means-empty (see the field's own comment), so a
+    // pattern that arrived with none keeps it `undefined` rather than
+    // gaining a `tags: []` the source never had.
+    if (pattern.tags === undefined) return pattern
+    const tags = normaliseTags(pattern.tags)
+    return tags.length > 0 ? { ...pattern, tags } : { ...pattern, tags: undefined }
   })
   const incomingSessions = raw.sessions.map((entry) => parseSession(entry))
 
@@ -754,7 +759,7 @@ function importBundle(json: string): { patterns: Pattern[]; sessions: Session[] 
   // other mutator in this file.
   const patternsWritten = writeLibrary([...patterns, ...added], damaged)
   if (recordWrite(errors, patternsWritten, damaged)) {
-    lastError.value = damagedMessage(damaged.length)
+    lastError.value = damagedMessage(damaged.length, 'pattern')
   }
   if (!patternsWritten) {
     throw new Error('The imported drills could not be saved to this browser.')

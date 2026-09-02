@@ -1,5 +1,11 @@
 import type { Session, SessionEntry } from '../types'
-import { createCollectionErrors, readCollection, recordWrite, writeCollection } from './collection'
+import {
+  createCollectionErrors,
+  damagedMessage,
+  readCollection,
+  recordWrite,
+  writeCollection,
+} from './collection'
 
 export const SESSIONS_KEY = 'fct.sessions.v1'
 
@@ -85,7 +91,7 @@ function mutate(change: (sessions: Session[]) => void): boolean {
   change(items)
   const ok = writeCollection(errors, SESSIONS_KEY, items, damaged)
   if (recordWrite(errors, ok, damaged)) {
-    lastError.value = `${damaged.length} saved session(s) could not be read. They have been left untouched so they can be recovered.`
+    lastError.value = damagedMessage(damaged.length, 'session')
   }
   // `recordWrite` answers whether damaged rows rode along, not whether the
   // write landed — a quota failure would otherwise be reported as success.
@@ -101,7 +107,7 @@ function listSessions(): Session[] {
     return []
   }
   if (damaged.length > 0) {
-    lastError.value = `${damaged.length} saved session(s) could not be read. They have been left untouched so they can be recovered.`
+    lastError.value = damagedMessage(damaged.length, 'session')
   }
   return items
 }
@@ -120,12 +126,7 @@ function createSession(name: string): Session {
 }
 
 function saveSession(session: Session): void {
-  mutate((sessions) => {
-    const next = { ...session, updatedAt: nowIso() }
-    const index = sessions.findIndex((s) => s.id === session.id)
-    if (index === -1) sessions.push(next)
-    else sessions[index] = next
-  })
+  saveSessions([session])
 }
 
 /**

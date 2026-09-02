@@ -985,6 +985,54 @@ describe('exporting a session as a PDF', () => {
     // never put into the export-derived state the GIF export uses.
     expect(board.isDerived.value).toBe(false)
   })
+
+  it('disables the Export PDF button for as long as the export is running', async () => {
+    // No drills in the session, exactly as the first test in this block: the
+    // cover alone proves the wiring without needing jsdom to rasterise a
+    // real image through jsPDF's addImage.
+    useSessions().createSession('Tuesday U12')
+    wrapper = mountApp()
+    await openSessions(wrapper)
+    await wrapper.find('[data-session] [data-open]').trigger('click')
+    await nextTick()
+
+    const click = wrapper.find('[data-export-pdf]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-export-pdf]').attributes('disabled')).toBeDefined()
+
+    await click
+    await vi.waitFor(() => {
+      expect(wrapper!.find('.notice').text()).toBe('Session saved.')
+    })
+
+    expect(wrapper.find('[data-export-pdf]').attributes('disabled')).toBeUndefined()
+  })
+})
+
+describe('exporting the JSON bundle', () => {
+  it('refuses only when there are neither patterns nor sessions', async () => {
+    wrapper = mountApp()
+
+    await wrapper.find('[data-export-json]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.find('.notice').text()).toContain('There are no saved patterns or sessions to export.')
+  })
+
+  it('exports a coach’s sessions even when they have no saved drills', async () => {
+    useSessions().createSession('Tuesday U12')
+    const exporter = useExport()
+    const downloads: string[] = []
+    vi.spyOn(exporter, 'downloadText').mockImplementation((text) => { downloads.push(text) })
+    wrapper = mountApp()
+
+    await wrapper.find('[data-export-json]').trigger('click')
+    await nextTick()
+
+    expect(downloads).toHaveLength(1)
+    expect(JSON.parse(downloads[0]).sessions).toHaveLength(1)
+    expect(wrapper.find('.notice').exists()).toBe(false)
+  })
 })
 
 describe('tagging while forking a drill', () => {
