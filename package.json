@@ -11,6 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "jspdf": "4.2.1",
     "modern-gif": "2.1.0",
     "vue": "3.5.41"
   },
