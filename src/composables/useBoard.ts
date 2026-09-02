@@ -1203,6 +1203,31 @@ function setArrowBend(id: string, bend: number, bendAlong = 0): void {
 }
 
 /**
+ * Bow a player's run into this phase, and set where along it the bow peaks.
+ * Called on every pointer-move of a handle drag, so it deliberately does not
+ * commit — the grab does that.
+ *
+ * On this phase alone, unlike a player's colour or label: where somebody
+ * stands, and how they got there, is what differs from phase to phase.
+ *
+ * Zeroes are stored as absent fields, exactly as `setArrowBend` stores them,
+ * so a straightened run is indistinguishable from one that was never bent.
+ */
+function setCounterBend(id: string, bend: number, bendAlong = 0): void {
+  if (locked()) return
+  const counter = counterById(id)
+  if (!counter) return
+  if (bend === 0) {
+    delete counter.bend
+    delete counter.bendAlong
+    return
+  }
+  counter.bend = bend
+  if (bendAlong === 0) delete counter.bendAlong
+  else counter.bendAlong = bendAlong
+}
+
+/**
  * Move one end of a segment that is already drawn. Called on every
  * pointer-move of a handle drag, so it deliberately does not commit — the
  * grab does that.
@@ -1572,6 +1597,7 @@ const board = {
   moveCounter,
   setCounterLabel,
   setCounterColor,
+  setCounterBend,
   frameNote,
   setFrameNote,
   deleteCounter,
