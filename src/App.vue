@@ -682,6 +682,28 @@ watch(renameCounterId, (id) => focusWhenOpen(id !== null, () => renameLabelInput
 })
 
 /** True while anything modal is on screen. */
+/**
+ * The one error banner, fed by two independent stores.
+ *
+ * `storage.lastError` and `sessions.lastError` used to be the very same ref
+ * — one module-level pair in collection.ts that both composables imported —
+ * so this could get away with `storage.lastError.value || ...`. Now that
+ * each store owns its pair (see `CollectionErrors` in collection.ts), both
+ * are read explicitly, and the patterns store is shown first only because a
+ * pattern write is the more common one; either can be showing on its own.
+ */
+const storeError = computed(() => storage.lastError.value || sessions.lastError.value)
+
+/**
+ * Clear only the store whose message is on screen. Clearing both
+ * unconditionally would silently drop a second store's still-unresolved
+ * error the coach never got shown, if both happened to fail at once.
+ */
+function dismissStoreError(): void {
+  if (storage.lastError.value) storage.lastError.value = null
+  else sessions.lastError.value = null
+}
+
 const isDialogOpen = computed(
   () =>
     savePromptOpen.value ||
@@ -1146,20 +1168,7 @@ watch(
 
     <!-- Both messages dismiss on click; an error the coach cannot clear is worse than a notice. -->
     <p v-if="notice" class="notice" role="status" @click="notice = null">{{ notice }}</p>
-    <!--
-      `sessions.lastError` and `storage.lastError` are the same ref under the
-      hood — both composables read the same collection module — but this
-      names the session store explicitly rather than leaning on that
-      coupling, so a failed session write is still reported here if the two
-      stores are ever split apart.
-    -->
-    <p
-      v-if="storage.lastError.value || sessions.lastError.value"
-      class="error"
-      role="status"
-      title="Dismiss"
-      @click="storage.lastError.value = null; sessions.lastError.value = null"
-    >{{ storage.lastError.value || sessions.lastError.value }}</p>
+    <p v-if="storeError" class="error" role="status" title="Dismiss" @click="dismissStoreError">{{ storeError }}</p>
   </div>
 </template>
 

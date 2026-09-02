@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { readCollection, writeCollection, lastError } from '../src/composables/collection'
+import { createCollectionErrors, readCollection, writeCollection } from '../src/composables/collection'
 
 type Thing = { id: string; n: number }
 
@@ -14,7 +14,6 @@ const KEY = 'test.things'
 
 beforeEach(() => {
   localStorage.clear()
-  lastError.value = null
 })
 
 describe('readCollection', () => {
@@ -46,8 +45,9 @@ describe('writeCollection', () => {
   it('puts damaged rows back so they survive a write', () => {
     localStorage.setItem(KEY, JSON.stringify([{ id: 'a', n: 1 }, { broken: true }]))
     const read = readCollection(KEY, parseThing)
+    const errors = createCollectionErrors()
 
-    writeCollection(KEY, [...read.items, { id: 'b', n: 2 }], read.damaged)
+    writeCollection(errors, KEY, [...read.items, { id: 'b', n: 2 }], read.damaged)
 
     const raw = JSON.parse(localStorage.getItem(KEY)!)
     expect(raw).toContainEqual({ broken: true })
@@ -64,9 +64,27 @@ describe('writeCollection', () => {
       throw error
     })
 
-    expect(writeCollection(KEY, [{ id: 'a', n: 1 }], [])).toBe(false)
-    expect(lastError.value).toContain('out of space')
+    const errors = createCollectionErrors()
+    expect(writeCollection(errors, KEY, [{ id: 'a', n: 1 }], [])).toBe(false)
+    expect(errors.lastError.value).toContain('out of space')
 
     vi.restoreAllMocks()
+  })
+
+  /**
+   * The bug this plan shipped once: a single module-level `lastError` meant
+   * one collection's read or write could erase another's unresolved
+   * warning. Two independent `createCollectionErrors()` pairs must not
+   * touch each other at all.
+   */
+  it('keeps two collections error state independent', () => {
+    const a = createCollectionErrors()
+    const b = createCollectionErrors()
+
+    a.lastError.value = 'Collection A is damaged.'
+    b.lastError.value = null
+
+    expect(a.lastError.value).toBe('Collection A is damaged.')
+    expect(b.lastError.value).toBeNull()
   })
 })

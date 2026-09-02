@@ -70,6 +70,9 @@ beforeEach(() => {
   localStorage.clear()
   __resetBoardForTests()
   useStorage().lastError.value = null
+  // No longer the same ref as the line above — each store owns its own pair
+  // now, so both need resetting between tests.
+  useSessions().lastError.value = null
 })
 
 afterEach(() => {
@@ -861,11 +864,12 @@ describe('the library changing the open session', () => {
 })
 
 /**
- * The session store shares its `lastError`/`lastWriteSucceeded` refs with
- * the pattern store (both read the same collection module), so a failed
- * session write already reaches this banner today — but the binding names
- * the session store explicitly rather than relying on that coupling, so a
- * later split of the two stores could not silently stop reporting it.
+ * `useStorage` and `useSessions` used to import one shared `lastError` ref
+ * from `collection.ts`, so a healthy read of one store silently erased the
+ * other's unresolved warning — SessionLibrary's own `refresh()` triggered
+ * this on every open, by reading sessions then patterns. Each store now owns
+ * its own pair (`createCollectionErrors()`), and this banner reads both
+ * explicitly rather than leaning on them happening to be the same ref.
  */
 describe('the session store error', () => {
   it('is surfaced the same way as a pattern store error', async () => {
@@ -880,6 +884,42 @@ describe('the session store error', () => {
     await wrapper.find('.error').trigger('click')
     expect(wrapper.find('.error').exists()).toBe(false)
     expect(useSessions().lastError.value).toBeNull()
+  })
+
+  it('does not clobber the pattern store error, and dismissing shows what is left', async () => {
+    const storage = useStorage()
+    wrapper = mountApp()
+
+    storage.lastError.value = 'Your saved patterns could not be read.'
+    useSessions().lastError.value = 'Your saved sessions could not be read.'
+    await nextTick()
+
+    // The patterns message shows first; the session one is still there
+    // underneath, not lost the way a shared ref would have lost it.
+    expect(wrapper.find('.error').text()).toMatch(/saved patterns/i)
+
+    await wrapper.find('.error').trigger('click')
+    expect(storage.lastError.value).toBeNull()
+    expect(useSessions().lastError.value).toBe('Your saved sessions could not be read.')
+    await nextTick()
+
+    expect(wrapper.find('.error').text()).toMatch(/saved sessions/i)
+
+    await wrapper.find('.error').trigger('click')
+    expect(useSessions().lastError.value).toBeNull()
+    expect(wrapper.find('.error').exists()).toBe(false)
+  })
+
+  it('is not erased by a healthy patterns read the way it was when the two stores shared one ref', async () => {
+    const storage = useStorage()
+    wrapper = mountApp()
+
+    useSessions().lastError.value = 'Your saved sessions could not be read.'
+    storage.listPatterns()
+    await nextTick()
+
+    expect(useSessions().lastError.value).toBe('Your saved sessions could not be read.')
+    expect(wrapper.find('.error').exists()).toBe(true)
   })
 })
 

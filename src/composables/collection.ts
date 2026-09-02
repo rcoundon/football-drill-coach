@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, type Ref } from 'vue'
 
 /**
  * A stored collection: an array of entities under one localStorage key,
@@ -19,15 +19,34 @@ export type CollectionRead<T> = {
   damaged: unknown[]
 }
 
-export const lastError = ref<string | null>(null)
-
 /**
- * Whether the most recent write actually reached localStorage. A caller that
- * wants to tell the coach "saved" has to know, because a write can be
- * refused (unreadable store) or fail (quota) while the caller still holds the
- * value it built in memory.
+ * One collection's own error state.
+ *
+ * Each stored collection gets its own pair rather than sharing one module-
+ * level pair: `lastError` used to live here as a single `ref`, and the
+ * patterns store and the sessions store both imported it — so reading either
+ * store's collection reset the OTHER store's unread warning to null. Opening
+ * the Sessions panel calls `listSessions()` then `listPatterns()` inside the
+ * same `refresh()`, so a damaged-session warning was being erased by a
+ * healthy patterns read on every single open. `createCollectionErrors()`
+ * gives each store its own ref pair so one store's read or write can no
+ * longer clobber another's unresolved error.
  */
-export const lastWriteSucceeded = ref(true)
+export type CollectionErrors = {
+  lastError: Ref<string | null>
+  /**
+   * Whether the most recent write actually reached localStorage. A caller
+   * that wants to tell the coach "saved" has to know, because a write can be
+   * refused (unreadable store) or fail (quota) while the caller still holds
+   * the value it built in memory.
+   */
+  lastWriteSucceeded: Ref<boolean>
+}
+
+/** One of these per stored collection — see `CollectionErrors` for why. */
+export function createCollectionErrors(): CollectionErrors {
+  return { lastError: ref<string | null>(null), lastWriteSucceeded: ref(true) }
+}
 
 export function damagedMessage(count: number): string {
   return `${count} saved item(s) could not be read. They have been left untouched so they can be recovered.`
@@ -61,13 +80,13 @@ export function readCollection<T>(key: string, parse: (value: unknown) => T): Co
   return { items, unreadable: false, damaged }
 }
 
-export function writeRaw(key: string, value: unknown): boolean {
+export function writeRaw(errors: CollectionErrors, key: string, value: unknown): boolean {
   try {
     localStorage.setItem(key, JSON.stringify(value))
     return true
   } catch (error) {
     const name = error instanceof Error ? error.name : ''
-    lastError.value =
+    errors.lastError.value =
       name === 'QuotaExceededError'
         ? 'The browser is out of space. Export some patterns to a file and delete them to free room.'
         : 'That could not be saved to this browser.'
@@ -79,12 +98,17 @@ export function writeRaw(key: string, value: unknown): boolean {
  * Write the collection back, damaged rows included. Every write goes through
  * here so no code path can drop a row it merely failed to understand.
  */
-export function writeCollection<T>(key: string, items: T[], damaged: unknown[]): boolean {
-  return writeRaw(key, [...items, ...damaged])
+export function writeCollection<T>(
+  errors: CollectionErrors,
+  key: string,
+  items: T[],
+  damaged: unknown[],
+): boolean {
+  return writeRaw(errors, key, [...items, ...damaged])
 }
 
 /** Record whether a write landed, and say whether damaged rows rode through it. */
-export function recordWrite(ok: boolean, damaged: unknown[]): boolean {
-  lastWriteSucceeded.value = ok
+export function recordWrite(errors: CollectionErrors, ok: boolean, damaged: unknown[]): boolean {
+  errors.lastWriteSucceeded.value = ok
   return ok && damaged.length > 0
 }

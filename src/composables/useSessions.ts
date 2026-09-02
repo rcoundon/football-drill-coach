@@ -1,13 +1,16 @@
 import type { Session, SessionEntry } from '../types'
-import {
-  lastError,
-  lastWriteSucceeded,
-  readCollection,
-  recordWrite,
-  writeCollection,
-} from './collection'
+import { createCollectionErrors, readCollection, recordWrite, writeCollection } from './collection'
 
 export const SESSIONS_KEY = 'fct.sessions.v1'
+
+/**
+ * This store's own error pair — not shared with the patterns store. See the
+ * comment on `CollectionErrors` in collection.ts: a single module-level pair
+ * meant a healthy `listPatterns()` silently erased a damaged-session warning
+ * this store had just set, on every open of the Sessions panel.
+ */
+const errors = createCollectionErrors()
+const { lastError, lastWriteSucceeded } = errors
 
 const SESSION_VERSION = 1
 
@@ -80,8 +83,8 @@ function mutate(change: (sessions: Session[]) => void): boolean {
     return false
   }
   change(items)
-  const ok = writeCollection(SESSIONS_KEY, items, damaged)
-  if (recordWrite(ok, damaged)) {
+  const ok = writeCollection(errors, SESSIONS_KEY, items, damaged)
+  if (recordWrite(errors, ok, damaged)) {
     lastError.value = `${damaged.length} saved session(s) could not be read. They have been left untouched so they can be recovered.`
   }
   // `recordWrite` answers whether damaged rows rode along, not whether the

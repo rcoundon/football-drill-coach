@@ -2,9 +2,8 @@ import type { Ball, Counter, Drawing, Frame, Label, Marker, Pattern, Session } f
 import type { BoardSnapshot } from './useBoard'
 import type { Vec } from '../types'
 import {
+  createCollectionErrors,
   damagedMessage,
-  lastError,
-  lastWriteSucceeded,
   readCollection,
   recordWrite,
   writeCollection,
@@ -13,6 +12,16 @@ import {
 import { parseSession, SESSIONS_KEY, useSessions } from './useSessions'
 
 const sessions = useSessions()
+
+/**
+ * This store's own error pair — not shared with the sessions store. See the
+ * comment on `CollectionErrors` in collection.ts for why that matters: it
+ * used to be one module-level ref pair, and a healthy `listPatterns()` read
+ * was silently erasing a damaged-session warning the sessions store had just
+ * set, every time the Sessions panel opened.
+ */
+const errors = createCollectionErrors()
+const { lastError, lastWriteSucceeded } = errors
 
 export const PATTERNS_KEY = 'fct.patterns.v1'
 export const DRAFT_KEY = 'fct.draft.v1'
@@ -320,7 +329,7 @@ function readLibrary() {
  * a row it merely failed to understand.
  */
 function writeLibrary(patterns: Pattern[], damaged: unknown[]): boolean {
-  return writeCollection(PATTERNS_KEY, patterns, damaged)
+  return writeCollection(errors, PATTERNS_KEY, patterns, damaged)
 }
 
 function listPatterns(): Pattern[] {
@@ -442,7 +451,7 @@ function savePattern(name: string, snap: BoardSnapshot, id?: string, forkFromId?
   if (index === -1) patterns.push(pattern)
   else patterns[index] = pattern
 
-  if (recordWrite(writeLibrary(patterns, damaged), damaged)) {
+  if (recordWrite(errors, writeLibrary(patterns, damaged), damaged)) {
     lastError.value = damagedMessage(damaged.length)
   }
   return pattern
@@ -456,7 +465,7 @@ function deletePattern(id: string): void {
     lastWriteSucceeded.value = false
     return
   }
-  if (recordWrite(writeLibrary(patterns.filter((p) => p.id !== id), damaged), damaged)) {
+  if (recordWrite(errors, writeLibrary(patterns.filter((p) => p.id !== id), damaged), damaged)) {
     lastError.value = damagedMessage(damaged.length)
   }
 }
@@ -473,7 +482,7 @@ function renamePattern(id: string, name: string): void {
   if (!pattern) return
   pattern.name = name
   pattern.updatedAt = nowIso()
-  if (recordWrite(writeLibrary(patterns, damaged), damaged)) {
+  if (recordWrite(errors, writeLibrary(patterns, damaged), damaged)) {
     lastError.value = damagedMessage(damaged.length)
   }
 }
@@ -490,7 +499,7 @@ function setTags(id: string, tags: string[]): void {
   if (!pattern) return
   pattern.tags = normaliseTags(tags)
   pattern.updatedAt = nowIso()
-  if (recordWrite(writeLibrary(patterns, damaged), damaged)) {
+  if (recordWrite(errors, writeLibrary(patterns, damaged), damaged)) {
     lastError.value = damagedMessage(damaged.length)
   }
 }
@@ -551,7 +560,7 @@ function readRaw(key: string): unknown {
 
 function saveDraft(snap: BoardSnapshot): void {
   lastError.value = null
-  writeRaw(DRAFT_KEY, snap)
+  writeRaw(errors, DRAFT_KEY, snap)
 }
 
 function isValidPitch(value: unknown): boolean {
@@ -744,7 +753,7 @@ function importBundle(json: string): { patterns: Pattern[]; sessions: Session[] 
   // the write landed — that check is `patternsWritten` itself, same as every
   // other mutator in this file.
   const patternsWritten = writeLibrary([...patterns, ...added], damaged)
-  if (recordWrite(patternsWritten, damaged)) {
+  if (recordWrite(errors, patternsWritten, damaged)) {
     lastError.value = damagedMessage(damaged.length)
   }
   if (!patternsWritten) {
@@ -774,7 +783,10 @@ function importBundle(json: string): { patterns: Pattern[]; sessions: Session[] 
   // `writeCollection` directly here — that keeps the upsert-by-id and
   // damaged-row handling in the one place that already owns it.
   sessions.saveSessions(addedSessions)
-  if (!lastWriteSucceeded.value) {
+  // The sessions store's own write flag, not this store's: they no longer
+  // share one ref, and this write went through `sessions.saveSessions`, not
+  // `writeLibrary`.
+  if (!sessions.lastWriteSucceeded.value) {
     throw new Error('The imported sessions could not be saved to this browser.')
   }
 

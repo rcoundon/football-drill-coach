@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useSessions, SESSIONS_KEY } from '../src/composables/useSessions'
+import { useStorage } from '../src/composables/useStorage'
 import type { Session } from '../src/types'
 
 const sessions = useSessions()
@@ -163,6 +164,35 @@ describe('saveSessions', () => {
     ])
 
     expect(localStorage.getItem(SESSIONS_KEY)).toBe('{not json')
+    expect(sessions.lastError.value).toContain('could not be read')
+  })
+})
+
+/**
+ * The bug SessionLibrary shipped: its `refresh()` calls
+ * `sessions.listSessions()` then `storage.listPatterns()`. Both used to read
+ * the exact same module-level `lastError` ref, so a healthy patterns read
+ * unconditionally set `lastError.value = null` and erased the damaged-session
+ * warning the line above had just set — every single time the Sessions panel
+ * opened or refreshed. This pins the two stores' errors as independent.
+ */
+describe('the sessions store error, beside the patterns store', () => {
+  it('is not clobbered by a healthy listPatterns() call that follows it', () => {
+    const storage = useStorage()
+    storage.lastError.value = null
+
+    sessions.createSession('Tuesday')
+    const raw = JSON.parse(localStorage.getItem(SESSIONS_KEY)!)
+    raw.push({ garbage: true })
+    localStorage.setItem(SESSIONS_KEY, JSON.stringify(raw))
+
+    // Mirrors SessionLibrary.refresh(): read the damaged sessions collection,
+    // then read the (healthy) patterns collection.
+    expect(sessions.listSessions()[0]).toBeDefined()
+    expect(sessions.lastError.value).toContain('could not be read')
+
+    storage.listPatterns()
+
     expect(sessions.lastError.value).toContain('could not be read')
   })
 })
