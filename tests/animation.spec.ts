@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Ball, Counter, Frame, Marker, Vec } from '../src/types'
-import { BALL_OFFSET } from '../src/geometry'
+import { BALL_OFFSET, curveHandle } from '../src/geometry'
 import {
   DEFAULT_FRAME_MS,
   GIF_FPS,
@@ -11,6 +11,7 @@ import {
   gifSchedule,
   interpolateFrames,
   lerp,
+  pointOnCurve,
   timelineOf,
 } from '../src/animation'
 
@@ -233,6 +234,36 @@ describe('gifSchedule', () => {
     const samples = gifSchedule([frame(), frame({ duration: 160 }), frame({ duration: 800 })], GIF_FPS)
     expect(samples.at(-1)!.atMs).toBe(960)
     expect(samples).toHaveLength(Math.floor(960 / STEP) + 1)
+  })
+})
+
+describe('pointOnCurve', () => {
+  const from = { x: 10, y: 10 }
+  const to = { x: 30, y: 10 }
+
+  it('is the plain lerp when there is no bend', () => {
+    expect(pointOnCurve(from, to, 0, 0, 0.25)).toEqual({ x: 15, y: 10 })
+    expect(pointOnCurve(from, to, 0, 0.2, 0.5)).toEqual({ x: 20, y: 10 })
+  })
+
+  it('returns the endpoints exactly', () => {
+    expect(pointOnCurve(from, to, 6, 0.1, 0)).toEqual(from)
+    expect(pointOnCurve(from, to, 6, 0.1, 1)).toEqual(to)
+  })
+
+  it('passes through the handle at the halfway point', () => {
+    const handle = curveHandle(from, to, 6, 0.1)
+    const mid = pointOnCurve(from, to, 6, 0.1, 0.5)
+    expect(mid.x).toBeCloseTo(handle.x, 10)
+    expect(mid.y).toBeCloseTo(handle.y, 10)
+  })
+
+  it('leaves the straight line when bent', () => {
+    expect(pointOnCurve(from, to, 6, 0, 0.5).y).not.toBe(10)
+  })
+
+  it('holds still when the ends coincide', () => {
+    expect(pointOnCurve(from, from, 6, 0.1, 0.5)).toEqual(from)
   })
 })
 

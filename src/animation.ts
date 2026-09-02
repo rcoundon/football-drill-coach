@@ -6,7 +6,7 @@
  * exercise it.
  */
 import type { Ball, Counter, Drawing, Frame, Label, Marker, Vec } from './types'
-import { BALL_OFFSET } from './geometry'
+import { BALL_OFFSET, curveControlPoint } from './geometry'
 
 /** How long the move into a frame takes when the frame does not say. */
 export const DEFAULT_FRAME_MS = 1000
@@ -46,6 +46,33 @@ export function easeInOut(t: number): number {
 
 function lerpVec(a: Vec, b: Vec, t: number): Vec {
   return { x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t) }
+}
+
+/**
+ * Where a curved move has reached at `t`.
+ *
+ * The quadratic whose control point `curveControlPoint` gives, so the path a
+ * player travels is the same curve the trail draws — one set of maths, and a
+ * bend that means the same thing on a run as it does on an arrow.
+ *
+ * A straight move takes the plain lerp rather than a Bezier with a control
+ * point on the chord: the same answer, without the floating-point noise that
+ * would make a straight run wander by a millionth of a unit.
+ */
+export function pointOnCurve(
+  from: Vec,
+  to: Vec,
+  bend: number,
+  bendAlong: number,
+  t: number,
+): Vec {
+  if (bend === 0) return lerpVec(from, to, t)
+  const control = curveControlPoint(from, to, bend, bendAlong)
+  const u = 1 - t
+  return {
+    x: u * u * from.x + 2 * u * t * control.x + t * t * to.x,
+    y: u * u * from.y + 2 * u * t * control.y + t * t * to.y,
+  }
 }
 
 /**
