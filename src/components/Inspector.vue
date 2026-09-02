@@ -132,9 +132,19 @@ const curveLabel = computed(() => {
   return `Bows ${side} ${Math.round(Math.abs(curve.bend))}m`
 })
 
+/*
+ * The commit sits here rather than in `setCounterBend`, which is called on
+ * every pointer-move of a handle drag and so deliberately does not commit —
+ * the grab does. A press of this button is the whole gesture, so it has to
+ * do for itself what the grab does on the pitch, or straightening a run
+ * would not be undoable and Ctrl+Z would silently take back whatever the
+ * coach did before it.
+ */
 function straightenRun(): void {
   const curve = runCurve.value
-  if (curve) board.setCounterBend(curve.id, 0)
+  if (!curve || board.isDerived.value) return
+  board.commit()
+  board.setCounterBend(curve.id, 0)
 }
 </script>
 

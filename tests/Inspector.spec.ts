@@ -262,6 +262,22 @@ describe('the curve of a held player', () => {
     expect('bend' in board.counterById(id)!).toBe(false)
     expect('bendAlong' in board.counterById(id)!).toBe(false)
   })
+
+  /**
+   * `setCounterBend` is called on every pointer-move of a handle drag and so
+   * never commits — the grab does. A button press is the whole gesture, so
+   * without a commit of its own, Ctrl+Z would take back whatever the coach
+   * did before straightening rather than the straightening itself.
+   */
+  it('makes the straightening undoable', async () => {
+    const id = playerWithARun()
+    board.setCounterBend(id, 4, 0.1)
+    const wrapper = mountInspector([{ kind: 'counter', id }])
+    await wrapper.find('[data-straighten-run]').trigger('click')
+    board.undo()
+    expect(board.counterById(id)!.bend).toBe(4)
+    expect(board.counterById(id)!.bendAlong).toBe(0.1)
+  })
 })
 
 /**
