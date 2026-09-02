@@ -82,7 +82,7 @@ function togglePlay(): void {
  */
 .bar {
   position: absolute;
-  bottom: 1rem;
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%);
   z-index: 30;
@@ -126,5 +126,11 @@ function togglePlay(): void {
 
 @media (pointer: coarse) {
   .button { width: 44px; height: 44px; }
+
+  /*
+   * A phone in fullscreen puts its own "swipe to exit" notice along the
+   * bottom edge, right where this bar wants to sit. Ride above it.
+   */
+  .bar { bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px)); }
 }
 </style>
