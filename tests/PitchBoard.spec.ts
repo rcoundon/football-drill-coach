@@ -2576,3 +2576,138 @@ describe('a ball in a gathered group', () => {
     expect(wrapper.findAll('[data-selected-token]')).toHaveLength(ringed - 1)
   })
 })
+
+describe('curving a run', () => {
+  async function dragBox(
+    wrapper: ReturnType<typeof mountBoard>,
+    from: Vec,
+    to: Vec,
+  ) {
+    const svg = wrapper.find('svg')
+    await firePointer(svg, 'pointerdown', clientFor(from.x, from.y))
+    await firePointer(svg, 'pointermove', clientFor(to.x, to.y))
+    await firePointer(svg, 'pointerup', clientFor(to.x, to.y))
+  }
+
+  /**
+   * A player who ran from (20, 30) to (60, 30) into the second phase — a
+   * flat chord, so its midpoint is (40, 30) and a handle dragged to (40, 38)
+   * asks for a bend of 8.
+   */
+  function playerWithARun() {
+    const board = useBoard()
+    const c = board.addCounter('red')
+    board.moveCounter(c.id, { x: 20, y: 30 })
+    board.addFrame()
+    board.moveCounter(c.id, { x: 60, y: 30 })
+    return { board, id: c.id }
+  }
+
+  it('shows no trail on the first phase', async () => {
+    const board = useBoard()
+    const c = board.addCounter('red')
+    board.moveCounter(c.id, { x: 20, y: 30 })
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+    await dragBox(wrapper, { x: 10, y: 20 }, { x: 30, y: 40 })
+    expect(wrapper.find('[data-movement-trail]').exists()).toBe(false)
+  })
+
+  it('shows the trail once the player has run into this phase', async () => {
+    playerWithARun()
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+    await dragBox(wrapper, { x: 50, y: 20 }, { x: 70, y: 40 })
+    expect(wrapper.find('[data-movement-trail]').exists()).toBe(true)
+  })
+
+  it('shows no trail for a player who stayed where they were', async () => {
+    const board = useBoard()
+    const c = board.addCounter('red')
+    board.moveCounter(c.id, { x: 20, y: 30 })
+    board.addFrame()
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+    await dragBox(wrapper, { x: 10, y: 20 }, { x: 30, y: 40 })
+    expect(wrapper.find('[data-movement-trail]').exists()).toBe(false)
+  })
+
+  it('shows no trail while several players are held', async () => {
+    const board = useBoard()
+    const one = board.addCounter('red')
+    const two = board.addCounter('blue')
+    board.moveCounter(one.id, { x: 20, y: 30 })
+    board.moveCounter(two.id, { x: 30, y: 30 })
+    board.addFrame()
+    board.moveCounter(one.id, { x: 60, y: 30 })
+    board.moveCounter(two.id, { x: 70, y: 30 })
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+    await dragBox(wrapper, { x: 50, y: 20 }, { x: 80, y: 40 })
+    expect(wrapper.findAll('[data-selected-token]')).toHaveLength(2)
+    expect(wrapper.find('[data-movement-trail]').exists()).toBe(false)
+  })
+
+  it('hides the trail under a drawing tool, so it cannot be drawn over', async () => {
+    playerWithARun()
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+    await dragBox(wrapper, { x: 50, y: 20 }, { x: 70, y: 40 })
+    await wrapper.setProps({ tool: 'arrow-run' })
+    expect(wrapper.find('[data-movement-trail]').exists()).toBe(false)
+  })
+
+  it('bows the run to wherever the handle is dragged', async () => {
+    const { board, id } = playerWithARun()
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+    await dragBox(wrapper, { x: 50, y: 20 }, { x: 70, y: 40 })
+
+    const handle = wrapper.find('[data-bend-handle]')
+    await firePointer(handle, 'pointerdown', clientFor(40, 30))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(40, 38))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(40, 38))
+
+    expect(board.counterById(id)!.bend).toBeCloseTo(8, 6)
+  })
+
+  it('straightens the run when the handle is dragged back onto the line', async () => {
+    const { board, id } = playerWithARun()
+    board.setCounterBend(id, 8)
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+    await dragBox(wrapper, { x: 50, y: 20 }, { x: 70, y: 40 })
+
+    const handle = wrapper.find('[data-bend-handle]')
+    await firePointer(handle, 'pointerdown', clientFor(40, 38))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(40, 30))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(40, 30))
+
+    expect(board.counterById(id)!.bend).toBeUndefined()
+  })
+
+  it('undoes a whole bend drag in one step', async () => {
+    const { board, id } = playerWithARun()
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+    await dragBox(wrapper, { x: 50, y: 20 }, { x: 70, y: 40 })
+
+    const handle = wrapper.find('[data-bend-handle]')
+    await firePointer(handle, 'pointerdown', clientFor(40, 30))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(40, 34))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(40, 38))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(40, 38))
+    board.undo()
+
+    expect(board.counterById(id)!.bend).toBeUndefined()
+  })
+
+  it('draws the trail the player will actually travel', async () => {
+    const { board, id } = playerWithARun()
+    board.setCounterBend(id, 8)
+    const wrapper = mountBoard('select')
+    await wrapper.vm.$nextTick()
+    await dragBox(wrapper, { x: 50, y: 20 }, { x: 70, y: 40 })
+    expect(wrapper.find('[data-movement-trail]').attributes('d')).toBe('M 20 30 Q 40 46 60 30')
+  })
+})

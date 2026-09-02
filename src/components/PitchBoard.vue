@@ -32,11 +32,14 @@ export const STALE_DRAG_MS = 10_000
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { ArrowDrawing, SegmentDrawing, SelectionRef, ToolMode, Vec } from '../types'
 import { bendFor, boundsOf, clampToPitch, clientToPitch, distance } from '../geometry'
+import { runInto } from '../animation'
 import { useBoard } from '../composables/useBoard'
 import { setPlacementDropTarget, type PlacementKind } from '../composables/usePlacement'
 import BoardView from './BoardView.vue'
 import BendHandle from './BendHandle.vue'
 import EndHandle from './EndHandle.vue'
+import MovementTrail from './MovementTrail.vue'
+import { SWATCHES } from './controls'
 
 const props = defineProps<{ tool: ToolMode; drawColor: string }>()
 const emit = defineEmits<{
@@ -118,6 +121,7 @@ type DragTarget =
   | { kind: 'pen'; id: string }
   | { kind: 'segment'; id: string }
   | { kind: 'bend'; id: string }
+  | { kind: 'counter-bend'; id: string }
   | { kind: 'end'; id: string; end: 'from' | 'to' }
   | { kind: 'body'; id: string }
   | { kind: 'group' }
@@ -760,6 +764,26 @@ const bendHandles = computed<ArrowDrawing[]>(() => {
 })
 
 /**
+ * The run into this phase, when there is one worth bending.
+ *
+ * Only ever the one player being held: an onion skin of the whole previous
+ * phase would fill the pitch with grey duplicates for the sake of one
+ * editable value, and a group has no single run to offer. `runInto` carries
+ * the actual "is there a run" question, so the Inspector can ask it the same
+ * way and never disagree with what the board is showing.
+ */
+const movementTrail = computed(() => {
+  if (props.tool !== 'select') return null
+  const [only] = selection.value
+  if (selection.value.length !== 1 || only.kind !== 'counter') return null
+
+  const run = runInto(board.state.frames, board.state.currentFrame, only.id)
+  if (!run) return null
+
+  return { id: only.id, ...run, color: SWATCHES[board.counterById(only.id)!.color] }
+})
+
+/**
  * The two end handles, when the drawing being worked on is a segment.
  *
  * Lines are in as well as arrows. A line cannot bend, but it is drawn to the
@@ -882,6 +906,40 @@ function bendTo(id: string, at: Vec): void {
   board.setArrowBend(id, bend, along)
 }
 
+function onCounterBendGrab(id: string, event: PointerEvent) {
+  if (board.isDerived.value) return
+  if (dragIsLive()) return
+  event.stopPropagation()
+  capture(event)
+  // The whole drag is one change, so the grab commits and the moves do not.
+  board.commit()
+  drag.value = {
+    kind: 'counter-bend',
+    id,
+    pointerId: event.pointerId,
+    origin: toPitch(event),
+    // The bend is read off the chord, not carried from the grab point, so an
+    // offset would only fight the projection.
+    grabOffset: { x: 0, y: 0 },
+    moved: false,
+    startedAt: Date.now(),
+  }
+}
+
+/**
+ * Bow the run this drag holds to wherever its handle now sits.
+ *
+ * Clamped to the pitch like the arrow's handle, and for the same reason: a
+ * drag off the edge would otherwise keep deepening the bow until the run
+ * curved out over the touchline.
+ */
+function bendRunTo(id: string, at: Vec): void {
+  const trail = movementTrail.value
+  if (!trail || trail.id !== id) return
+  const { bend, along } = bendFor(trail.from, trail.to, clampToPitch(at, board.state.pitch.type))
+  board.setCounterBend(id, bend, along)
+}
+
 function onPointerDown(event: PointerEvent) {
   if (board.isDerived.value) return
   if (dragIsLive()) return
@@ -947,6 +1005,7 @@ function onPointerMove(event: PointerEvent) {
     if (active.moved) board.moveBall(active.id, at)
   } else if (active.kind === 'pen') board.extendPen(active.id, at)
   else if (active.kind === 'bend') bendTo(active.id, at)
+  else if (active.kind === 'counter-bend') bendRunTo(active.id, at)
   else if (active.kind === 'end') board.moveSegmentEnd(active.id, active.end, carried)
   else if (active.kind === 'body') dragBody(active, at)
   else if (active.kind === 'group') dragGroup(active, at)
@@ -1021,6 +1080,8 @@ function onPointerUp(event: PointerEvent) {
     board.finishDrawing(active.id)
   } else if (active.kind === 'bend') {
     bendTo(active.id, at)
+  } else if (active.kind === 'counter-bend') {
+    bendRunTo(active.id, at)
   } else if (active.kind === 'end') {
     board.moveSegmentEnd(active.id, active.end, withGrabOffset(active, at))
   } else if (active.kind === 'body') {
@@ -1097,10 +1158,31 @@ function onPointerUp(event: PointerEvent) {
         picked up, so at that moment it is what they are reaching for — a
         press on bare grass still falls through to the player underneath.
       -->
+      <template v-if="movementTrail">
+        <MovementTrail
+          :from="movementTrail.from"
+          :to="movementTrail.to"
+          :bend="movementTrail.bend"
+          :bend-along="movementTrail.bendAlong"
+          :color="movementTrail.color"
+        />
+        <BendHandle
+          :from="movementTrail.from"
+          :to="movementTrail.to"
+          :bend="movementTrail.bend"
+          :bend-along="movementTrail.bendAlong"
+          :color="movementTrail.color"
+          @grab="onCounterBendGrab(movementTrail.id, $event)"
+        />
+      </template>
       <BendHandle
         v-for="arrow in bendHandles"
         :key="`bend-${arrow.id}`"
-        :arrow="arrow"
+        :from="arrow.from"
+        :to="arrow.to"
+        :bend="arrow.bend"
+        :bend-along="arrow.bendAlong"
+        :color="arrow.color"
         @grab="onBendGrab(arrow.id, $event)"
       />
       <template v-for="segment in endHandles" :key="`ends-${segment.id}`">

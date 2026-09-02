@@ -808,6 +808,28 @@ describe('duplicating a group', () => {
     expect(board.canUndo.value).toBe(false)
   })
 
+  /**
+   * A counter's bend describes the leg walked into whichever phase it sits
+   * on, so the copy must carry the same bend on every phase the original
+   * has one on — and stay straight on the phases the original is straight
+   * on — rather than the current phase's value bleeding into the rest.
+   */
+  it('gives the copy the same bend on every phase it appears on', () => {
+    const board = useBoard()
+    const counter = board.addCounter('red')
+    board.addFrame()
+    board.moveCounter(counter.id, { x: 30, y: 30 })
+    board.setCounterBend(counter.id, 7, 0.4)
+
+    const [copy] = board.duplicateGroup([{ kind: 'counter', id: counter.id }], { x: 4, y: 4 })
+
+    expect(board.counterById(copy.id)!.bend).toBe(7)
+    expect(board.counterById(copy.id)!.bendAlong).toBe(0.4)
+
+    board.goToFrame(0)
+    expect(board.counterById(copy.id)!.bend).toBeUndefined()
+  })
+
   it('skips members that have since gone', () => {
     const board = useBoard()
     const counter = board.addCounter('red')

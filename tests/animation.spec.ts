@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Ball, Counter, Frame, Marker, Vec } from '../src/types'
-import { BALL_OFFSET } from '../src/geometry'
+import { BALL_OFFSET, curveHandle } from '../src/geometry'
 import {
   DEFAULT_FRAME_MS,
   GIF_FPS,
@@ -11,6 +11,8 @@ import {
   gifSchedule,
   interpolateFrames,
   lerp,
+  pointOnCurve,
+  runInto,
   timelineOf,
 } from '../src/animation'
 
@@ -236,6 +238,36 @@ describe('gifSchedule', () => {
   })
 })
 
+describe('pointOnCurve', () => {
+  const from = { x: 10, y: 10 }
+  const to = { x: 30, y: 10 }
+
+  it('is the plain lerp when there is no bend', () => {
+    expect(pointOnCurve(from, to, 0, 0, 0.25)).toEqual({ x: 15, y: 10 })
+    expect(pointOnCurve(from, to, 0, 0.2, 0.5)).toEqual({ x: 20, y: 10 })
+  })
+
+  it('returns the endpoints exactly', () => {
+    expect(pointOnCurve(from, to, 6, 0.1, 0)).toEqual(from)
+    expect(pointOnCurve(from, to, 6, 0.1, 1)).toEqual(to)
+  })
+
+  it('passes through the handle at the halfway point', () => {
+    const handle = curveHandle(from, to, 6, 0.1)
+    const mid = pointOnCurve(from, to, 6, 0.1, 0.5)
+    expect(mid.x).toBeCloseTo(handle.x, 10)
+    expect(mid.y).toBeCloseTo(handle.y, 10)
+  })
+
+  it('leaves the straight line when bent', () => {
+    expect(pointOnCurve(from, to, 6, 0, 0.5).y).not.toBe(10)
+  })
+
+  it('holds still when the ends coincide', () => {
+    expect(pointOnCurve(from, from, 6, 0.1, 0.5)).toEqual(from)
+  })
+})
+
 /**
  * A struck ball travels at a constant speed and a running player does not, so
  * the two are deliberately given different curves. That is right while the
@@ -320,5 +352,99 @@ describe('balls are matched by id, not by where they sit in the list', () => {
     const held = Object.fromEntries(view.balls.map((x) => [x.id, x.attachedTo]))
     expect(held.b1).toBe('c1')
     expect(held.b2).toBe('c2')
+  })
+})
+
+describe('a curved run in playback', () => {
+  it('leaves the straight line between the two phases', () => {
+    const a = frame({ counters: [counter('c1', 10, 10)], balls: [] })
+    const b = frame({ counters: [{ ...counter('c1', 30, 10), bend: 6 }], balls: [] })
+    const view = interpolateFrames(a, b, 0.5)
+    expect(view.counters[0].pos.y).not.toBeCloseTo(10, 6)
+  })
+
+  it('reads the bend off the phase being moved into, not the one being left', () => {
+    const a = frame({ counters: [{ ...counter('c1', 10, 10), bend: 6 }], balls: [] })
+    const b = frame({ counters: [counter('c1', 30, 10)], balls: [] })
+    const view = interpolateFrames(a, b, 0.5)
+    expect(view.counters[0].pos.y).toBeCloseTo(10, 10)
+  })
+
+  it('still arrives exactly where the phase says', () => {
+    const a = frame({ counters: [counter('c1', 10, 10)], balls: [] })
+    const b = frame({ counters: [{ ...counter('c1', 30, 10), bend: 6 }], balls: [] })
+    expect(interpolateFrames(a, b, 1).counters[0].pos).toEqual({ x: 30, y: 10 })
+  })
+
+  it('does not bend a cone', () => {
+    const a = frame({ counters: [], markers: [marker('m1', 10, 10)], balls: [] })
+    const b = frame({
+      counters: [],
+      markers: [{ ...marker('m1', 30, 10), bend: 6 } as unknown as Marker],
+      balls: [],
+    })
+    expect(interpolateFrames(a, b, 0.5).markers[0].pos.y).toBeCloseTo(10, 10)
+  })
+
+  it('carries a held ball around the curve with its carrier', () => {
+    const a = frame({ counters: [counter('c1', 10, 10)], balls: [ball(10, 10, 'c1')] })
+    const b = frame({
+      counters: [{ ...counter('c1', 30, 10), bend: 6 }],
+      balls: [ball(30, 10, 'c1')],
+    })
+    const view = interpolateFrames(a, b, 0.5)
+    expect(view.balls[0].pos.x).toBeCloseTo(view.counters[0].pos.x + BALL_OFFSET.x, 10)
+    expect(view.balls[0].pos.y).toBeCloseTo(view.counters[0].pos.y + BALL_OFFSET.y, 10)
+  })
+
+  it('does not bend a ball in flight', () => {
+    const a = frame({ counters: [counter('c1', 10, 10)], balls: [ball(10, 10, null)] })
+    const b = frame({
+      counters: [{ ...counter('c1', 30, 10), bend: 6 }],
+      balls: [ball(30, 10, null)],
+    })
+    expect(interpolateFrames(a, b, 0.5).balls[0].pos.y).toBeCloseTo(10, 10)
+  })
+
+  it('holds a player with no counterpart in the next phase', () => {
+    const a = frame({ counters: [counter('c1', 10, 10)], balls: [] })
+    const b = frame({ counters: [], balls: [] })
+    expect(interpolateFrames(a, b, 0.5).counters[0].pos).toEqual({ x: 10, y: 10 })
+  })
+})
+
+describe('runInto', () => {
+  it('is null before the first phase', () => {
+    const frames = [frame({ counters: [counter('c1', 10, 10)] })]
+    expect(runInto(frames, 0, 'c1')).toBeNull()
+  })
+
+  it('is null for a player absent from either phase', () => {
+    const frames = [
+      frame({ counters: [counter('c1', 10, 10)] }),
+      frame({ counters: [counter('c1', 30, 10)] }),
+    ]
+    expect(runInto(frames, 1, 'ghost')).toBeNull()
+  })
+
+  it('is null for a player who did not move', () => {
+    const frames = [
+      frame({ counters: [counter('c1', 10, 10)] }),
+      frame({ counters: [counter('c1', 10, 10)] }),
+    ]
+    expect(runInto(frames, 1, 'c1')).toBeNull()
+  })
+
+  it('returns the run into the phase, with the bend read off the arriving frame', () => {
+    const frames = [
+      frame({ counters: [counter('c1', 10, 10)] }),
+      frame({ counters: [{ ...counter('c1', 30, 10), bend: 6, bendAlong: 0.25 }] }),
+    ]
+    expect(runInto(frames, 1, 'c1')).toEqual({
+      from: { x: 10, y: 10 },
+      to: { x: 30, y: 10 },
+      bend: 6,
+      bendAlong: 0.25,
+    })
   })
 })

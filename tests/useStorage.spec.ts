@@ -1379,3 +1379,51 @@ describe('the player-label setting', () => {
     expect(store.patternToSnapshot(stored).counterLabelsVisible).toBe(true)
   })
 })
+
+/**
+ * A version-3 pattern object with one frame and the given counter.
+ */
+function patternWithCounter(counter: unknown) {
+  return {
+    id: 'p1',
+    name: 'Test drill',
+    version: 3,
+    pitch: { type: 'full' as const, rotated: false },
+    frames: [
+      {
+        counters: [counter],
+        markers: [],
+        labels: [],
+        balls: [],
+        drawings: [],
+      },
+    ],
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  }
+}
+
+describe('a curved run', () => {
+  it('reads a counter carrying a bend', () => {
+    const raw = patternWithCounter({ id: 'c1', color: 'red', label: '9', pos: { x: 10, y: 10 }, bend: 4, bendAlong: 0.1 })
+    const parsed = parsePattern(raw)
+    expect(parsed.frames[0].counters[0].bend).toBe(4)
+    expect(parsed.frames[0].counters[0].bendAlong).toBe(0.1)
+  })
+
+  it('reads a counter saved before curves existed', () => {
+    const raw = patternWithCounter({ id: 'c1', color: 'red', label: '9', pos: { x: 10, y: 10 } })
+    const parsed = parsePattern(raw)
+    expect(parsed.frames[0].counters[0].bend).toBeUndefined()
+  })
+
+  it('rejects a bend that is not a number', () => {
+    const raw = patternWithCounter({ id: 'c1', color: 'red', label: '9', pos: { x: 10, y: 10 }, bend: 'lots' })
+    expect(() => parsePattern(raw)).toThrow()
+  })
+
+  it('rejects a bend that is not finite', () => {
+    const raw = patternWithCounter({ id: 'c1', color: 'red', label: '9', pos: { x: 10, y: 10 }, bend: Number.POSITIVE_INFINITY })
+    expect(() => parsePattern(raw)).toThrow()
+  })
+})

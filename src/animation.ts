@@ -6,7 +6,7 @@
  * exercise it.
  */
 import type { Ball, Counter, Drawing, Frame, Label, Marker, Vec } from './types'
-import { BALL_OFFSET } from './geometry'
+import { BALL_OFFSET, curveControlPoint } from './geometry'
 
 /** How long the move into a frame takes when the frame does not say. */
 export const DEFAULT_FRAME_MS = 1000
@@ -46,6 +46,33 @@ export function easeInOut(t: number): number {
 
 function lerpVec(a: Vec, b: Vec, t: number): Vec {
   return { x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t) }
+}
+
+/**
+ * Where a curved move has reached at `t`.
+ *
+ * The quadratic whose control point `curveControlPoint` gives, so the path a
+ * player travels is the same curve the trail draws — one set of maths, and a
+ * bend that means the same thing on a run as it does on an arrow.
+ *
+ * A straight move takes the plain lerp rather than a Bezier with a control
+ * point on the chord: the same answer, without the floating-point noise that
+ * would make a straight run wander by a millionth of a unit.
+ */
+export function pointOnCurve(
+  from: Vec,
+  to: Vec,
+  bend: number,
+  bendAlong: number,
+  t: number,
+): Vec {
+  if (bend === 0) return lerpVec(from, to, t)
+  const control = curveControlPoint(from, to, bend, bendAlong)
+  const u = 1 - t
+  return {
+    x: u * u * from.x + 2 * u * t * control.x + t * t * to.x,
+    y: u * u * from.y + 2 * u * t * control.y + t * t * to.y,
+  }
 }
 
 /**
@@ -89,6 +116,27 @@ export function timelineOf(frames: Frame[]): Timeline {
   }
 }
 
+/**
+ * The run a held player made to reach this phase: where they were, where
+ * they ended up, and the bend that phase already carries.
+ *
+ * Pure and shared rather than folded into the board, because the Inspector
+ * needs to answer the same question — is there a run here, and what does it
+ * look like — and the two must never disagree about it.
+ */
+export function runInto(
+  frames: Frame[],
+  index: number,
+  counterId: string,
+): { from: Vec; to: Vec; bend: number; bendAlong: number } | null {
+  if (index < 1) return null
+  const was = frames[index - 1]?.counters.find((c) => c.id === counterId)
+  const now = frames[index]?.counters.find((c) => c.id === counterId)
+  if (!was || !now) return null
+  if (was.pos.x === now.pos.x && was.pos.y === now.pos.y) return null
+  return { from: was.pos, to: now.pos, bend: now.bend ?? 0, bendAlong: now.bendAlong ?? 0 }
+}
+
 /** Where the ball is actually drawn in a frame, carried or not. */
 export function ballPositionIn(frame: FrameView, ball: Ball): Vec {
   if (ball.attachedTo) {
@@ -108,6 +156,28 @@ function tweenAll<T extends { id: string; pos: Vec }>(from: T[], to: T[], e: num
   return from.map((item) => {
     const target = to.find((other) => other.id === item.id)?.pos ?? item.pos
     return { ...item, pos: lerpVec(item.pos, target, e) }
+  })
+}
+
+/**
+ * Move each player towards where the next phase puts them, along the curve
+ * that phase asks for.
+ *
+ * The bend is read off the TARGET, because it describes the move into that
+ * frame — the same leg its `duration` times. A player with no counterpart in
+ * the target holds position, the insurance `tweenAll` gives everything else.
+ *
+ * Separate from `tweenAll` rather than a widening of it: cones and labels
+ * share that function and do not run, so there is no curve for them to take.
+ */
+function tweenCounters(from: Counter[], to: Counter[], e: number): Counter[] {
+  return from.map((item) => {
+    const target = to.find((other) => other.id === item.id)
+    if (!target) return { ...item }
+    return {
+      ...item,
+      pos: pointOnCurve(item.pos, target.pos, target.bend ?? 0, target.bendAlong ?? 0, e),
+    }
   })
 }
 
@@ -163,7 +233,7 @@ export function gifSchedule(frames: Frame[], fps = GIF_FPS): GifSample[] {
  */
 export function interpolateFrames(a: Frame, b: Frame, t: number): FrameView {
   const e = easeInOut(t)
-  const counters = tweenAll(a.counters, b.counters, e)
+  const counters = tweenCounters(a.counters, b.counters, e)
 
   /*
    * Per ball, matched by id, exactly as the players are.

@@ -201,6 +201,85 @@ describe('the room the notes take', () => {
   })
 })
 
+describe('the curve of a held player', () => {
+  /** A player who ran left to right into the second phase. */
+  function playerWithARun() {
+    const c = board.addCounter('red')
+    board.moveCounter(c.id, { x: 20, y: 30 })
+    board.addFrame()
+    board.moveCounter(c.id, { x: 60, y: 30 })
+    return c.id
+  }
+
+  it('says nothing about a run on the first phase', () => {
+    const c = board.addCounter('red')
+    const wrapper = mountInspector([{ kind: 'counter', id: c.id }])
+    expect(wrapper.find('[data-run-curve]').exists()).toBe(false)
+  })
+
+  it('says nothing about a player who stayed where they were', () => {
+    const c = board.addCounter('red')
+    board.addFrame()
+    const wrapper = mountInspector([{ kind: 'counter', id: c.id }])
+    expect(wrapper.find('[data-run-curve]').exists()).toBe(false)
+  })
+
+  it('reads Straight for a run that was never bent', () => {
+    const id = playerWithARun()
+    const wrapper = mountInspector([{ kind: 'counter', id }])
+    expect(wrapper.find('[data-run-curve]').text()).toContain('Straight')
+  })
+
+  /**
+   * Right of the direction of travel, not right of the screen: the bend is
+   * held against the chord, so the words have to be too.
+   */
+  it('names the side the run bows towards, and how deep', () => {
+    const id = playerWithARun()
+    board.setCounterBend(id, 4)
+    const wrapper = mountInspector([{ kind: 'counter', id }])
+    expect(wrapper.find('[data-run-curve]').text()).toContain('Bows right 4m')
+  })
+
+  it('names the other side when the bow goes the other way', () => {
+    const id = playerWithARun()
+    board.setCounterBend(id, -4)
+    const wrapper = mountInspector([{ kind: 'counter', id }])
+    expect(wrapper.find('[data-run-curve]').text()).toContain('Bows left 4m')
+  })
+
+  it('offers no straighten button on a run that is already straight', () => {
+    const id = playerWithARun()
+    const wrapper = mountInspector([{ kind: 'counter', id }])
+    expect(wrapper.find('[data-straighten-run]').exists()).toBe(false)
+  })
+
+  it('straightens the run', async () => {
+    const id = playerWithARun()
+    board.setCounterBend(id, 4, 0.1)
+    const wrapper = mountInspector([{ kind: 'counter', id }])
+    await wrapper.find('[data-straighten-run]').trigger('click')
+    expect('bend' in board.counterById(id)!).toBe(false)
+    expect('bendAlong' in board.counterById(id)!).toBe(false)
+  })
+
+  /**
+   * `setCounterBend` is called on every pointer-move of a handle drag and so
+   * never commits — the grab does. A button press is the whole gesture, so
+   * without a commit of its own, Ctrl+Z would take back whatever the coach
+   * did before straightening rather than the straightening itself.
+   */
+  it('makes the straightening undoable', async () => {
+    const id = playerWithARun()
+    board.setCounterBend(id, 4, 0.1)
+    const wrapper = mountInspector([{ kind: 'counter', id }])
+    await wrapper.find('[data-straighten-run]').trigger('click')
+    board.undo()
+    expect(board.counterById(id)!.bend).toBe(4)
+    expect(board.counterById(id)!.bendAlong).toBe(0.1)
+  })
+})
+
 /**
  * Which way the chevrons point.
  *

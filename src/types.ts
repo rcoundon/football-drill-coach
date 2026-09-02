@@ -15,6 +15,28 @@ export type Counter = {
   color: CounterColor
   label: string
   pos: Vec
+  /**
+   * How far this player's run bows off the straight line into this frame, in
+   * pitch units, signed by which side it bows towards. Absent or zero is a
+   * straight run.
+   *
+   * The chord is where this player stood on the PREVIOUS frame to `pos` on
+   * this one, so the value describes the move into the frame it sits on. The
+   * first frame's is ignored: nothing moves into the start of a drill, the
+   * same rule `Frame.duration` follows.
+   *
+   * Held as a chord-relative offset rather than a control point, exactly as
+   * `ArrowDrawing.bend` is, so a curve keeps its shape through a board
+   * rotation, a group move and a duplicate — and so a pattern saved before
+   * curves existed loads as the straight one it was.
+   */
+  bend?: number
+  /**
+   * Where along the run the bow peaks, as a signed fraction of the chord
+   * either side of its midpoint. Absent or zero is an even arc; positive
+   * leans towards the arrival.
+   */
+  bendAlong?: number
 }
 
 /**

@@ -199,3 +199,85 @@ describe('recolouring a player', () => {
     expect(board.state.counters).toHaveLength(0)
   })
 })
+
+describe('bending a run', () => {
+  /** A player on a second phase, which is the only place a run exists. */
+  function playerWithARun() {
+    const board = useBoard()
+    const c = board.addCounter('red')
+    board.addFrame()
+    board.moveCounter(c.id, { x: 30, y: 10 })
+    return { board, id: c.id }
+  }
+
+  it('stores the bend on the phase it is set on', () => {
+    const { board, id } = playerWithARun()
+    board.setCounterBend(id, 4, 0.1)
+    expect(board.counterById(id)!.bend).toBe(4)
+    expect(board.counterById(id)!.bendAlong).toBe(0.1)
+  })
+
+  it('leaves the other phases straight', () => {
+    const { board, id } = playerWithARun()
+    board.setCounterBend(id, 4, 0.1)
+    board.goToFrame(0)
+    expect(board.counterById(id)!.bend).toBeUndefined()
+  })
+
+  it('stores a straightened run as no fields at all', () => {
+    const { board, id } = playerWithARun()
+    board.setCounterBend(id, 4, 0.1)
+    board.setCounterBend(id, 0, 0)
+    expect('bend' in board.counterById(id)!).toBe(false)
+    expect('bendAlong' in board.counterById(id)!).toBe(false)
+  })
+
+  it('drops the skew when the bow goes', () => {
+    const { board, id } = playerWithARun()
+    board.setCounterBend(id, 4, 0.1)
+    board.setCounterBend(id, 0)
+    expect('bendAlong' in board.counterById(id)!).toBe(false)
+  })
+
+  it('stores an even arc as no skew field', () => {
+    const { board, id } = playerWithARun()
+    board.setCounterBend(id, 4, 0)
+    expect(board.counterById(id)!.bend).toBe(4)
+    expect('bendAlong' in board.counterById(id)!).toBe(false)
+  })
+
+  it('does nothing while the drill is playing', () => {
+    const { board, id } = playerWithARun()
+    board.play()
+    board.setCounterBend(id, 4, 0.1)
+    board.pause()
+    expect(board.counterById(id)!.bend).toBeUndefined()
+  })
+
+  /**
+   * A duplicated phase starts with nobody having moved into it — its cast
+   * stands exactly where the original's does, so there is no run yet to
+   * describe a curve for. A bend copied along with the rest of the counter
+   * would sit there unseen until the coach drags the player, at which point
+   * it would bow the new run into a shape nobody drew.
+   */
+  describe('duplicating a phase that has a bent run', () => {
+    it('addFrame gives the copy a straight run once the player moves', () => {
+      const { board, id } = playerWithARun()
+      board.setCounterBend(id, 8, 0.3)
+      board.addFrame()
+      board.moveCounter(id, { x: 60, y: 40 })
+      expect(board.counterById(id)!.bend).toBeUndefined()
+      expect(board.counterById(id)!.bendAlong).toBeUndefined()
+    })
+
+    it('duplicateFrame does the same, being the same operation', () => {
+      const { board, id } = playerWithARun()
+      board.setCounterBend(id, 8, 0.3)
+      board.duplicateFrame(board.state.currentFrame)
+      board.moveCounter(id, { x: 60, y: 40 })
+      expect(board.counterById(id)!.bend).toBeUndefined()
+      expect(board.counterById(id)!.bendAlong).toBeUndefined()
+    })
+  })
+})
