@@ -64,6 +64,31 @@ describe('sessions storage', () => {
     expect(sessions.lastError.value).toContain('could not be read')
   })
 
+  /**
+   * `Session` declares both timestamps as required strings, and the PDF
+   * cover reads one straight into a date. A record missing either used to
+   * be cast through unvalidated and render as an invalid date on the cover
+   * rather than being dropped — the same damaged-row discipline every other
+   * malformed field already gets.
+   */
+  it('drops a session missing createdAt as damaged, rather than returning an invalid date', () => {
+    sessions.createSession('Tuesday')
+    const raw = JSON.parse(localStorage.getItem(SESSIONS_KEY)!)
+    delete raw[0].createdAt
+    localStorage.setItem(SESSIONS_KEY, JSON.stringify(raw))
+
+    expect(sessions.listSessions()).toEqual([])
+  })
+
+  it('drops a session missing updatedAt as damaged, rather than returning an invalid date', () => {
+    sessions.createSession('Tuesday')
+    const raw = JSON.parse(localStorage.getItem(SESSIONS_KEY)!)
+    delete raw[0].updatedAt
+    localStorage.setItem(SESSIONS_KEY, JSON.stringify(raw))
+
+    expect(sessions.listSessions()).toEqual([])
+  })
+
   it('rejects an entry whose minutes are not a positive number', () => {
     sessions.createSession('Tuesday')
     const raw = JSON.parse(localStorage.getItem(SESSIONS_KEY)!)
@@ -89,9 +114,27 @@ describe('sessionsUsing', () => {
 
     // p1 is in both sessions — twice in Tuesday's, once in Thursday's — and
     // comes back once per session, not once per appearance.
-    expect(sessions.sessionsUsing('p1').map((s) => s.name).sort()).toEqual(['Thursday', 'Tuesday'])
-    expect(sessions.sessionsUsing('p2').map((s) => s.name)).toEqual(['Thursday'])
-    expect(sessions.sessionsUsing('p3')).toEqual([])
+    expect(sessions.sessionsUsing('p1').sessions.map((s) => s.name).sort()).toEqual([
+      'Thursday',
+      'Tuesday',
+    ])
+    expect(sessions.sessionsUsing('p2').sessions.map((s) => s.name)).toEqual(['Thursday'])
+    expect(sessions.sessionsUsing('p3').sessions).toEqual([])
+    expect(sessions.sessionsUsing('p1').unreadable).toBe(false)
+  })
+
+  /**
+   * Regression: an unreadable store used to come back from `sessionsUsing`
+   * as an empty array, indistinguishable from "no session uses this drill" —
+   * exactly the moment the caller cannot know that. `unreadable` says so.
+   */
+  it('reports unreadable rather than claiming zero sessions when the store cannot be read', () => {
+    localStorage.setItem(SESSIONS_KEY, '{not json')
+
+    const result = sessions.sessionsUsing('p1')
+
+    expect(result.unreadable).toBe(true)
+    expect(result.sessions).toEqual([])
   })
 })
 

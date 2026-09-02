@@ -87,16 +87,22 @@ function askDelete(id: string) {
 }
 
 /**
- * How many sessions hold the drill awaiting confirmation.
+ * Which sessions hold the drill awaiting confirmation, or whether that could
+ * not even be checked.
  *
  * Computed at the moment of asking rather than kept alongside the list: a
  * session can be edited in another panel between the library opening and the
  * coach reaching for Delete. Deletion is not blocked or cascaded on this —
  * the coach may well mean it — but they should not find out a session was
- * left pointing at nothing after the fact.
+ * left pointing at nothing after the fact. An unreadable sessions store used
+ * to read back as zero sessions, which is exactly the moment it cannot be
+ * said that none use this drill — `unreadable` carries that distinction
+ * through instead of erasing it into a false "used by nothing".
  */
-const usageCount = computed(() =>
-  confirmingId.value === null ? 0 : sessions.sessionsUsing(confirmingId.value).length,
+const usage = computed(() =>
+  confirmingId.value === null
+    ? { sessions: [], unreadable: false }
+    : sessions.sessionsUsing(confirmingId.value),
 )
 
 function confirmDelete(id: string) {
@@ -174,8 +180,11 @@ function saveTags(id: string) {
 
           <template v-else-if="confirmingId === pattern.id">
             <span class="name">Delete “{{ pattern.name }}”?</span>
-            <span v-if="usageCount > 0" data-usage-warning class="warning">
-              Used in {{ usageCount }} session{{ usageCount === 1 ? '' : 's' }}.
+            <span v-if="usage.unreadable" data-usage-unknown class="warning">
+              Unable to check whether any session uses this drill.
+            </span>
+            <span v-else-if="usage.sessions.length > 0" data-usage-warning class="warning">
+              Used in {{ usage.sessions.length }} session{{ usage.sessions.length === 1 ? '' : 's' }}.
             </span>
             <button data-confirm-delete class="chip chip--danger" @click="confirmDelete(pattern.id)">Delete</button>
             <button class="chip" @click="confirmingId = null">Cancel</button>

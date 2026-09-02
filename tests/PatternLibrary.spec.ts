@@ -3,7 +3,7 @@ import { mount } from '@vue/test-utils'
 import PatternLibrary from '../src/components/PatternLibrary.vue'
 import { useStorage } from '../src/composables/useStorage'
 import { useBoard, __resetBoardForTests } from '../src/composables/useBoard'
-import { useSessions } from '../src/composables/useSessions'
+import { useSessions, SESSIONS_KEY } from '../src/composables/useSessions'
 
 beforeEach(() => {
   localStorage.clear()
@@ -161,6 +161,22 @@ describe('deleting', () => {
     const wrapper = mount(PatternLibrary, { props: { open: true } })
     await wrapper.find('[data-delete]').trigger('click')
 
+    expect(wrapper.find('[data-usage-warning]').exists()).toBe(false)
+  })
+
+  /**
+   * Regression: an unreadable sessions store used to make `sessionsUsing`
+   * come back as an empty array, so this confirmation silently claimed the
+   * drill was used by no session — exactly the moment it cannot know that.
+   */
+  it('warns that usage could not be checked when the sessions store is unreadable', async () => {
+    seed('Rondo')
+    localStorage.setItem(SESSIONS_KEY, '{not json')
+
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    await wrapper.find('[data-delete]').trigger('click')
+
+    expect(wrapper.find('[data-usage-unknown]').text()).toMatch(/unable to check/i)
     expect(wrapper.find('[data-usage-warning]').exists()).toBe(false)
   })
 })

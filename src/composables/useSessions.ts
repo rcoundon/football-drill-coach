@@ -51,6 +51,12 @@ export function parseSession(value: unknown): Session {
   if (typeof value.id !== 'string' || typeof value.name !== 'string') {
     throw new Error('That session is missing its name or id.')
   }
+  // `Session` declares both as required strings, and the PDF cover reads
+  // one straight into a date — a record missing either was being cast
+  // through unchecked and printed as an invalid date rather than dropped.
+  if (typeof value.createdAt !== 'string' || typeof value.updatedAt !== 'string') {
+    throw new Error('That session is missing when it was created or last saved.')
+  }
   if (!Array.isArray(value.entries) || !value.entries.every(isValidEntry)) {
     throw new Error('That session has a damaged drill.')
   }
@@ -170,16 +176,24 @@ function renameSession(id: string, name: string): void {
 }
 
 /**
- * Every session holding this drill, once each however many times it appears.
+ * Every session holding this drill, once each however many times it appears,
+ * alongside whether the sessions store could be read at all.
  *
  * Backs the warning shown before a drill is deleted. It reads one key at a
  * moment the coach has already paused over a confirmation, so its cost does
- * not matter.
+ * not matter. `unreadable` matters just as much as the matches: an unreadable
+ * store used to come back as an empty array indistinguishable from "no
+ * session uses this drill", which is exactly the moment the caller cannot
+ * know that.
  */
-function sessionsUsing(patternId: string): Session[] {
-  return read().items.filter((session) =>
-    session.entries.some((entry) => entry.patternId === patternId),
-  )
+function sessionsUsing(patternId: string): { sessions: Session[]; unreadable: boolean } {
+  const { items, unreadable } = read()
+  return {
+    sessions: items.filter((session) =>
+      session.entries.some((entry) => entry.patternId === patternId),
+    ),
+    unreadable,
+  }
 }
 
 /**
