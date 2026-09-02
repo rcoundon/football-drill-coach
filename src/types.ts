@@ -186,3 +186,38 @@ export type Pattern = {
   createdAt: string
   updatedAt: string
 }
+
+/**
+ * One drill in a session, and how long it runs.
+ *
+ * The id is the entry's own, not the drill's: a drill can appear twice in a
+ * session — the warm-up rondo run again at the end is an ordinary session —
+ * and keying a list render or a reorder on `patternId` breaks the moment it
+ * does.
+ */
+export type SessionEntry = {
+  id: string
+  patternId: string
+  /** Minutes. Validated like a frame's duration: finite and above zero. */
+  minutes: number
+}
+
+/**
+ * A training session: several drills, in order, with minutes against each.
+ *
+ * It references drills rather than containing them, so a drill fixed after
+ * the session was built is fixed in the session too. The cost is an entry
+ * that can point at a drill that is gone, which the interface renders as a
+ * missing row rather than hiding.
+ *
+ * Its version is a separate line from `Pattern.version`. Sessions do not
+ * contain patterns, so a change to the pattern format never changes this one.
+ */
+export type Session = {
+  id: string
+  name: string
+  version: 1
+  entries: SessionEntry[]
+  createdAt: string
+  updatedAt: string
+}

@@ -429,9 +429,9 @@ describe('import and export', () => {
   it('imports patterns from exported JSON', () => {
     const store = useStorage()
     const saved = store.savePattern('Drill', snap())
-    const json = store.exportPatternsJson([saved])
+    const json = store.exportBundleJson([saved], [])
     localStorage.clear()
-    const imported = store.importPatterns(json)
+    const { patterns: imported } = store.importBundle(json)
     expect(imported).toHaveLength(1)
     expect(store.listPatterns()).toHaveLength(1)
   })
@@ -439,8 +439,8 @@ describe('import and export', () => {
   it('never overwrites an existing pattern on an id collision', () => {
     const store = useStorage()
     const saved = store.savePattern('Drill', snap())
-    const json = store.exportPatternsJson([saved])
-    const imported = store.importPatterns(json)
+    const json = store.exportBundleJson([saved], [])
+    const { patterns: imported } = store.importBundle(json)
     expect(store.listPatterns()).toHaveLength(2)
     expect(imported[0].id).not.toBe(saved.id)
     expect(imported[0].name).toBe('Drill (imported)')
@@ -449,25 +449,25 @@ describe('import and export', () => {
   it('rejects a malformed file whole, importing nothing', () => {
     const store = useStorage()
     store.savePattern('Existing', snap())
-    expect(() => store.importPatterns('[[[')).toThrow()
+    expect(() => store.importBundle('[[[')).toThrow()
     expect(store.listPatterns()).toHaveLength(1)
   })
 
   it('rejects the file if ANY pattern in it is invalid', () => {
     const store = useStorage()
     const saved = store.savePattern('Drill', snap())
-    const bad = JSON.stringify([saved, { id: 'x', name: 'broken' }])
-    expect(() => store.importPatterns(bad)).toThrow()
+    const bad = JSON.stringify({ patterns: [saved, { id: 'x', name: 'broken' }], sessions: [] })
+    expect(() => store.importBundle(bad)).toThrow()
     expect(store.listPatterns()).toHaveLength(1)
   })
 
   it('re-issues ids for duplicate ids within the same imported file', () => {
     const store = useStorage()
     const saved = store.savePattern('Drill', snap())
-    const json = JSON.stringify([saved, { ...saved }])
+    const json = JSON.stringify({ patterns: [saved, { ...saved }], sessions: [] })
     localStorage.clear()
 
-    const imported = store.importPatterns(json)
+    const { patterns: imported } = store.importBundle(json)
 
     expect(imported).toHaveLength(2)
     expect(imported[0].id).toBe(saved.id)
@@ -483,23 +483,37 @@ describe('import and export', () => {
     const store = useStorage()
     const saved = store.savePattern('Drill', snap())
     const messy = { ...saved, tags: [' Rondo ', 'rondo', 'WARM UP'] }
-    const json = JSON.stringify([messy])
+    const json = JSON.stringify({ patterns: [messy], sessions: [] })
     localStorage.clear()
 
-    const imported = store.importPatterns(json)
+    const { patterns: imported } = store.importBundle(json)
 
     expect(imported[0].tags).toEqual(['rondo', 'warm up'])
     expect(store.listPatterns()[0].tags).toEqual(['rondo', 'warm up'])
   })
 
+  it('keeps tags absent, rather than an empty array, for an incoming pattern that had none', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Drill', snap())
+    const { tags: _tags, ...withoutTags } = saved
+    const json = JSON.stringify({ patterns: [withoutTags], sessions: [] })
+    localStorage.clear()
+
+    const { patterns: imported } = store.importBundle(json)
+
+    expect(imported[0].tags).toBeUndefined()
+    expect(store.listPatterns()[0].tags).toBeUndefined()
+    expect(JSON.parse(localStorage.getItem(PATTERNS_KEY)!)[0]).not.toHaveProperty('tags')
+  })
+
   it('refuses to import over an unreadable library, leaving the bad bytes intact', () => {
     const store = useStorage()
     const saved = store.savePattern('Drill', snap())
-    const json = store.exportPatternsJson([saved])
+    const json = store.exportBundleJson([saved], [])
 
     localStorage.setItem(PATTERNS_KEY, '{not json at all')
 
-    expect(() => store.importPatterns(json)).toThrow(/could not be read/i)
+    expect(() => store.importBundle(json)).toThrow(/could not be read/i)
     expect(localStorage.getItem(PATTERNS_KEY)).toBe('{not json at all')
   })
 
@@ -511,9 +525,9 @@ describe('import and export', () => {
     localStorage.setItem(PATTERNS_KEY, JSON.stringify(raw))
 
     const toImport = { ...existing, id: 'incoming-id', name: 'Incoming' }
-    const json = JSON.stringify([toImport])
+    const json = JSON.stringify({ patterns: [toImport], sessions: [] })
 
-    const imported = store.importPatterns(json)
+    const { patterns: imported } = store.importBundle(json)
 
     expect(imported).toHaveLength(1)
     const listed = store.listPatterns()

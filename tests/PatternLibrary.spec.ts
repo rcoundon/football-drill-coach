@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import PatternLibrary from '../src/components/PatternLibrary.vue'
 import { useStorage } from '../src/composables/useStorage'
 import { useBoard, __resetBoardForTests } from '../src/composables/useBoard'
+import { useSessions, SESSIONS_KEY } from '../src/composables/useSessions'
 
 beforeEach(() => {
   localStorage.clear()
@@ -135,6 +136,48 @@ describe('deleting', () => {
     expect(wrapper.emitted('delete')).toBeUndefined()
     const listed = useStorage().listPatterns()
     expect(listed.map((p) => p.id)).toContain(saved.id)
+  })
+
+  /**
+   * Deleting a drill a session still points at is allowed, not blocked — the
+   * coach may well mean it — but the confirmation should say so, since the
+   * session would otherwise be left pointing at nothing without warning.
+   */
+  it('says how many sessions use a drill before deleting it', async () => {
+    const saved = seed('Rondo')
+    const sessions = useSessions()
+    const session = sessions.createSession('Tuesday')
+    sessions.saveSession({ ...session, entries: [sessions.newEntry(saved.id, 12)] })
+
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    await wrapper.find('[data-delete]').trigger('click')
+
+    expect(wrapper.find('[data-usage-warning]').text()).toContain('1 session')
+  })
+
+  it('says nothing when no session uses it', async () => {
+    seed('Rondo')
+
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    await wrapper.find('[data-delete]').trigger('click')
+
+    expect(wrapper.find('[data-usage-warning]').exists()).toBe(false)
+  })
+
+  /**
+   * Regression: an unreadable sessions store used to make `sessionsUsing`
+   * come back as an empty array, so this confirmation silently claimed the
+   * drill was used by no session — exactly the moment it cannot know that.
+   */
+  it('warns that usage could not be checked when the sessions store is unreadable', async () => {
+    seed('Rondo')
+    localStorage.setItem(SESSIONS_KEY, '{not json')
+
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    await wrapper.find('[data-delete]').trigger('click')
+
+    expect(wrapper.find('[data-usage-unknown]').text()).toMatch(/unable to check/i)
+    expect(wrapper.find('[data-usage-warning]').exists()).toBe(false)
   })
 })
 

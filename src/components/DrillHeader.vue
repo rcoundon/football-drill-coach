@@ -30,6 +30,7 @@ const emit = defineEmits<{
   clearDrawings: []
   resetBoard: []
   open: []
+  openSessions: []
   exportPng: []
   exportGif: []
   exportJson: []
@@ -193,6 +194,17 @@ function commitName(): void {
 
       <div v-show="openMenu === 'drill'" class="menu" role="menu">
         <button data-open class="menu-item" role="menuitem" @click="choose(() => emit('open'))">Open…</button>
+        <!--
+          Beside Open… rather than behind a control of its own: both are
+          ways into a library this menu already owns, so a session plan is
+          one more row here rather than a second menu to go looking for.
+        -->
+        <button
+          data-open-sessions
+          class="menu-item"
+          role="menuitem"
+          @click="choose(() => emit('openSessions'))"
+        >Sessions…</button>
         <button data-save class="menu-item" role="menuitem" @click="choose(() => emit('save'))">Save now</button>
         <button data-save-as class="menu-item" role="menuitem" @click="choose(() => emit('saveAs'))">Save as…</button>
         <button

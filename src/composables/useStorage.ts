@@ -1,7 +1,27 @@
-import { ref } from 'vue'
-import type { Ball, Counter, Drawing, Frame, Label, Marker, Pattern } from '../types'
+import type { Ball, Counter, Drawing, Frame, Label, Marker, Pattern, Session } from '../types'
 import type { BoardSnapshot } from './useBoard'
 import type { Vec } from '../types'
+import {
+  createCollectionErrors,
+  damagedMessage,
+  readCollection,
+  recordWrite,
+  writeCollection,
+  writeRaw,
+} from './collection'
+import { parseSession, SESSIONS_KEY, useSessions } from './useSessions'
+
+const sessions = useSessions()
+
+/**
+ * This store's own error pair — not shared with the sessions store. See the
+ * comment on `CollectionErrors` in collection.ts for why that matters: it
+ * used to be one module-level ref pair, and a healthy `listPatterns()` read
+ * was silently erasing a damaged-session warning the sessions store had just
+ * set, every time the Sessions panel opened.
+ */
+const errors = createCollectionErrors()
+const { lastError, lastWriteSucceeded } = errors
 
 export const PATTERNS_KEY = 'fct.patterns.v1'
 export const DRAFT_KEY = 'fct.draft.v1'
@@ -10,20 +30,6 @@ const SCHEMA_VERSION = 3
 
 /** Versions this build can open. Only SCHEMA_VERSION is ever written. */
 const READABLE_VERSIONS = new Set([1, 2, 3])
-
-const lastError = ref<string | null>(null)
-
-/**
- * Whether the most recent LIBRARY write actually reached localStorage.
- *
- * `savePattern` deliberately writes nothing when the library is unreadable,
- * and a write can also fail on quota, yet it still returns the pattern it
- * built in memory. Callers that want to tell the coach "saved" — or to treat
- * the pattern as the one now open — have to know which happened.
- *
- * Draft autosaves do not touch this: it answers for the library only.
- */
-const lastWriteSucceeded = ref(true)
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -304,79 +310,26 @@ export function parsePattern(value: unknown): Pattern {
   return value as unknown as Pattern
 }
 
-function readRaw(key: string): unknown {
-  const text = localStorage.getItem(key)
-  if (text === null) return null
-  return JSON.parse(text)
-}
-
-function writeRaw(key: string, value: unknown): boolean {
-  try {
-    localStorage.setItem(key, JSON.stringify(value))
-    return true
-  } catch (error) {
-    const name = error instanceof Error ? error.name : ''
-    lastError.value =
-      name === 'QuotaExceededError'
-        ? 'The browser is out of space. Export some patterns to a file and delete them to free room.'
-        : 'That could not be saved to this browser.'
-    return false
-  }
-}
-
 const UNREADABLE_LIBRARY_MESSAGE =
   'Your saved patterns could not be read, so saving now would overwrite them. Export or clear your saved patterns first, then try again.'
 
-type LibraryRead = {
-  patterns: Pattern[]
-  /** True when the top-level stored value itself could not be trusted (bad JSON, or not an array). */
-  unreadable: boolean
-  /**
-   * The individual entries that failed to parse even though the top-level
-   * value was fine, exactly as they were stored. Carried, not counted, so
-   * every write can put them back untouched.
-   */
-  damaged: unknown[]
+/**
+ * Read the library through the shared collection helper. A thin wrapper
+ * rather than a call site rename, so `patterns`/`unreadable`/`damaged` stay
+ * the names every function below already reads.
+ */
+function readLibrary() {
+  const { items, unreadable, damaged } = readCollection(PATTERNS_KEY, parsePattern)
+  return { patterns: items, unreadable, damaged }
 }
 
 /**
- * Read the library and say what kind of problem, if any, was found.
- *
- * `unreadable` is the disaster case: the stored bytes could not be trusted
- * at all, and a caller that goes on to write would permanently destroy them.
- *
- * A `damaged` entry is the partial case: the rest of the library is good and
- * the coach must still be able to save, delete and rename. But the damaged
- * rows are the coach's work too, and the spec promises corrupt data is "left
- * untouched so it can be recovered" — so they ride along with every write
- * rather than being dropped on the first one. `writeLibrary` is the only
- * supported way to write, and it takes them as an argument for that reason.
+ * Write the library back, damaged rows included, through the shared
+ * collection helper. Every write goes through here so no code path can drop
+ * a row it merely failed to understand.
  */
-function readLibrary(): LibraryRead {
-  let raw: unknown
-  try {
-    raw = readRaw(PATTERNS_KEY)
-  } catch {
-    return { patterns: [], unreadable: true, damaged: [] }
-  }
-
-  if (raw === null) return { patterns: [], unreadable: false, damaged: [] }
-  if (!Array.isArray(raw)) return { patterns: [], unreadable: true, damaged: [] }
-
-  const patterns: Pattern[] = []
-  const damaged: unknown[] = []
-  for (const entry of raw) {
-    try {
-      patterns.push(parsePattern(entry))
-    } catch {
-      damaged.push(entry)
-    }
-  }
-  return { patterns, unreadable: false, damaged }
-}
-
-function damagedMessage(count: number): string {
-  return `${count} saved pattern(s) could not be read. They have been left untouched so they can be recovered.`
+function writeLibrary(patterns: Pattern[], damaged: unknown[]): boolean {
+  return writeCollection(errors, PATTERNS_KEY, patterns, damaged)
 }
 
 function listPatterns(): Pattern[] {
@@ -389,27 +342,8 @@ function listPatterns(): Pattern[] {
     return []
   }
 
-  if (damaged.length > 0) lastError.value = damagedMessage(damaged.length)
+  if (damaged.length > 0) lastError.value = damagedMessage(damaged.length, 'pattern')
   return patterns
-}
-
-/**
- * Write the library back, damaged rows included.
- *
- * Every write goes through here so that no code path can drop a row it
- * merely failed to understand.
- */
-function writeLibrary(patterns: Pattern[], damaged: unknown[]): boolean {
-  return writeRaw(PATTERNS_KEY, [...patterns, ...damaged])
-}
-
-/**
- * Record whether a write landed, and say whether the coach should also be
- * told that damaged rows were carried through it.
- */
-function recordWrite(ok: boolean, damaged: unknown[]): boolean {
-  lastWriteSucceeded.value = ok
-  return ok && damaged.length > 0
 }
 
 function nowIso(): string {
@@ -517,8 +451,8 @@ function savePattern(name: string, snap: BoardSnapshot, id?: string, forkFromId?
   if (index === -1) patterns.push(pattern)
   else patterns[index] = pattern
 
-  if (recordWrite(writeLibrary(patterns, damaged), damaged)) {
-    lastError.value = damagedMessage(damaged.length)
+  if (recordWrite(errors, writeLibrary(patterns, damaged), damaged)) {
+    lastError.value = damagedMessage(damaged.length, 'pattern')
   }
   return pattern
 }
@@ -531,8 +465,8 @@ function deletePattern(id: string): void {
     lastWriteSucceeded.value = false
     return
   }
-  if (recordWrite(writeLibrary(patterns.filter((p) => p.id !== id), damaged), damaged)) {
-    lastError.value = damagedMessage(damaged.length)
+  if (recordWrite(errors, writeLibrary(patterns.filter((p) => p.id !== id), damaged), damaged)) {
+    lastError.value = damagedMessage(damaged.length, 'pattern')
   }
 }
 
@@ -548,8 +482,8 @@ function renamePattern(id: string, name: string): void {
   if (!pattern) return
   pattern.name = name
   pattern.updatedAt = nowIso()
-  if (recordWrite(writeLibrary(patterns, damaged), damaged)) {
-    lastError.value = damagedMessage(damaged.length)
+  if (recordWrite(errors, writeLibrary(patterns, damaged), damaged)) {
+    lastError.value = damagedMessage(damaged.length, 'pattern')
   }
 }
 
@@ -565,8 +499,8 @@ function setTags(id: string, tags: string[]): void {
   if (!pattern) return
   pattern.tags = normaliseTags(tags)
   pattern.updatedAt = nowIso()
-  if (recordWrite(writeLibrary(patterns, damaged), damaged)) {
-    lastError.value = damagedMessage(damaged.length)
+  if (recordWrite(errors, writeLibrary(patterns, damaged), damaged)) {
+    lastError.value = damagedMessage(damaged.length, 'pattern')
   }
 }
 
@@ -613,9 +547,20 @@ function patternToSnapshot(pattern: Pattern): BoardSnapshot {
   }
 }
 
+/**
+ * The draft is a single value, not an array of entities, so it does not fit
+ * `readCollection`'s per-row parsing — this stays local rather than moving
+ * into `collection.ts`, which knows nothing but collections.
+ */
+function readRaw(key: string): unknown {
+  const text = localStorage.getItem(key)
+  if (text === null) return null
+  return JSON.parse(text)
+}
+
 function saveDraft(snap: BoardSnapshot): void {
   lastError.value = null
-  writeRaw(DRAFT_KEY, snap)
+  writeRaw(errors, DRAFT_KEY, snap)
 }
 
 function isValidPitch(value: unknown): boolean {
@@ -724,16 +669,21 @@ function loadDraft(): BoardSnapshot | null {
   }
 }
 
-function exportPatternsJson(patterns: Pattern[]): string {
-  return JSON.stringify(patterns, null, 2)
+function exportBundleJson(patterns: Pattern[], sessionList: Session[]): string {
+  return JSON.stringify({ patterns, sessions: sessionList }, null, 2)
 }
 
 /**
- * Validate an exported file whole, then merge. A pattern whose id already
- * exists is added under a NEW id with a suffixed name, so importing can
- * never silently overwrite the coach's existing work.
+ * Validate an exported file whole, then merge both collections.
+ *
+ * A pattern whose id already exists is added under a NEW id with a suffixed
+ * name, so importing can never silently overwrite the coach's work. That
+ * re-idding is why sessions cannot simply be written as they arrive: every
+ * `patternId` in the file would point at an id that had just changed, and
+ * the coach would open a session of entirely missing drills. The remap
+ * threads the new ids through the incoming entries before they land.
  */
-function importPatterns(json: string): Pattern[] {
+function importBundle(json: string): { patterns: Pattern[]; sessions: Session[] } {
   let raw: unknown
   try {
     raw = JSON.parse(json)
@@ -741,7 +691,9 @@ function importPatterns(json: string): Pattern[] {
     throw new Error('That file is not valid JSON.')
   }
 
-  if (!Array.isArray(raw)) throw new Error('That file does not contain a list of patterns.')
+  if (!isObject(raw) || !Array.isArray(raw.patterns) || !Array.isArray(raw.sessions)) {
+    throw new Error('That file is not a saved bundle of drills and sessions.')
+  }
 
   const { patterns, unreadable, damaged } = readLibrary()
   if (unreadable) {
@@ -755,29 +707,95 @@ function importPatterns(json: string): Pattern[] {
   // land as two chips in the filter row for what the coach meant as one tag.
   // Import is where untrusted data enters the library, so it is normalised
   // here, the same way `setTags` normalises a tag typed by hand.
-  const incoming = raw.map((entry) => parsePattern(entry)).map((pattern) =>
-    pattern.tags === undefined ? pattern : { ...pattern, tags: normaliseTags(pattern.tags) },
-  )
+  const incoming = raw.patterns.map((entry) => {
+    const pattern = parsePattern(entry)
+    // `tags?` is absent-means-empty (see the field's own comment), so a
+    // pattern that arrived with none keeps it `undefined` rather than
+    // gaining a `tags: []` the source never had.
+    if (pattern.tags === undefined) return pattern
+    const tags = normaliseTags(pattern.tags)
+    return tags.length > 0 ? { ...pattern, tags } : { ...pattern, tags: undefined }
+  })
+  const incomingSessions = raw.sessions.map((entry) => parseSession(entry))
 
   // Tracked incrementally: a collision can be with the existing library OR
   // with an earlier entry in this same file. Either way the id must be
-  // unique before it lands in localStorage.
+  // unique before it lands in localStorage. `remap` carries the old id
+  // forward so the sessions below can follow a re-idded pattern to its new one.
   const seenIds = new Set(patterns.map((p) => p.id))
-
+  const remap = new Map<string, string>()
   const added: Pattern[] = []
+
   for (const pattern of incoming) {
     if (!seenIds.has(pattern.id)) {
       seenIds.add(pattern.id)
       added.push(pattern)
       continue
     }
-    const renamed = { ...pattern, id: makeId(), name: `${pattern.name} (imported)` }
-    seenIds.add(renamed.id)
-    added.push(renamed)
+    const fresh = makeId()
+    remap.set(pattern.id, fresh)
+    seenIds.add(fresh)
+    added.push({ ...pattern, id: fresh, name: `${pattern.name} (imported)` })
   }
 
-  recordWrite(writeLibrary([...patterns, ...added], damaged), damaged)
-  return added
+  // The sessions store is read BEFORE either write, so an unreadable one
+  // aborts the whole import rather than leaving patterns written and sessions
+  // destroyed. Nothing has been written at this point, so throwing is clean.
+  const sessionRead = readCollection(SESSIONS_KEY, parseSession)
+  if (sessionRead.unreadable) {
+    throw new Error(
+      'Your saved sessions could not be read, so importing now would overwrite them. Export or clear your saved sessions first, then try again.',
+    )
+  }
+
+  // Patterns first, deliberately. localStorage has no transaction, so if the
+  // second write fails the import is partial either way — and patterns without
+  // their sessions is the additive half. Sessions landing first would leave
+  // entries pointing at drills that were never written: rows the coach has to
+  // clear by hand.
+  //
+  // `recordWrite`'s return says whether damaged rows rode along, not whether
+  // the write landed — that check is `patternsWritten` itself, same as every
+  // other mutator in this file.
+  const patternsWritten = writeLibrary([...patterns, ...added], damaged)
+  if (recordWrite(errors, patternsWritten, damaged)) {
+    lastError.value = damagedMessage(damaged.length, 'pattern')
+  }
+  if (!patternsWritten) {
+    throw new Error('The imported drills could not be saved to this browser.')
+  }
+
+  const sessionIds = new Set(sessionRead.items.map((s) => s.id))
+  const addedSessions = incomingSessions.map((session) => {
+    // Tracked incrementally, exactly as the pattern loop above tracks
+    // `seenIds`: a collision can be with the stored sessions OR with an
+    // earlier session in this same file, and two sessions sharing an id
+    // would render under duplicate keys and have rename and delete hit
+    // whichever one `find` returned first.
+    const id = sessionIds.has(session.id) ? makeId() : session.id
+    sessionIds.add(id)
+    return {
+      ...session,
+      id,
+      entries: session.entries.map((entry) => ({
+        ...entry,
+        patternId: remap.get(entry.patternId) ?? entry.patternId,
+      })),
+    }
+  })
+
+  // Goes through the sessions module's own bulk write rather than poking
+  // `writeCollection` directly here — that keeps the upsert-by-id and
+  // damaged-row handling in the one place that already owns it.
+  sessions.saveSessions(addedSessions)
+  // The sessions store's own write flag, not this store's: they no longer
+  // share one ref, and this write went through `sessions.saveSessions`, not
+  // `writeLibrary`.
+  if (!sessions.lastWriteSucceeded.value) {
+    throw new Error('The imported sessions could not be saved to this browser.')
+  }
+
+  return { patterns: added, sessions: addedSessions }
 }
 
 const storage = {
@@ -790,8 +808,8 @@ const storage = {
   patternToSnapshot,
   saveDraft,
   loadDraft,
-  importPatterns,
-  exportPatternsJson,
+  importBundle,
+  exportBundleJson,
   lastError,
   lastWriteSucceeded,
 }

@@ -259,6 +259,17 @@ const emit = defineEmits<{ close: [] }>()
           both. The Tags button on a row changes them later. Save a copy as… starts the copy
           with the original's tags already chosen, since a copy of a rondo is still a rondo.
         </p>
+        <p>
+          <strong>Sessions</strong>, beside Open in the same <kbd>▾</kbd> menu, plan a whole
+          training session rather than one drill. Name a session, add saved drills to it —
+          filtered by tag, the same way the library is — set minutes against each and reorder
+          them, and it keeps its own running total. Export PDF builds one document: a cover
+          with the running order and total time, then a page per drill with up to four
+          captioned boards and its notes, where those are showing on the drill itself, ready to
+          print or hand to an assistant coach. A drill
+          deleted out from under a session leaves a removable row saying so rather than
+          vanishing quietly, and the PDF skips it the same way.
+        </p>
       </section>
 
       <section data-help-section="shortcuts" class="section">

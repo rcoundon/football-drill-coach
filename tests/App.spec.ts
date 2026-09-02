@@ -6,7 +6,18 @@ import { useBoard, __resetBoardForTests, type BoardSnapshot } from '../src/compo
 import { useStorage, PATTERNS_KEY } from '../src/composables/useStorage'
 import { __resetViewportForTests } from '../src/composables/useViewport'
 import { useExport } from '../src/composables/useExport'
+import { useSessions } from '../src/composables/useSessions'
 import { PITCH_H, PITCH_W } from '../src/geometry'
+
+// jsdom has no canvas package installed, so decoding a rasterised board never
+// settles at all rather than rejecting (see the comment on this same point
+// in useExport's GIF encoder) — real rendering would hang the one test below
+// that exercises a rasterise failure. Mocked here rather than left real, the
+// same way sessionPdf.spec.ts mocks it for the same reason.
+vi.mock('../src/composables/renderFrame', () => ({
+  renderFrameToDataUrl: vi.fn(async () => 'data:image/png;base64,AAAA'),
+  SESSION_BOARD_WIDTH: 800,
+}))
 
 let wrapper: VueWrapper | undefined
 
@@ -59,6 +70,9 @@ beforeEach(() => {
   localStorage.clear()
   __resetBoardForTests()
   useStorage().lastError.value = null
+  // No longer the same ref as the line above — each store owns its own pair
+  // now, so both need resetting between tests.
+  useSessions().lastError.value = null
 })
 
 afterEach(() => {
@@ -745,6 +759,325 @@ describe('escape closes what is open', () => {
     expect(wrapper.find('[data-help-section="board"]').exists()).toBe(false)
   })
 
+  it('closes the session editor before the sessions library beneath it', async () => {
+    useSessions().createSession('Tuesday U12')
+    wrapper = mountApp()
+
+    await openSessions(wrapper)
+    await wrapper.find('[data-session] [data-open]').trigger('click')
+    await nextTick()
+
+    // Reopened behind the editor that is already up, the way Save as… can
+    // sit over an already-open library.
+    await openSessions(wrapper)
+
+    await pressEscape()
+    expect(wrapper.find('[role="dialog"][aria-label="Tuesday U12"]').exists()).toBe(false)
+    expect(wrapper.find('[role="dialog"][aria-label="Sessions"]').exists()).toBe(true)
+
+    await pressEscape()
+    expect(wrapper.find('[role="dialog"][aria-label="Sessions"]').exists()).toBe(false)
+  })
+
+})
+
+/**
+ * Task 12's way into the sessions feature: the brief named a `Toolbar.vue`
+ * that does not exist. The drill menu is where `@open` already leads to the
+ * pattern library, so Sessions sits beside it in that same menu.
+ */
+async function openSessions(app: VueWrapper) {
+  await app.find('[data-drill-menu]').trigger('click')
+  await app.find('[data-open-sessions]').trigger('click')
+}
+
+describe('the Sessions control', () => {
+  it('opens the sessions panel from the drill menu', async () => {
+    wrapper = mountApp()
+    await openSessions(wrapper)
+    expect(wrapper.find('[role="dialog"][aria-label="Sessions"]').exists()).toBe(true)
+  })
+
+  it('ignores tool shortcuts while the sessions panel is open', async () => {
+    wrapper = mountApp()
+    await openSessions(wrapper)
+
+    fire({ key: 'd' })
+    await nextTick()
+
+    expect(wrapper.find('[data-tool="pen"]').classes()).not.toContain('is-active')
+  })
+
+  it('opens a session for editing and closes the library behind it', async () => {
+    useSessions().createSession('Tuesday U12')
+    wrapper = mountApp()
+
+    await openSessions(wrapper)
+    await wrapper.find('[data-session] [data-open]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.find('[role="dialog"][aria-label="Sessions"]').exists()).toBe(false)
+    expect(wrapper.find('[role="dialog"][aria-label="Tuesday U12"]').exists()).toBe(true)
+  })
+})
+
+/**
+ * SessionLibrary's `renamed` and `deleted` emits exist so App's held-open
+ * session cannot drift from what the library just did to the same row:
+ * `saveSession` upserts by id, so a stale rename or a deleted-but-still-open
+ * session would otherwise be resurrected by the editor's next write.
+ */
+describe('the library changing the open session', () => {
+  it('keeps the open session in step when the library renames it', async () => {
+    useSessions().createSession('Tuesday U12')
+    wrapper = mountApp()
+
+    await openSessions(wrapper)
+    await wrapper.find('[data-session] [data-open]').trigger('click')
+    await nextTick()
+
+    // Reopen the library behind the editor and rename the session there.
+    await openSessions(wrapper)
+    await wrapper.find('[data-session] [data-rename]').trigger('click')
+    await wrapper.find('[data-rename-input]').setValue('Wednesday U12')
+    await wrapper.find('[data-rename-save]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.find('[role="dialog"][aria-label="Wednesday U12"]').exists()).toBe(true)
+  })
+
+  it('closes the open session when the library deletes it', async () => {
+    useSessions().createSession('Tuesday U12')
+    wrapper = mountApp()
+
+    await openSessions(wrapper)
+    await wrapper.find('[data-session] [data-open]').trigger('click')
+    await nextTick()
+
+    await openSessions(wrapper)
+    await wrapper.find('[data-session] [data-delete]').trigger('click')
+    await wrapper.find('[data-confirm-delete]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.find('[role="dialog"][aria-label="Tuesday U12"]').exists()).toBe(false)
+  })
+})
+
+/**
+ * `useStorage` and `useSessions` used to import one shared `lastError` ref
+ * from `collection.ts`, so a healthy read of one store silently erased the
+ * other's unresolved warning — SessionLibrary's own `refresh()` triggered
+ * this on every open, by reading sessions then patterns. Each store now owns
+ * its own pair (`createCollectionErrors()`), and this banner reads both
+ * explicitly rather than leaning on them happening to be the same ref.
+ */
+describe('the session store error', () => {
+  it('is surfaced the same way as a pattern store error', async () => {
+    wrapper = mountApp()
+
+    useSessions().lastError.value = 'Your saved sessions could not be read.'
+    await nextTick()
+
+    expect(wrapper.find('.error').exists()).toBe(true)
+    expect(wrapper.find('.error').text()).toMatch(/saved sessions/i)
+
+    await wrapper.find('.error').trigger('click')
+    expect(wrapper.find('.error').exists()).toBe(false)
+    expect(useSessions().lastError.value).toBeNull()
+  })
+
+  it('does not clobber the pattern store error, and dismissing shows what is left', async () => {
+    const storage = useStorage()
+    wrapper = mountApp()
+
+    storage.lastError.value = 'Your saved patterns could not be read.'
+    useSessions().lastError.value = 'Your saved sessions could not be read.'
+    await nextTick()
+
+    // The patterns message shows first; the session one is still there
+    // underneath, not lost the way a shared ref would have lost it.
+    expect(wrapper.find('.error').text()).toMatch(/saved patterns/i)
+
+    await wrapper.find('.error').trigger('click')
+    expect(storage.lastError.value).toBeNull()
+    expect(useSessions().lastError.value).toBe('Your saved sessions could not be read.')
+    await nextTick()
+
+    expect(wrapper.find('.error').text()).toMatch(/saved sessions/i)
+
+    await wrapper.find('.error').trigger('click')
+    expect(useSessions().lastError.value).toBeNull()
+    expect(wrapper.find('.error').exists()).toBe(false)
+  })
+
+  it('is not erased by a healthy patterns read the way it was when the two stores shared one ref', async () => {
+    const storage = useStorage()
+    wrapper = mountApp()
+
+    useSessions().lastError.value = 'Your saved sessions could not be read.'
+    storage.listPatterns()
+    await nextTick()
+
+    expect(useSessions().lastError.value).toBe('Your saved sessions could not be read.')
+    expect(wrapper.find('.error').exists()).toBe(true)
+  })
+})
+
+/**
+ * Unlike the GIF, exporting a session never touches the live board: the
+ * boards it prints are rasterised off-screen by `renderFrameToDataUrl`, so a
+ * coach can keep working, and a failure halfway through cannot strand them
+ * mid-move. `exporting` is still the same guard the GIF export uses, so the
+ * two cannot run on top of each other.
+ */
+describe('exporting a session as a PDF', () => {
+  it('builds and downloads the PDF, reporting progress, without locking the board', async () => {
+    const board = useBoard()
+    const exporter = useExport()
+    const downloads: string[] = []
+    vi.spyOn(exporter, 'downloadBlob').mockImplementation((_blob, name) => { downloads.push(name) })
+
+    // No drills in the session: the cover alone is enough to prove the
+    // wiring without needing a working canvas, which jsdom does not have.
+    useSessions().createSession('Tuesday U12')
+    wrapper = mountApp()
+
+    await openSessions(wrapper)
+    await wrapper.find('[data-session] [data-open]').trigger('click')
+    await nextTick()
+
+    await wrapper.find('[data-export-pdf]').trigger('click')
+    await nextTick()
+    await nextTick()
+
+    expect(downloads).toEqual(['tuesday-u12.pdf'])
+    expect(wrapper.find('.notice').text()).toBe('Session saved.')
+    expect(board.isDerived.value).toBe(false)
+  })
+
+  it('reports the reason a drill could not be rasterised, leaving the board untouched', async () => {
+    const { renderFrameToDataUrl } = await import('../src/composables/renderFrame')
+    vi.mocked(renderFrameToDataUrl).mockRejectedValueOnce(
+      new Error('This browser could not create the image.'),
+    )
+
+    const store = useStorage()
+    const board = useBoard()
+    const pattern = store.savePattern('Rondo', sampleSnapshot())
+    const created = useSessions().createSession('Tuesday U12')
+    useSessions().saveSession({
+      ...created,
+      entries: [useSessions().newEntry(pattern.id, 10)],
+    })
+
+    wrapper = mountApp()
+    await openSessions(wrapper)
+    await wrapper.find('[data-session] [data-open]').trigger('click')
+    await nextTick()
+
+    await wrapper.find('[data-export-pdf]').trigger('click')
+
+    await vi.waitFor(() => {
+      expect(wrapper!.find('.notice').text()).toMatch(/could not render/i)
+    })
+
+    // Never locked: the export rasterises off-screen, so the live board was
+    // never put into the export-derived state the GIF export uses.
+    expect(board.isDerived.value).toBe(false)
+  })
+
+  it('disables the Export PDF button for as long as the export is running', async () => {
+    // No drills in the session, exactly as the first test in this block: the
+    // cover alone proves the wiring without needing jsdom to rasterise a
+    // real image through jsPDF's addImage.
+    useSessions().createSession('Tuesday U12')
+    wrapper = mountApp()
+    await openSessions(wrapper)
+    await wrapper.find('[data-session] [data-open]').trigger('click')
+    await nextTick()
+
+    const click = wrapper.find('[data-export-pdf]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-export-pdf]').attributes('disabled')).toBeDefined()
+
+    await click
+    await vi.waitFor(() => {
+      expect(wrapper!.find('.notice').text()).toBe('Session saved.')
+    })
+
+    expect(wrapper.find('[data-export-pdf]').attributes('disabled')).toBeUndefined()
+  })
+})
+
+describe('exporting the JSON bundle', () => {
+  it('refuses only when there are neither patterns nor sessions', async () => {
+    wrapper = mountApp()
+
+    await wrapper.find('[data-export-json]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.find('.notice').text()).toContain('There are no saved patterns or sessions to export.')
+  })
+
+  it('exports a coach’s sessions even when they have no saved drills', async () => {
+    useSessions().createSession('Tuesday U12')
+    const exporter = useExport()
+    const downloads: string[] = []
+    vi.spyOn(exporter, 'downloadText').mockImplementation((text) => { downloads.push(text) })
+    wrapper = mountApp()
+
+    await wrapper.find('[data-export-json]').trigger('click')
+    await nextTick()
+
+    expect(downloads).toHaveLength(1)
+    expect(JSON.parse(downloads[0]).sessions).toHaveLength(1)
+    expect(wrapper.find('.notice').exists()).toBe(false)
+  })
+})
+
+describe('importing the JSON bundle', () => {
+  /**
+   * Regression: the notice used to read `Imported ${patterns.length}
+   * pattern(s).` — built from only half of what `importBundle` returns, so
+   * a file carrying sessions said nothing about them.
+   */
+  it('reports both patterns and sessions imported', async () => {
+    const storage = useStorage()
+    const pattern = storage.savePattern('Rondo', sampleSnapshot())
+    const session = useSessions().createSession('Tuesday U12')
+    useSessions().saveSession({ ...session, entries: [useSessions().newEntry(pattern.id, 12)] })
+    const json = storage.exportBundleJson(storage.listPatterns(), useSessions().listSessions())
+    localStorage.clear()
+    vi.spyOn(useExport(), 'pickJsonFile').mockResolvedValue(json)
+    wrapper = mountApp()
+
+    await wrapper.find('[data-import-json]').trigger('click')
+    await vi.waitFor(() => {
+      expect(wrapper!.find('.notice').exists()).toBe(true)
+    })
+
+    expect(wrapper.find('.notice').text()).toBe('Imported 1 pattern(s) and 1 session(s).')
+  })
+
+  /**
+   * The other half of the same bug: a file of sessions with no new patterns
+   * used to read "Imported 0 pattern(s)." and say nothing about the
+   * sessions it had just added.
+   */
+  it('reports the session count for a file with no new patterns', async () => {
+    const storage = useStorage()
+    const session = useSessions().createSession('Tuesday U12')
+    const json = storage.exportBundleJson([], [session])
+    vi.spyOn(useExport(), 'pickJsonFile').mockResolvedValue(json)
+    wrapper = mountApp()
+
+    await wrapper.find('[data-import-json]').trigger('click')
+    await vi.waitFor(() => {
+      expect(wrapper!.find('.notice').exists()).toBe(true)
+    })
+
+    expect(wrapper.find('.notice').text()).toBe('Imported 0 pattern(s) and 1 session(s).')
+  })
 })
 
 describe('tagging while forking a drill', () => {
@@ -1002,6 +1335,125 @@ describe('autosaving the open drill', () => {
       expect(listed).toHaveLength(1)
       expect(listed[0].id).toBe(saved.id)
       expect(listed[0].name).toBe('Counter press')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  /**
+   * Naming a board that has never been saved is the coach deciding what it
+   * is called — the one thing autosave could not do on its own — so that
+   * decision is what starts filing it, on the same debounce as every other
+   * autosave.
+   */
+  it('files a brand-new board once the coach names it in the header', async () => {
+    vi.useFakeTimers()
+    try {
+      const store = useStorage()
+      wrapper = mountApp()
+
+      const field = wrapper.find('[data-current-pattern]')
+      await field.setValue('Rondo 4v2')
+      await field.trigger('change')
+      expect(wrapper.find('[data-save-status]').text()).toMatch(/unsaved changes/i)
+
+      vi.advanceTimersByTime(1000)
+      await nextTick()
+
+      const listed = store.listPatterns()
+      expect(listed).toHaveLength(1)
+      expect(listed[0].name).toBe('Rondo 4v2')
+      expect(wrapper.find('[data-save-status]').text()).toMatch(/saved (just now|\d+m ago)/i)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  /**
+   * The first write mints an id and hands it back; every autosave after
+   * that — including the one still pending from the keystrokes that named
+   * it — must use that id rather than minting another, or a coach typing a
+   * name out one character at a time would file a drill per letter.
+   */
+  it('keeps updating the same drill as the name keeps changing, not one per edit', async () => {
+    vi.useFakeTimers()
+    try {
+      const store = useStorage()
+      wrapper = mountApp()
+
+      const field = wrapper.find('[data-current-pattern]')
+      await field.setValue('R')
+      await field.trigger('change')
+      vi.advanceTimersByTime(1000)
+      await nextTick()
+
+      const first = store.listPatterns()
+      expect(first).toHaveLength(1)
+      const id = first[0].id
+
+      await field.setValue('Rondo 4v2')
+      await field.trigger('change')
+      vi.advanceTimersByTime(1000)
+      await nextTick()
+
+      const second = store.listPatterns()
+      expect(second).toHaveLength(1)
+      expect(second[0].id).toBe(id)
+      expect(second[0].name).toBe('Rondo 4v2')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  /**
+   * DrillHeader already refuses to emit a rename for a blank field, but that
+   * is its guard, not this one's — clearing the name must not be mistaken
+   * here for a coach deciding to save.
+   */
+  it('creates nothing when the header name is emptied', async () => {
+    vi.useFakeTimers()
+    try {
+      const store = useStorage()
+      wrapper = mountApp()
+
+      const field = wrapper.find('[data-current-pattern]')
+      await field.setValue('   ')
+      await field.trigger('change')
+      vi.advanceTimersByTime(2000)
+      await nextTick()
+
+      expect(store.listPatterns()).toHaveLength(0)
+      expect(wrapper.find('[data-save-status]').text()).toMatch(/not saved/i)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  /**
+   * savePattern writes nothing when the library is unreadable, so a failed
+   * first write must not claim "Saved" — and must not leave the board
+   * holding an id for a drill that was never actually written, or the next
+   * autosave would try to update something that does not exist.
+   */
+  it('does not claim a new drill was saved when the write fails', async () => {
+    vi.useFakeTimers()
+    try {
+      const store = useStorage()
+      wrapper = mountApp()
+      localStorage.setItem(PATTERNS_KEY, '{not json at all')
+
+      const field = wrapper.find('[data-current-pattern]')
+      await field.setValue('Rondo 4v2')
+      await field.trigger('change')
+      vi.advanceTimersByTime(1000)
+      await nextTick()
+
+      // Still dirty, never 'saved': scheduleAutosave marks it dirty on the
+      // keystroke, and the failed write has nothing to correct that with.
+      expect(wrapper.find('[data-save-status]').text()).toMatch(/unsaved changes/i)
+      expect(wrapper.find('.error').exists()).toBe(true)
+      expect(localStorage.getItem(PATTERNS_KEY)).toBe('{not json at all')
+      void store
     } finally {
       vi.useRealTimers()
     }

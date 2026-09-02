@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import type { Pattern, SelectionRef, ToolMode, Vec } from './types'
+import type { Pattern, Session, SelectionRef, ToolMode, Vec } from './types'
 import { gifSchedule } from './animation'
 import { PITCH_H, PITCH_W } from './geometry'
 import ActionToast from './components/ActionToast.vue'
@@ -11,17 +11,22 @@ import PitchEmptyState from './components/PitchEmptyState.vue'
 import PlacementGhost from './components/PlacementGhost.vue'
 import PresentationBar from './components/PresentationBar.vue'
 import PatternLibrary from './components/PatternLibrary.vue'
+import SessionLibrary from './components/SessionLibrary.vue'
+import SessionPlan from './components/SessionPlan.vue'
 import HelpPanel from './components/HelpPanel.vue'
 import Inspector from './components/Inspector.vue'
 import TagInput from './components/TagInput.vue'
 import PhaseTimeline from './components/PhaseTimeline.vue'
 import { MAX_LABEL_LENGTH, useBoard } from './composables/useBoard'
 import { useStorage } from './composables/useStorage'
+import { useSessions } from './composables/useSessions'
+import { buildSessionPdf } from './sessionPdf'
 import { useExport } from './composables/useExport'
 import { useViewport } from './composables/useViewport'
 
 const board = useBoard()
 const storage = useStorage()
+const sessions = useSessions()
 const { isPortrait, isCompact } = useViewport()
 
 /**
@@ -160,6 +165,37 @@ function onFullscreenChange(): void {
 const libraryOpen = ref(false)
 const helpOpen = ref(false)
 
+const sessionsOpen = ref(false)
+
+/**
+ * The session being edited, and the single owner of that fact.
+ *
+ * Held here rather than left to SessionPlan for the same reason the open
+ * pattern is: SessionLibrary reports what the coach did to it — a rename, a
+ * delete — through `renamed`/`deleted` rather than mutating this directly,
+ * so this cannot drift out of step with a row the library just changed.
+ * `Session`, not a boolean, is why every local identifier that touches it
+ * below is named for what it holds rather than reusing `open` — a
+ * same-named local already shadowed a prop once in this plan.
+ */
+const openSession = ref<Session | null>(null)
+
+/** A session picked from the library replaces whatever was open, and the library gets out of the way. */
+function onSessionOpened(session: Session) {
+  openSession.value = session
+  sessionsOpen.value = false
+}
+
+/** The library renamed the session that is open here — keep its title in step. */
+function onSessionRenamed(session: Session) {
+  if (openSession.value?.id === session.id) openSession.value = session
+}
+
+/** The library deleted the session that is open here — there is nothing left to edit. */
+function onSessionDeleted(id: string) {
+  if (openSession.value?.id === id) openSession.value = null
+}
+
 /**
  * The pattern the board came from, and the single owner of that fact.
  *
@@ -189,15 +225,23 @@ function markSaved(): void {
 /**
  * Write the open drill back to the library.
  *
- * A drill that has never been saved has nowhere to go, so it stays a draft
- * until the coach names it — autosave can update a drill in place, but it
- * cannot decide what a new one is called.
+ * A drill that has never been saved has nowhere to go until the coach names
+ * it — but once it has a name, that name IS the coach deciding what this
+ * drill is called, so this writes it for the first time, same as it writes
+ * every update after. `savePattern` mints an id when passed none and hands
+ * back what it saved; capturing that id here is what turns the second
+ * keystroke into an update of the same drill rather than a second one.
  */
 function autosavePattern(): void {
+  if (board.isDerived.value) return
   const id = currentPatternId.value
-  if (!id || board.isDerived.value) return
-  const saved = storage.savePattern(currentName.value, board.snapshot(), id)
+  const name = currentName.value.trim()
+  // Nothing named and nothing already filed — an empty name is not a
+  // decision to save, so there is nowhere for this write to go.
+  if (!id && !name) return
+  const saved = storage.savePattern(currentName.value, board.snapshot(), id ?? undefined)
   if (!storage.lastWriteSucceeded.value) return
+  currentPatternId.value = saved.id
   currentName.value = saved.name
   markSaved()
 }
@@ -207,9 +251,14 @@ let autosaveTimer: ReturnType<typeof setTimeout> | undefined
 /**
  * Debounced, because a drag is hundreds of changes and the library is a
  * single localStorage key. A second of quiet is the coach having stopped.
+ *
+ * A board with neither an id nor a name has nowhere to write to, so board
+ * edits on a fresh, unnamed board are left alone here — otherwise every
+ * pointer move would flip the header to "unsaved changes" for a save that
+ * can never happen.
  */
 function scheduleAutosave(): void {
-  if (!currentPatternId.value) return
+  if (!currentPatternId.value && !currentName.value.trim()) return
   saveStatus.value = 'dirty'
   clearTimeout(autosaveTimer)
   autosaveTimer = setTimeout(autosavePattern, 1000)
@@ -218,11 +267,13 @@ function scheduleAutosave(): void {
 /**
  * The name is edited in the header itself, so there is no rename dialog to
  * confirm: typing a new one is the change, and the autosave that follows
- * files it.
+ * files it — including the first time, on a board that has never been
+ * saved. Naming it is the coach deciding what it is called, which is the
+ * one thing autosave could not do on its own.
  */
 function onHeaderRename(name: string): void {
   currentName.value = name
-  if (currentPatternId.value) scheduleAutosave()
+  scheduleAutosave()
 }
 
 /**
@@ -569,20 +620,61 @@ async function exportGif() {
   }
 }
 
+/**
+ * Export a session as one PDF.
+ *
+ * Unlike the GIF, this does not lock the board: every board in the document
+ * is rasterised off-screen by `renderFrameToDataUrl`, which mounts its own
+ * detached copy of each drill rather than reading the live one — so the
+ * coach can keep working while it runs, and a failure halfway through
+ * cannot strand their board mid-move the way `board.beginExport()` guards
+ * against for the GIF. The `exporting` guard is still shared with the GIF
+ * export, so the two heavy rasterises cannot run on top of each other.
+ */
+async function exportSessionPdf(session: Session) {
+  if (exporting.value) return
+  exporting.value = true
+  try {
+    const blob = await buildSessionPdf({
+      session,
+      patterns: storage.listPatterns(),
+      onProgress: (done, total) => {
+        notice.value = `Building the session… ${done} of ${total}`
+      },
+    })
+    exporter.downloadBlob(blob, `${exporter.slugify(session.name || 'session')}.pdf`)
+    notice.value = 'Session saved.'
+  } catch (error) {
+    notice.value = error instanceof Error ? error.message : 'The session could not be created.'
+  } finally {
+    exporting.value = false
+  }
+}
+
 function exportJson() {
   const patterns = storage.listPatterns()
-  if (patterns.length === 0) {
-    notice.value = 'There are no saved patterns to export.'
+  const sessionList = sessions.listSessions()
+  // The file is a bundle of both, so a coach with sessions but no drills (or
+  // drills but no sessions) still has something worth exporting — only bail
+  // when there is truly nothing in either list.
+  if (patterns.length === 0 && sessionList.length === 0) {
+    notice.value = 'There are no saved patterns or sessions to export.'
     return
   }
-  exporter.downloadText(storage.exportPatternsJson(patterns), 'tactics-patterns.json')
+  exporter.downloadText(
+    storage.exportBundleJson(patterns, sessionList),
+    'tactics-patterns.json',
+  )
 }
 
 async function importJson() {
   try {
     const text = await exporter.pickJsonFile()
-    const added = storage.importPatterns(text)
-    notice.value = `Imported ${added.length} pattern(s).`
+    const added = storage.importBundle(text)
+    // importBundle returns both collections, so a file carrying sessions —
+    // with or without any new patterns — has to be reported on both counts,
+    // not just the one this used to mention.
+    notice.value = `Imported ${added.patterns.length} pattern(s) and ${added.sessions.length} session(s).`
   } catch (error) {
     notice.value = error instanceof Error ? error.message : 'That file could not be imported.'
   }
@@ -612,6 +704,28 @@ watch(renameCounterId, (id) => focusWhenOpen(id !== null, () => renameLabelInput
 })
 
 /** True while anything modal is on screen. */
+/**
+ * The one error banner, fed by two independent stores.
+ *
+ * `storage.lastError` and `sessions.lastError` used to be the very same ref
+ * — one module-level pair in collection.ts that both composables imported —
+ * so this could get away with `storage.lastError.value || ...`. Now that
+ * each store owns its pair (see `CollectionErrors` in collection.ts), both
+ * are read explicitly, and the patterns store is shown first only because a
+ * pattern write is the more common one; either can be showing on its own.
+ */
+const storeError = computed(() => storage.lastError.value || sessions.lastError.value)
+
+/**
+ * Clear only the store whose message is on screen. Clearing both
+ * unconditionally would silently drop a second store's still-unresolved
+ * error the coach never got shown, if both happened to fail at once.
+ */
+function dismissStoreError(): void {
+  if (storage.lastError.value) storage.lastError.value = null
+  else sessions.lastError.value = null
+}
+
 const isDialogOpen = computed(
   () =>
     savePromptOpen.value ||
@@ -619,6 +733,8 @@ const isDialogOpen = computed(
     resetPromptOpen.value ||
     libraryOpen.value ||
     helpOpen.value ||
+    sessionsOpen.value ||
+    openSession.value !== null ||
     renameCounterId.value !== null ||
     labelTarget.value !== null,
 )
@@ -649,6 +765,16 @@ function closeTopmostDialog(): boolean {
   }
   if (labelTarget.value !== null) {
     labelTarget.value = null
+    return true
+  }
+  // The editor before the library it was opened from: closing both on one
+  // press would take away the list a coach was about to go back to.
+  if (openSession.value !== null) {
+    openSession.value = null
+    return true
+  }
+  if (sessionsOpen.value) {
+    sessionsOpen.value = false
     return true
   }
   if (libraryOpen.value) {
@@ -854,6 +980,7 @@ watch(
       @clearDrawings="clearDrawings"
       @resetBoard="resetPromptOpen = true"
       @open="libraryOpen = true"
+      @openSessions="sessionsOpen = true"
       @exportPng="exportPng"
       @exportGif="exportGif"
       @exportJson="exportJson"
@@ -947,6 +1074,20 @@ watch(
       @load="onPatternLoaded"
       @rename="onPatternRenamed"
       @delete="onPatternDeleted"
+    />
+
+    <SessionLibrary
+      :open="sessionsOpen"
+      @close="sessionsOpen = false"
+      @open="onSessionOpened"
+      @renamed="onSessionRenamed"
+      @deleted="onSessionDeleted"
+    />
+    <SessionPlan
+      :session="openSession"
+      :exporting="exporting"
+      @close="openSession = null"
+      @exportPdf="exportSessionPdf"
     />
 
     <HelpPanel :open="helpOpen" @close="helpOpen = false" />
@@ -1050,13 +1191,7 @@ watch(
 
     <!-- Both messages dismiss on click; an error the coach cannot clear is worse than a notice. -->
     <p v-if="notice" class="notice" role="status" @click="notice = null">{{ notice }}</p>
-    <p
-      v-if="storage.lastError.value"
-      class="error"
-      role="status"
-      title="Dismiss"
-      @click="storage.lastError.value = null"
-    >{{ storage.lastError.value }}</p>
+    <p v-if="storeError" class="error" role="status" title="Dismiss" @click="dismissStoreError">{{ storeError }}</p>
   </div>
 </template>
 

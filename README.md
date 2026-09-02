@@ -211,12 +211,24 @@ fifty drills wants "rondos" apart from "pressing" without losing either. Save a 
 starts the copy with the original's tags already chosen, since a copy of a rondo is still
 a rondo.
 
+**Sessions.** Sessions plan a whole training session rather than one drill — open the
+Sessions panel from the same **▾** menu Open lives in. Name a session, add saved drills to
+it (filtered by tag, like the library), give each one minutes and reorder them; the panel
+keeps a running total of the drills still in your library. Export PDF turns it into one
+document: a cover page with the running order and total time, then a page per drill with
+up to four captioned boards and its notes — ready to print or hand to an assistant. If a
+drill a session uses gets deleted, the session keeps a removable row saying so rather than
+silently dropping it, and the PDF leaves that drill out too.
+
 ## Where drills live
 
 Saved drills are in this browser's local storage under `fct.patterns.v1`, and the board
 you are working on autosaves to `fct.draft.v1` so a refresh does not lose it. The keys
 still say "patterns" because renaming one would orphan every drill anyone has saved;
-only what you read on screen changed.
+only what you read on screen changed. Sessions live separately, under
+`fct.sessions.v1` — they reference drills by id rather than containing them, so
+editing a drill after it is added to a session keeps the session pointing at the current
+version, at the cost of a session outliving a drill it references.
 
 Local storage is per-browser and per-device. Use **Export** to write a JSON file for
 backup or to move drills to another machine, and **Import** to read one back. Importing
