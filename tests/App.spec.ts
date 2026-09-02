@@ -6,7 +6,18 @@ import { useBoard, __resetBoardForTests, type BoardSnapshot } from '../src/compo
 import { useStorage, PATTERNS_KEY } from '../src/composables/useStorage'
 import { __resetViewportForTests } from '../src/composables/useViewport'
 import { useExport } from '../src/composables/useExport'
+import { useSessions } from '../src/composables/useSessions'
 import { PITCH_H, PITCH_W } from '../src/geometry'
+
+// jsdom has no canvas package installed, so decoding a rasterised board never
+// settles at all rather than rejecting (see the comment on this same point
+// in useExport's GIF encoder) — real rendering would hang the one test below
+// that exercises a rasterise failure. Mocked here rather than left real, the
+// same way sessionPdf.spec.ts mocks it for the same reason.
+vi.mock('../src/composables/renderFrame', () => ({
+  renderFrameToDataUrl: vi.fn(async () => 'data:image/png;base64,AAAA'),
+  SESSION_BOARD_WIDTH: 800,
+}))
 
 let wrapper: VueWrapper | undefined
 
@@ -745,6 +756,195 @@ describe('escape closes what is open', () => {
     expect(wrapper.find('[data-help-section="board"]').exists()).toBe(false)
   })
 
+  it('closes the session editor before the sessions library beneath it', async () => {
+    useSessions().createSession('Tuesday U12')
+    wrapper = mountApp()
+
+    await openSessions(wrapper)
+    await wrapper.find('[data-session] [data-open]').trigger('click')
+    await nextTick()
+
+    // Reopened behind the editor that is already up, the way Save as… can
+    // sit over an already-open library.
+    await openSessions(wrapper)
+
+    await pressEscape()
+    expect(wrapper.find('[role="dialog"][aria-label="Tuesday U12"]').exists()).toBe(false)
+    expect(wrapper.find('[role="dialog"][aria-label="Sessions"]').exists()).toBe(true)
+
+    await pressEscape()
+    expect(wrapper.find('[role="dialog"][aria-label="Sessions"]').exists()).toBe(false)
+  })
+
+})
+
+/**
+ * Task 12's way into the sessions feature: the brief named a `Toolbar.vue`
+ * that does not exist. The drill menu is where `@open` already leads to the
+ * pattern library, so Sessions sits beside it in that same menu.
+ */
+async function openSessions(app: VueWrapper) {
+  await app.find('[data-drill-menu]').trigger('click')
+  await app.find('[data-open-sessions]').trigger('click')
+}
+
+describe('the Sessions control', () => {
+  it('opens the sessions panel from the drill menu', async () => {
+    wrapper = mountApp()
+    await openSessions(wrapper)
+    expect(wrapper.find('[role="dialog"][aria-label="Sessions"]').exists()).toBe(true)
+  })
+
+  it('ignores tool shortcuts while the sessions panel is open', async () => {
+    wrapper = mountApp()
+    await openSessions(wrapper)
+
+    fire({ key: 'd' })
+    await nextTick()
+
+    expect(wrapper.find('[data-tool="pen"]').classes()).not.toContain('is-active')
+  })
+
+  it('opens a session for editing and closes the library behind it', async () => {
+    useSessions().createSession('Tuesday U12')
+    wrapper = mountApp()
+
+    await openSessions(wrapper)
+    await wrapper.find('[data-session] [data-open]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.find('[role="dialog"][aria-label="Sessions"]').exists()).toBe(false)
+    expect(wrapper.find('[role="dialog"][aria-label="Tuesday U12"]').exists()).toBe(true)
+  })
+})
+
+/**
+ * SessionLibrary's `renamed` and `deleted` emits exist so App's held-open
+ * session cannot drift from what the library just did to the same row:
+ * `saveSession` upserts by id, so a stale rename or a deleted-but-still-open
+ * session would otherwise be resurrected by the editor's next write.
+ */
+describe('the library changing the open session', () => {
+  it('keeps the open session in step when the library renames it', async () => {
+    useSessions().createSession('Tuesday U12')
+    wrapper = mountApp()
+
+    await openSessions(wrapper)
+    await wrapper.find('[data-session] [data-open]').trigger('click')
+    await nextTick()
+
+    // Reopen the library behind the editor and rename the session there.
+    await openSessions(wrapper)
+    await wrapper.find('[data-session] [data-rename]').trigger('click')
+    await wrapper.find('[data-rename-input]').setValue('Wednesday U12')
+    await wrapper.find('[data-rename-save]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.find('[role="dialog"][aria-label="Wednesday U12"]').exists()).toBe(true)
+  })
+
+  it('closes the open session when the library deletes it', async () => {
+    useSessions().createSession('Tuesday U12')
+    wrapper = mountApp()
+
+    await openSessions(wrapper)
+    await wrapper.find('[data-session] [data-open]').trigger('click')
+    await nextTick()
+
+    await openSessions(wrapper)
+    await wrapper.find('[data-session] [data-delete]').trigger('click')
+    await wrapper.find('[data-confirm-delete]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.find('[role="dialog"][aria-label="Tuesday U12"]').exists()).toBe(false)
+  })
+})
+
+/**
+ * The session store shares its `lastError`/`lastWriteSucceeded` refs with
+ * the pattern store (both read the same collection module), so a failed
+ * session write already reaches this banner today — but the binding names
+ * the session store explicitly rather than relying on that coupling, so a
+ * later split of the two stores could not silently stop reporting it.
+ */
+describe('the session store error', () => {
+  it('is surfaced the same way as a pattern store error', async () => {
+    wrapper = mountApp()
+
+    useSessions().lastError.value = 'Your saved sessions could not be read.'
+    await nextTick()
+
+    expect(wrapper.find('.error').exists()).toBe(true)
+    expect(wrapper.find('.error').text()).toMatch(/saved sessions/i)
+
+    await wrapper.find('.error').trigger('click')
+    expect(wrapper.find('.error').exists()).toBe(false)
+    expect(useSessions().lastError.value).toBeNull()
+  })
+})
+
+/**
+ * Unlike the GIF, exporting a session never touches the live board: the
+ * boards it prints are rasterised off-screen by `renderFrameToDataUrl`, so a
+ * coach can keep working, and a failure halfway through cannot strand them
+ * mid-move. `exporting` is still the same guard the GIF export uses, so the
+ * two cannot run on top of each other.
+ */
+describe('exporting a session as a PDF', () => {
+  it('builds and downloads the PDF, reporting progress, without locking the board', async () => {
+    const board = useBoard()
+    const exporter = useExport()
+    const downloads: string[] = []
+    vi.spyOn(exporter, 'downloadBlob').mockImplementation((_blob, name) => { downloads.push(name) })
+
+    // No drills in the session: the cover alone is enough to prove the
+    // wiring without needing a working canvas, which jsdom does not have.
+    useSessions().createSession('Tuesday U12')
+    wrapper = mountApp()
+
+    await openSessions(wrapper)
+    await wrapper.find('[data-session] [data-open]').trigger('click')
+    await nextTick()
+
+    await wrapper.find('[data-export-pdf]').trigger('click')
+    await nextTick()
+    await nextTick()
+
+    expect(downloads).toEqual(['tuesday-u12.pdf'])
+    expect(wrapper.find('.notice').text()).toBe('Session saved.')
+    expect(board.isDerived.value).toBe(false)
+  })
+
+  it('reports the reason a drill could not be rasterised, leaving the board untouched', async () => {
+    const { renderFrameToDataUrl } = await import('../src/composables/renderFrame')
+    vi.mocked(renderFrameToDataUrl).mockRejectedValueOnce(
+      new Error('This browser could not create the image.'),
+    )
+
+    const store = useStorage()
+    const board = useBoard()
+    const pattern = store.savePattern('Rondo', sampleSnapshot())
+    const created = useSessions().createSession('Tuesday U12')
+    useSessions().saveSession({
+      ...created,
+      entries: [useSessions().newEntry(pattern.id, 10)],
+    })
+
+    wrapper = mountApp()
+    await openSessions(wrapper)
+    await wrapper.find('[data-session] [data-open]').trigger('click')
+    await nextTick()
+
+    await wrapper.find('[data-export-pdf]').trigger('click')
+
+    await vi.waitFor(() => {
+      expect(wrapper!.find('.notice').text()).toMatch(/could not render/i)
+    })
+
+    // Never locked: the export rasterises off-screen, so the live board was
+    // never put into the export-derived state the GIF export uses.
+    expect(board.isDerived.value).toBe(false)
+  })
 })
 
 describe('tagging while forking a drill', () => {

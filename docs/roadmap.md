@@ -31,8 +31,6 @@ Frames, tweening, scrubbing and playback have landed. What is left:
 
 ## Smaller things
 
-- **A session plan.** Several drills in one exported document, rather than a
-  PNG per pattern. Coaches plan a session, not a drill.
 - **Straight-line snapping for arrows.** Lines snap to the horizontal and
   vertical; arrows deliberately do not, because an arrow traces a movement.
   Worth revisiting if squaring off a run turns out to be something coaches

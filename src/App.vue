@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import type { Pattern, SelectionRef, ToolMode, Vec } from './types'
+import type { Pattern, Session, SelectionRef, ToolMode, Vec } from './types'
 import { gifSchedule } from './animation'
 import { PITCH_H, PITCH_W } from './geometry'
 import ActionToast from './components/ActionToast.vue'
@@ -11,6 +11,8 @@ import PitchEmptyState from './components/PitchEmptyState.vue'
 import PlacementGhost from './components/PlacementGhost.vue'
 import PresentationBar from './components/PresentationBar.vue'
 import PatternLibrary from './components/PatternLibrary.vue'
+import SessionLibrary from './components/SessionLibrary.vue'
+import SessionPlan from './components/SessionPlan.vue'
 import HelpPanel from './components/HelpPanel.vue'
 import Inspector from './components/Inspector.vue'
 import TagInput from './components/TagInput.vue'
@@ -18,6 +20,7 @@ import PhaseTimeline from './components/PhaseTimeline.vue'
 import { MAX_LABEL_LENGTH, useBoard } from './composables/useBoard'
 import { useStorage } from './composables/useStorage'
 import { useSessions } from './composables/useSessions'
+import { buildSessionPdf } from './sessionPdf'
 import { useExport } from './composables/useExport'
 import { useViewport } from './composables/useViewport'
 
@@ -161,6 +164,37 @@ function onFullscreenChange(): void {
 
 const libraryOpen = ref(false)
 const helpOpen = ref(false)
+
+const sessionsOpen = ref(false)
+
+/**
+ * The session being edited, and the single owner of that fact.
+ *
+ * Held here rather than left to SessionPlan for the same reason the open
+ * pattern is: SessionLibrary reports what the coach did to it — a rename, a
+ * delete — through `renamed`/`deleted` rather than mutating this directly,
+ * so this cannot drift out of step with a row the library just changed.
+ * `Session`, not a boolean, is why every local identifier that touches it
+ * below is named for what it holds rather than reusing `open` — a
+ * same-named local already shadowed a prop once in this plan.
+ */
+const openSession = ref<Session | null>(null)
+
+/** A session picked from the library replaces whatever was open, and the library gets out of the way. */
+function onSessionOpened(session: Session) {
+  openSession.value = session
+  sessionsOpen.value = false
+}
+
+/** The library renamed the session that is open here — keep its title in step. */
+function onSessionRenamed(session: Session) {
+  if (openSession.value?.id === session.id) openSession.value = session
+}
+
+/** The library deleted the session that is open here — there is nothing left to edit. */
+function onSessionDeleted(id: string) {
+  if (openSession.value?.id === id) openSession.value = null
+}
 
 /**
  * The pattern the board came from, and the single owner of that fact.
@@ -571,6 +605,37 @@ async function exportGif() {
   }
 }
 
+/**
+ * Export a session as one PDF.
+ *
+ * Unlike the GIF, this does not lock the board: every board in the document
+ * is rasterised off-screen by `renderFrameToDataUrl`, which mounts its own
+ * detached copy of each drill rather than reading the live one — so the
+ * coach can keep working while it runs, and a failure halfway through
+ * cannot strand their board mid-move the way `board.beginExport()` guards
+ * against for the GIF. The `exporting` guard is still shared with the GIF
+ * export, so the two heavy rasterises cannot run on top of each other.
+ */
+async function exportSessionPdf(session: Session) {
+  if (exporting.value) return
+  exporting.value = true
+  try {
+    const blob = await buildSessionPdf({
+      session,
+      patterns: storage.listPatterns(),
+      onProgress: (done, total) => {
+        notice.value = `Building the session… ${done} of ${total}`
+      },
+    })
+    exporter.downloadBlob(blob, `${exporter.slugify(session.name || 'session')}.pdf`)
+    notice.value = 'Session saved.'
+  } catch (error) {
+    notice.value = error instanceof Error ? error.message : 'The session could not be created.'
+  } finally {
+    exporting.value = false
+  }
+}
+
 function exportJson() {
   const patterns = storage.listPatterns()
   if (patterns.length === 0) {
@@ -624,6 +689,8 @@ const isDialogOpen = computed(
     resetPromptOpen.value ||
     libraryOpen.value ||
     helpOpen.value ||
+    sessionsOpen.value ||
+    openSession.value !== null ||
     renameCounterId.value !== null ||
     labelTarget.value !== null,
 )
@@ -654,6 +721,16 @@ function closeTopmostDialog(): boolean {
   }
   if (labelTarget.value !== null) {
     labelTarget.value = null
+    return true
+  }
+  // The editor before the library it was opened from: closing both on one
+  // press would take away the list a coach was about to go back to.
+  if (openSession.value !== null) {
+    openSession.value = null
+    return true
+  }
+  if (sessionsOpen.value) {
+    sessionsOpen.value = false
     return true
   }
   if (libraryOpen.value) {
@@ -859,6 +936,7 @@ watch(
       @clearDrawings="clearDrawings"
       @resetBoard="resetPromptOpen = true"
       @open="libraryOpen = true"
+      @openSessions="sessionsOpen = true"
       @exportPng="exportPng"
       @exportGif="exportGif"
       @exportJson="exportJson"
@@ -952,6 +1030,19 @@ watch(
       @load="onPatternLoaded"
       @rename="onPatternRenamed"
       @delete="onPatternDeleted"
+    />
+
+    <SessionLibrary
+      :open="sessionsOpen"
+      @close="sessionsOpen = false"
+      @open="onSessionOpened"
+      @renamed="onSessionRenamed"
+      @deleted="onSessionDeleted"
+    />
+    <SessionPlan
+      :session="openSession"
+      @close="openSession = null"
+      @exportPdf="exportSessionPdf"
     />
 
     <HelpPanel :open="helpOpen" @close="helpOpen = false" />
@@ -1055,13 +1146,20 @@ watch(
 
     <!-- Both messages dismiss on click; an error the coach cannot clear is worse than a notice. -->
     <p v-if="notice" class="notice" role="status" @click="notice = null">{{ notice }}</p>
+    <!--
+      `sessions.lastError` and `storage.lastError` are the same ref under the
+      hood — both composables read the same collection module — but this
+      names the session store explicitly rather than leaning on that
+      coupling, so a failed session write is still reported here if the two
+      stores are ever split apart.
+    -->
     <p
-      v-if="storage.lastError.value"
+      v-if="storage.lastError.value || sessions.lastError.value"
       class="error"
       role="status"
       title="Dismiss"
-      @click="storage.lastError.value = null"
-    >{{ storage.lastError.value }}</p>
+      @click="storage.lastError.value = null; sessions.lastError.value = null"
+    >{{ storage.lastError.value || sessions.lastError.value }}</p>
   </div>
 </template>
 

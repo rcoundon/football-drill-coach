@@ -90,6 +90,19 @@ describe('the drill menu', () => {
     }
   })
 
+  /**
+   * Sessions sit beside Open… rather than behind a separate control: both
+   * are ways into a library the drill menu already owns, and a second menu
+   * for one more button would be a second place to look for it.
+   */
+  it('asks the app to open the sessions panel', async () => {
+    const wrapper = mountHeader()
+    await wrapper.find('[data-drill-menu]').trigger('click')
+    await wrapper.find('[data-open-sessions]').trigger('click')
+    expect(wrapper.emitted('openSessions')).toHaveLength(1)
+    expect(wrapper.find('[data-open-sessions]').isVisible()).toBe(false)
+  })
+
   it('emits what was chosen and closes behind itself', async () => {
     const wrapper = mountHeader()
     await wrapper.find('[data-drill-menu]').trigger('click')
