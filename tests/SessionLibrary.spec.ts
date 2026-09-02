@@ -78,4 +78,32 @@ describe('SessionLibrary', () => {
     await wrapper.find('[data-confirm-delete]').trigger('click')
     expect(sessions.listSessions()).toEqual([])
   })
+
+  it('stays hidden when closed', () => {
+    // Regression: a local `open(session)` function once shadowed the `open`
+    // prop inside the template, so `v-if="open"` resolved to the function
+    // reference — always truthy — and the panel rendered even when closed.
+    const wrapper = mount(SessionLibrary, { props: { open: false } })
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+  })
+
+  it('reports a rename so App can keep an already-open session in step', async () => {
+    sessions.createSession('Tuesday')
+    const wrapper = mount(SessionLibrary, { props: { open: true } })
+    await wrapper.find('[data-rename]').trigger('click')
+    await wrapper.find('[data-rename-input]').setValue('Wednesday')
+    await wrapper.find('[data-rename-save]').trigger('click')
+
+    expect(wrapper.emitted('renamed')?.[0]?.[0]).toMatchObject({ name: 'Wednesday' })
+  })
+
+  it('reports a delete so App can drop an already-open session', async () => {
+    const created = sessions.createSession('Tuesday')
+    const wrapper = mount(SessionLibrary, { props: { open: true } })
+
+    await wrapper.find('[data-delete]').trigger('click')
+    await wrapper.find('[data-confirm-delete]').trigger('click')
+
+    expect(wrapper.emitted('deleted')?.[0]?.[0]).toBe(created.id)
+  })
 })

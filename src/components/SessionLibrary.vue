@@ -6,12 +6,19 @@ import { useStorage } from '../composables/useStorage'
 
 const props = defineProps<{ open: boolean }>()
 /**
- * Only `open` is reported. Unlike a drill, a session is not loaded onto
- * anything App itself owns — rename and delete both go straight through
- * useSessions and this panel refreshes its own list after — so there is
- * nothing else here App needs telling about.
+ * `renamed` and `deleted` exist because App (Task 12) will hold the opened
+ * session in its own state, and SessionPlan commits edits with
+ * `saveSession({ ...props.session, entries })`. Left unreported, a rename
+ * from this panel would be silently reverted by the next edit, and a delete
+ * would be resurrected by it — `saveSession` upserts by id, so it does not
+ * know the row it is writing back is one this panel just renamed or removed.
  */
-const emit = defineEmits<{ close: []; open: [session: Session] }>()
+const emit = defineEmits<{
+  close: []
+  open: [session: Session]
+  renamed: [session: Session]
+  deleted: [id: string]
+}>()
 
 const sessions = useSessions()
 const storage = useStorage()
@@ -52,8 +59,13 @@ function create() {
 /**
  * `toRaw` before the session leaves: it comes from a v-for over a ref-held
  * array, so Vue has wrapped it in a Proxy, and the PDF path clones it.
+ *
+ * Named `openSession`, not `open` — the prop is called `open`, and a
+ * same-named local function shadows it inside this file's own template
+ * expressions, which silently turns `v-if="open"` into "is this function",
+ * always truthy.
  */
-function open(session: Session) {
+function openSession(session: Session) {
   emit('open', toRaw(session))
 }
 
@@ -64,6 +76,11 @@ function saveRename(id: string) {
   sessions.renameSession(id, name)
   if (!sessions.lastWriteSucceeded.value) return
   refresh()
+  // Read the renamed session back off the refreshed list rather than
+  // building `{ id, name }` by hand, so App gets the same updatedAt the
+  // store now holds.
+  const renamed = list.value.find((s) => s.id === id)
+  if (renamed) emit('renamed', toRaw(renamed))
 }
 
 function confirmDelete(id: string) {
@@ -71,6 +88,7 @@ function confirmDelete(id: string) {
   confirmingId.value = null
   if (!sessions.lastWriteSucceeded.value) return
   refresh()
+  emit('deleted', id)
 }
 
 /**
@@ -116,8 +134,8 @@ function totalOf(session: Session): number {
 
           <template v-else>
             <span class="name">{{ session.name }}</span>
-            <span class="date">{{ session.entries.length }} drills · {{ totalOf(session) }} min</span>
-            <button data-open class="chip" @click="open(session)">Open</button>
+            <span class="meta">{{ session.entries.length }} drills · {{ totalOf(session) }} min</span>
+            <button data-open class="chip" @click="openSession(session)">Open</button>
             <button data-rename class="chip" @click="renamingId = session.id; renameDraft = session.name">Rename</button>
             <button data-delete class="chip" @click="confirmingId = session.id">Delete</button>
           </template>
@@ -142,7 +160,7 @@ function totalOf(session: Session): number {
 .list { list-style: none; margin: 0.75rem 0 0; padding: 0; display: grid; gap: 0.4rem; }
 .row { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; background: var(--surface-2); padding: 0.45rem 0.6rem; border-radius: 0.4rem; }
 .name { flex: 1; }
-.date { opacity: 0.6; font-size: 0.8rem; }
+.meta { opacity: 0.6; font-size: 0.8rem; }
 .input { flex: 1; padding: 0.35rem; border-radius: 0.3rem; border: 1px solid #ffffff40; background: var(--surface-1); color: inherit; }
 .chip { border: 1px solid #ffffff40; background: var(--surface-3); color: inherit; border-radius: 0.4rem; padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.8rem; }
 .chip--danger { background: #c62828; }
