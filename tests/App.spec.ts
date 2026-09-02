@@ -1341,6 +1341,125 @@ describe('autosaving the open drill', () => {
   })
 
   /**
+   * Naming a board that has never been saved is the coach deciding what it
+   * is called — the one thing autosave could not do on its own — so that
+   * decision is what starts filing it, on the same debounce as every other
+   * autosave.
+   */
+  it('files a brand-new board once the coach names it in the header', async () => {
+    vi.useFakeTimers()
+    try {
+      const store = useStorage()
+      wrapper = mountApp()
+
+      const field = wrapper.find('[data-current-pattern]')
+      await field.setValue('Rondo 4v2')
+      await field.trigger('change')
+      expect(wrapper.find('[data-save-status]').text()).toMatch(/unsaved changes/i)
+
+      vi.advanceTimersByTime(1000)
+      await nextTick()
+
+      const listed = store.listPatterns()
+      expect(listed).toHaveLength(1)
+      expect(listed[0].name).toBe('Rondo 4v2')
+      expect(wrapper.find('[data-save-status]').text()).toMatch(/saved (just now|\d+m ago)/i)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  /**
+   * The first write mints an id and hands it back; every autosave after
+   * that — including the one still pending from the keystrokes that named
+   * it — must use that id rather than minting another, or a coach typing a
+   * name out one character at a time would file a drill per letter.
+   */
+  it('keeps updating the same drill as the name keeps changing, not one per edit', async () => {
+    vi.useFakeTimers()
+    try {
+      const store = useStorage()
+      wrapper = mountApp()
+
+      const field = wrapper.find('[data-current-pattern]')
+      await field.setValue('R')
+      await field.trigger('change')
+      vi.advanceTimersByTime(1000)
+      await nextTick()
+
+      const first = store.listPatterns()
+      expect(first).toHaveLength(1)
+      const id = first[0].id
+
+      await field.setValue('Rondo 4v2')
+      await field.trigger('change')
+      vi.advanceTimersByTime(1000)
+      await nextTick()
+
+      const second = store.listPatterns()
+      expect(second).toHaveLength(1)
+      expect(second[0].id).toBe(id)
+      expect(second[0].name).toBe('Rondo 4v2')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  /**
+   * DrillHeader already refuses to emit a rename for a blank field, but that
+   * is its guard, not this one's — clearing the name must not be mistaken
+   * here for a coach deciding to save.
+   */
+  it('creates nothing when the header name is emptied', async () => {
+    vi.useFakeTimers()
+    try {
+      const store = useStorage()
+      wrapper = mountApp()
+
+      const field = wrapper.find('[data-current-pattern]')
+      await field.setValue('   ')
+      await field.trigger('change')
+      vi.advanceTimersByTime(2000)
+      await nextTick()
+
+      expect(store.listPatterns()).toHaveLength(0)
+      expect(wrapper.find('[data-save-status]').text()).toMatch(/not saved/i)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  /**
+   * savePattern writes nothing when the library is unreadable, so a failed
+   * first write must not claim "Saved" — and must not leave the board
+   * holding an id for a drill that was never actually written, or the next
+   * autosave would try to update something that does not exist.
+   */
+  it('does not claim a new drill was saved when the write fails', async () => {
+    vi.useFakeTimers()
+    try {
+      const store = useStorage()
+      wrapper = mountApp()
+      localStorage.setItem(PATTERNS_KEY, '{not json at all')
+
+      const field = wrapper.find('[data-current-pattern]')
+      await field.setValue('Rondo 4v2')
+      await field.trigger('change')
+      vi.advanceTimersByTime(1000)
+      await nextTick()
+
+      // Still dirty, never 'saved': scheduleAutosave marks it dirty on the
+      // keystroke, and the failed write has nothing to correct that with.
+      expect(wrapper.find('[data-save-status]').text()).toMatch(/unsaved changes/i)
+      expect(wrapper.find('.error').exists()).toBe(true)
+      expect(localStorage.getItem(PATTERNS_KEY)).toBe('{not json at all')
+      void store
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  /**
    * Playing moves the playhead, not the drill. Writing a blend back over the
    * saved drill would file a half-tweened board as the coach's work.
    */

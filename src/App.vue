@@ -225,15 +225,23 @@ function markSaved(): void {
 /**
  * Write the open drill back to the library.
  *
- * A drill that has never been saved has nowhere to go, so it stays a draft
- * until the coach names it — autosave can update a drill in place, but it
- * cannot decide what a new one is called.
+ * A drill that has never been saved has nowhere to go until the coach names
+ * it — but once it has a name, that name IS the coach deciding what this
+ * drill is called, so this writes it for the first time, same as it writes
+ * every update after. `savePattern` mints an id when passed none and hands
+ * back what it saved; capturing that id here is what turns the second
+ * keystroke into an update of the same drill rather than a second one.
  */
 function autosavePattern(): void {
+  if (board.isDerived.value) return
   const id = currentPatternId.value
-  if (!id || board.isDerived.value) return
-  const saved = storage.savePattern(currentName.value, board.snapshot(), id)
+  const name = currentName.value.trim()
+  // Nothing named and nothing already filed — an empty name is not a
+  // decision to save, so there is nowhere for this write to go.
+  if (!id && !name) return
+  const saved = storage.savePattern(currentName.value, board.snapshot(), id ?? undefined)
   if (!storage.lastWriteSucceeded.value) return
+  currentPatternId.value = saved.id
   currentName.value = saved.name
   markSaved()
 }
@@ -243,9 +251,14 @@ let autosaveTimer: ReturnType<typeof setTimeout> | undefined
 /**
  * Debounced, because a drag is hundreds of changes and the library is a
  * single localStorage key. A second of quiet is the coach having stopped.
+ *
+ * A board with neither an id nor a name has nowhere to write to, so board
+ * edits on a fresh, unnamed board are left alone here — otherwise every
+ * pointer move would flip the header to "unsaved changes" for a save that
+ * can never happen.
  */
 function scheduleAutosave(): void {
-  if (!currentPatternId.value) return
+  if (!currentPatternId.value && !currentName.value.trim()) return
   saveStatus.value = 'dirty'
   clearTimeout(autosaveTimer)
   autosaveTimer = setTimeout(autosavePattern, 1000)
@@ -254,11 +267,13 @@ function scheduleAutosave(): void {
 /**
  * The name is edited in the header itself, so there is no rename dialog to
  * confirm: typing a new one is the change, and the autosave that follows
- * files it.
+ * files it — including the first time, on a board that has never been
+ * saved. Naming it is the coach deciding what it is called, which is the
+ * one thing autosave could not do on its own.
  */
 function onHeaderRename(name: string): void {
   currentName.value = name
-  if (currentPatternId.value) scheduleAutosave()
+  scheduleAutosave()
 }
 
 /**
