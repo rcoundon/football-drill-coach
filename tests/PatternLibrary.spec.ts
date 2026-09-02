@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import PatternLibrary from '../src/components/PatternLibrary.vue'
 import { useStorage } from '../src/composables/useStorage'
 import { useBoard, __resetBoardForTests } from '../src/composables/useBoard'
+import { useSessions } from '../src/composables/useSessions'
 
 beforeEach(() => {
   localStorage.clear()
@@ -135,6 +136,32 @@ describe('deleting', () => {
     expect(wrapper.emitted('delete')).toBeUndefined()
     const listed = useStorage().listPatterns()
     expect(listed.map((p) => p.id)).toContain(saved.id)
+  })
+
+  /**
+   * Deleting a drill a session still points at is allowed, not blocked — the
+   * coach may well mean it — but the confirmation should say so, since the
+   * session would otherwise be left pointing at nothing without warning.
+   */
+  it('says how many sessions use a drill before deleting it', async () => {
+    const saved = seed('Rondo')
+    const sessions = useSessions()
+    const session = sessions.createSession('Tuesday')
+    sessions.saveSession({ ...session, entries: [sessions.newEntry(saved.id, 12)] })
+
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    await wrapper.find('[data-delete]').trigger('click')
+
+    expect(wrapper.find('[data-usage-warning]').text()).toContain('1 session')
+  })
+
+  it('says nothing when no session uses it', async () => {
+    seed('Rondo')
+
+    const wrapper = mount(PatternLibrary, { props: { open: true } })
+    await wrapper.find('[data-delete]').trigger('click')
+
+    expect(wrapper.find('[data-usage-warning]').exists()).toBe(false)
   })
 })
 
