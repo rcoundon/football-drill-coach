@@ -1,7 +1,15 @@
-import { ref } from 'vue'
 import type { Ball, Counter, Drawing, Frame, Label, Marker, Pattern } from '../types'
 import type { BoardSnapshot } from './useBoard'
 import type { Vec } from '../types'
+import {
+  damagedMessage,
+  lastError,
+  lastWriteSucceeded,
+  readCollection,
+  recordWrite,
+  writeCollection,
+  writeRaw,
+} from './collection'
 
 export const PATTERNS_KEY = 'fct.patterns.v1'
 export const DRAFT_KEY = 'fct.draft.v1'
@@ -10,20 +18,6 @@ const SCHEMA_VERSION = 3
 
 /** Versions this build can open. Only SCHEMA_VERSION is ever written. */
 const READABLE_VERSIONS = new Set([1, 2, 3])
-
-const lastError = ref<string | null>(null)
-
-/**
- * Whether the most recent LIBRARY write actually reached localStorage.
- *
- * `savePattern` deliberately writes nothing when the library is unreadable,
- * and a write can also fail on quota, yet it still returns the pattern it
- * built in memory. Callers that want to tell the coach "saved" — or to treat
- * the pattern as the one now open — have to know which happened.
- *
- * Draft autosaves do not touch this: it answers for the library only.
- */
-const lastWriteSucceeded = ref(true)
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -304,79 +298,26 @@ export function parsePattern(value: unknown): Pattern {
   return value as unknown as Pattern
 }
 
-function readRaw(key: string): unknown {
-  const text = localStorage.getItem(key)
-  if (text === null) return null
-  return JSON.parse(text)
-}
-
-function writeRaw(key: string, value: unknown): boolean {
-  try {
-    localStorage.setItem(key, JSON.stringify(value))
-    return true
-  } catch (error) {
-    const name = error instanceof Error ? error.name : ''
-    lastError.value =
-      name === 'QuotaExceededError'
-        ? 'The browser is out of space. Export some patterns to a file and delete them to free room.'
-        : 'That could not be saved to this browser.'
-    return false
-  }
-}
-
 const UNREADABLE_LIBRARY_MESSAGE =
   'Your saved patterns could not be read, so saving now would overwrite them. Export or clear your saved patterns first, then try again.'
 
-type LibraryRead = {
-  patterns: Pattern[]
-  /** True when the top-level stored value itself could not be trusted (bad JSON, or not an array). */
-  unreadable: boolean
-  /**
-   * The individual entries that failed to parse even though the top-level
-   * value was fine, exactly as they were stored. Carried, not counted, so
-   * every write can put them back untouched.
-   */
-  damaged: unknown[]
+/**
+ * Read the library through the shared collection helper. A thin wrapper
+ * rather than a call site rename, so `patterns`/`unreadable`/`damaged` stay
+ * the names every function below already reads.
+ */
+function readLibrary() {
+  const { items, unreadable, damaged } = readCollection(PATTERNS_KEY, parsePattern)
+  return { patterns: items, unreadable, damaged }
 }
 
 /**
- * Read the library and say what kind of problem, if any, was found.
- *
- * `unreadable` is the disaster case: the stored bytes could not be trusted
- * at all, and a caller that goes on to write would permanently destroy them.
- *
- * A `damaged` entry is the partial case: the rest of the library is good and
- * the coach must still be able to save, delete and rename. But the damaged
- * rows are the coach's work too, and the spec promises corrupt data is "left
- * untouched so it can be recovered" — so they ride along with every write
- * rather than being dropped on the first one. `writeLibrary` is the only
- * supported way to write, and it takes them as an argument for that reason.
+ * Write the library back, damaged rows included, through the shared
+ * collection helper. Every write goes through here so no code path can drop
+ * a row it merely failed to understand.
  */
-function readLibrary(): LibraryRead {
-  let raw: unknown
-  try {
-    raw = readRaw(PATTERNS_KEY)
-  } catch {
-    return { patterns: [], unreadable: true, damaged: [] }
-  }
-
-  if (raw === null) return { patterns: [], unreadable: false, damaged: [] }
-  if (!Array.isArray(raw)) return { patterns: [], unreadable: true, damaged: [] }
-
-  const patterns: Pattern[] = []
-  const damaged: unknown[] = []
-  for (const entry of raw) {
-    try {
-      patterns.push(parsePattern(entry))
-    } catch {
-      damaged.push(entry)
-    }
-  }
-  return { patterns, unreadable: false, damaged }
-}
-
-function damagedMessage(count: number): string {
-  return `${count} saved pattern(s) could not be read. They have been left untouched so they can be recovered.`
+function writeLibrary(patterns: Pattern[], damaged: unknown[]): boolean {
+  return writeCollection(PATTERNS_KEY, patterns, damaged)
 }
 
 function listPatterns(): Pattern[] {
@@ -391,25 +332,6 @@ function listPatterns(): Pattern[] {
 
   if (damaged.length > 0) lastError.value = damagedMessage(damaged.length)
   return patterns
-}
-
-/**
- * Write the library back, damaged rows included.
- *
- * Every write goes through here so that no code path can drop a row it
- * merely failed to understand.
- */
-function writeLibrary(patterns: Pattern[], damaged: unknown[]): boolean {
-  return writeRaw(PATTERNS_KEY, [...patterns, ...damaged])
-}
-
-/**
- * Record whether a write landed, and say whether the coach should also be
- * told that damaged rows were carried through it.
- */
-function recordWrite(ok: boolean, damaged: unknown[]): boolean {
-  lastWriteSucceeded.value = ok
-  return ok && damaged.length > 0
 }
 
 function nowIso(): string {
@@ -611,6 +533,17 @@ function patternToSnapshot(pattern: Pattern): BoardSnapshot {
     notesVisible: (copy.notesVisible as boolean | undefined) ?? true,
     pitch: copy.pitch as BoardSnapshot['pitch'],
   }
+}
+
+/**
+ * The draft is a single value, not an array of entities, so it does not fit
+ * `readCollection`'s per-row parsing — this stays local rather than moving
+ * into `collection.ts`, which knows nothing but collections.
+ */
+function readRaw(key: string): unknown {
+  const text = localStorage.getItem(key)
+  if (text === null) return null
+  return JSON.parse(text)
 }
 
 function saveDraft(snap: BoardSnapshot): void {
