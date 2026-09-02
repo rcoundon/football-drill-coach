@@ -73,6 +73,17 @@ describe('renderFrameToDataUrl', () => {
     expect(capturedSvg!.querySelector('[data-selected-token]')).toBeNull()
   })
 
+  it('hides player numbers when the drill was saved with them off', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    board.toggleCounterLabelsVisible()
+    const pattern = storage.savePattern('Numbers off', board.snapshot())
+
+    await renderFrameToDataUrl(pattern, 0)
+
+    expect(capturedSvg!.querySelector('[data-counter-label]')).toBeNull()
+  })
+
   it('leaves nothing mounted in the document behind it', async () => {
     const board = useBoard()
     const pattern = storage.savePattern('One', board.snapshot())

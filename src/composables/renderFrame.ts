@@ -51,6 +51,7 @@ export async function renderFrameToDataUrl(
     frame,
     pitch: snapshot.pitch,
     labelsVisible: snapshot.labelsVisible,
+    counterLabelsVisible: snapshot.counterLabelsVisible,
     ballsVisible: snapshot.ballsVisible,
   })
 
