@@ -46,7 +46,12 @@ function isValidCounter(value: unknown): boolean {
     typeof value.id === 'string' &&
     typeof value.color === 'string' &&
     typeof value.label === 'string' &&
-    isVec(value.pos)
+    isVec(value.pos) &&
+    // Curved runs arrived after version 3, so a counter with neither field is
+    // a straight run saved before them. A value that is present must still be
+    // a real number: anything else reaches the tween as a NaN position.
+    isOptionalNumber(value.bend) &&
+    isOptionalNumber(value.bendAlong)
   )
 }
 
