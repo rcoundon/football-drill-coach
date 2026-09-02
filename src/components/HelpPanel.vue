@@ -147,6 +147,16 @@ const emit = defineEmits<{ close: [] }>()
           it, a phase takes one second to arrive.
         </p>
         <p>
+          A player travels in a straight line from where they stood on the phase
+          before. To bend the run, pick them up under Move on any phase after the
+          first: a dashed trail shows the path they took to get here, with a dot at
+          its middle. Drag the dot off the trail to bow the run, or along it to slide
+          where the bow peaks — an arc round the back of a defender, or a run that
+          curves away and straightens. Drag the dot back onto the straight line, or
+          press Straighten in the panel, to lose the curve again. A ball at the
+          player's feet follows them round.
+        </p>
+        <p>
           Play watches the drill from where you are, and the clock beside it says where the
           playhead is and how long the whole drill runs. Press a card to jump to that phase, or
           drag it onto another card to reorder the two. Each card's <kbd>⋯</kbd> button holds

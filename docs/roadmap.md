@@ -25,9 +25,10 @@ Frames, tweening, scrubbing and playback have landed. What is left:
 - **Timing one movement against another.** A run that starts before the pass
   that finds it. Every object on a frame currently moves over the same
   duration, and staggering them needs its own model and its own UI.
-- **Motion paths.** A player travels in a straight line between frames. A
-  curved run is expressed by adding a frame at the turn, which is usually
-  enough — worth revisiting only if it turns out not to be.
+- **Curved passes.** A player's run bends; a ball played into space still
+  travels straight. The curve sampler and the handle are already shared, so
+  this is a field on `Ball`, a branch in the flight path, and a handle on the
+  token — worth doing when a coach asks for a whipped cross.
 
 ## Smaller things
 

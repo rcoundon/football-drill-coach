@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { CounterColor, SelectionRef } from '../types'
 import { COUNTER_COLORS } from '../geometry'
+import { runInto } from '../animation'
 import { MAX_NOTES_LENGTH, useBoard } from '../composables/useBoard'
 import { useViewport } from '../composables/useViewport'
 import { SWATCHES } from './controls'
@@ -101,6 +102,40 @@ function recolour(color: CounterColor): void {
 
 /** Names what the buttons would act on, so a coach can see before pressing. */
 const heldLabel = computed(() => (held.value === 1 ? subject.value.toLowerCase() : `${held.value} things`))
+
+/**
+ * The run into this phase, when the held player has one.
+ *
+ * `runInto` rather than a second derivation: the board draws a trail under
+ * the same conditions, and the panel is describing the thing the board is
+ * showing, so the two must agree exactly about when a run exists.
+ */
+const runCurve = computed(() => {
+  const held = counter.value
+  if (!held) return null
+  const run = runInto(board.state.frames, board.state.currentFrame, held.id)
+  if (!run) return null
+  return { id: held.id, bend: run.bend }
+})
+
+/**
+ * The curve in the coach's words.
+ *
+ * Left and right are read from the direction of travel rather than from the
+ * screen, so the words still hold when the board is rotated — which is the
+ * same reason the bend itself is held against the chord.
+ */
+const curveLabel = computed(() => {
+  const curve = runCurve.value
+  if (!curve || curve.bend === 0) return 'Straight'
+  const side = curve.bend > 0 ? 'right' : 'left'
+  return `Bows ${side} ${Math.round(Math.abs(curve.bend))}m`
+})
+
+function straightenRun(): void {
+  const curve = runCurve.value
+  if (curve) board.setCounterBend(curve.id, 0)
+}
 </script>
 
 <template>
@@ -190,6 +225,21 @@ const heldLabel = computed(() => (held.value === 1 ? subject.value.toLowerCase()
             :aria-label="`Make this player ${color}`"
             @click="recolour(color)"
           />
+        </div>
+      </div>
+
+      <div v-if="runCurve" data-run-curve class="field">
+        <span class="field-label">Run into this phase</span>
+        <div class="curve-row">
+          <span class="curve-reading">{{ curveLabel }}</span>
+          <button
+            v-if="runCurve.bend !== 0"
+            data-straighten-run
+            class="chip"
+            :disabled="board.isDerived.value"
+            title="Take the bow out of this run"
+            @click="straightenRun"
+          >Straighten</button>
         </div>
       </div>
 
@@ -341,6 +391,10 @@ const heldLabel = computed(() => (held.value === 1 ? subject.value.toLowerCase()
 }
 
 .hint { margin: 0; font-size: 0.8rem; opacity: 0.7; }
+
+.curve-row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.curve-row .chip { flex: none; }
+.curve-reading { font-size: 0.85rem; }
 
 .actions { display: flex; gap: 0.4rem; margin-top: auto; }
 .chip {
