@@ -111,11 +111,11 @@ const heldLabel = computed(() => (held.value === 1 ? subject.value.toLowerCase()
  * showing, so the two must agree exactly about when a run exists.
  */
 const runCurve = computed(() => {
-  const held = counter.value
-  if (!held) return null
-  const run = runInto(board.state.frames, board.state.currentFrame, held.id)
+  const player = counter.value
+  if (!player) return null
+  const run = runInto(board.state.frames, board.state.currentFrame, player.id)
   if (!run) return null
-  return { id: held.id, bend: run.bend }
+  return { id: player.id, bend: run.bend }
 })
 
 /**

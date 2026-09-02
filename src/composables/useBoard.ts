@@ -543,7 +543,17 @@ function duplicateFrame(index: number): number {
   if (index < 0 || index >= state.frames.length) return state.currentFrame
   commit()
   const at = index + 1
-  state.frames.splice(at, 0, clone(toRaw(state).frames[index]))
+  const copy = clone(toRaw(state).frames[index])
+  // A counter's bend describes the leg walked into the frame it sits on. The
+  // copy starts with nobody having walked into it yet — its cast stands
+  // exactly where the original's does — so a bend copied along would describe
+  // a leg that does not exist until the coach drags someone. Left in place it
+  // would surface the moment that drag happens, as a curve nobody drew.
+  for (const counter of copy.counters) {
+    delete counter.bend
+    delete counter.bendAlong
+  }
+  state.frames.splice(at, 0, copy)
   state.currentFrame = at
   parkPlayhead()
   return at

@@ -17,7 +17,7 @@ const props = withDefaults(
 )
 defineEmits<{ grab: [event: PointerEvent] }>()
 
-/** The drawn dot, in pitch units. Small enough not to hide the arrow it rides. */
+/** The drawn dot, in pitch units. Small enough not to hide the line it rides. */
 const RADIUS = 0.9
 
 /** A finger is far bigger than the dot, so the hit target is larger. */
