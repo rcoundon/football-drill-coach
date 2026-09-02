@@ -47,12 +47,14 @@ function create() {
   // there is nothing to put at the top of its PDF.
   if (!name) return
   sessions.createSession(name)
-  newName.value = ''
   // createSession writes nothing when the library is unreadable, and a write
   // can fail on quota, so success is not something to claim on faith: refresh()
   // starts with lastError cleared, which would erase the error banner that is
-  // the only thing telling the coach the session was not saved.
+  // the only thing telling the coach the session was not saved. The field is
+  // cleared only once that guard has passed — a coach whose write failed
+  // still has what they typed to try again with.
   if (!sessions.lastWriteSucceeded.value) return
+  newName.value = ''
   refresh()
 }
 
@@ -71,10 +73,20 @@ function openSession(session: Session) {
 
 function saveRename(id: string) {
   const name = renameDraft.value.trim()
-  renamingId.value = null
-  if (!name) return
+  // An empty name is a cancel, same as pressing Cancel: there is nothing to
+  // write, so the row closes straight away rather than waiting on a guard
+  // that no write is going to trip.
+  if (!name) {
+    renamingId.value = null
+    return
+  }
   sessions.renameSession(id, name)
+  // renameSession writes nothing when the library is unreadable, and a write
+  // can fail on quota, so success is not something to claim on faith: the
+  // row stays open on a failed write rather than closing over a rename that
+  // never landed.
   if (!sessions.lastWriteSucceeded.value) return
+  renamingId.value = null
   refresh()
   // Read the renamed session back off the refreshed list rather than
   // building `{ id, name }` by hand, so App gets the same updatedAt the
