@@ -1,9 +1,20 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ArrowDrawing } from '../types'
+import type { Vec } from '../types'
 import { curveHandle } from '../geometry'
 
-const props = defineProps<{ arrow: ArrowDrawing }>()
+const props = withDefaults(
+  defineProps<{
+    /** The chord this handle bends: from where the movement starts, to where it ends. */
+    from: Vec
+    to: Vec
+    bend?: number
+    bendAlong?: number
+    /** The dot takes the colour of whatever it is bending. */
+    color: string
+  }>(),
+  { bend: 0, bendAlong: 0 },
+)
 defineEmits<{ grab: [event: PointerEvent] }>()
 
 /** The drawn dot, in pitch units. Small enough not to hide the arrow it rides. */
@@ -17,9 +28,7 @@ const BEND_HIT_RADIUS = 2.6
  * bends the line the coach can see rather than moving an abstract control
  * point somewhere off it.
  */
-const at = computed(() =>
-  curveHandle(props.arrow.from, props.arrow.to, props.arrow.bend ?? 0, props.arrow.bendAlong ?? 0),
-)
+const at = computed(() => curveHandle(props.from, props.to, props.bend, props.bendAlong))
 </script>
 
 <template>
@@ -36,7 +45,7 @@ const at = computed(() =>
       :cx="at.x"
       :cy="at.y"
       :r="RADIUS"
-      :fill="arrow.color"
+      :fill="color"
       stroke="#00000060"
       stroke-width="0.2"
     />

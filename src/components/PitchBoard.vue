@@ -1100,7 +1100,11 @@ function onPointerUp(event: PointerEvent) {
       <BendHandle
         v-for="arrow in bendHandles"
         :key="`bend-${arrow.id}`"
-        :arrow="arrow"
+        :from="arrow.from"
+        :to="arrow.to"
+        :bend="arrow.bend"
+        :bend-along="arrow.bendAlong"
+        :color="arrow.color"
         @grab="onBendGrab(arrow.id, $event)"
       />
       <template v-for="segment in endHandles" :key="`ends-${segment.id}`">
