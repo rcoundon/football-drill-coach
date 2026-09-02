@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import SessionPlan from '../src/components/SessionPlan.vue'
 import { useSessions } from '../src/composables/useSessions'
@@ -13,6 +13,19 @@ beforeEach(() => {
   localStorage.clear()
   __resetBoardForTests()
 })
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
+/** Same idiom PatternLibrary.spec.ts and useStorage.spec.ts use to make the next write fail. */
+function failNextWrite() {
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
+    const error = new Error('quota') as Error & { name: string }
+    error.name = 'QuotaExceededError'
+    throw error
+  })
+}
 
 function sessionWith(entries: Array<{ patternId: string; minutes: number }>): Session {
   const created = sessions.createSession('Tuesday')
@@ -131,6 +144,39 @@ describe('SessionPlan', () => {
     await rondo.trigger('click')
 
     expect(wrapper.findAll('[data-pick]')).toHaveLength(1)
+  })
+
+  it('does not persist a change when the write fails, and leaves the list as saved', async () => {
+    const a = storage.savePattern('Rondo', useBoard().snapshot())
+    const session = sessionWith([{ patternId: a.id, minutes: 12 }])
+
+    const wrapper = mount(SessionPlan, { props: { session } })
+    failNextWrite()
+    await wrapper.find('[data-remove]').trigger('click')
+
+    // `entries` was spliced optimistically before the write was attempted.
+    // Unless that splice is rolled back on failure, the row disappears from
+    // the panel while the storage row it claims to have removed is still
+    // there — a removal, addition or reorder reported as done that never
+    // actually happened.
+    expect(wrapper.findAll('[data-entry]')).toHaveLength(1)
+    expect(sessions.listSessions()[0].entries).toHaveLength(1)
+  })
+
+  it('rejects an emptied minutes value and puts the stored number back in the field', async () => {
+    const a = storage.savePattern('Rondo', useBoard().snapshot())
+    const session = sessionWith([{ patternId: a.id, minutes: 12 }])
+
+    const wrapper = mount(SessionPlan, { props: { session } })
+    const input = wrapper.find('[data-minutes]')
+    await input.setValue('')
+
+    // `:value="entry.minutes"` does not repaint the input on its own here —
+    // the bound number never changed, so Vue skips the DOM write — which
+    // would otherwise leave the field showing blank while 12 is still what
+    // is saved.
+    expect((input.element as HTMLInputElement).value).toBe('12')
+    expect(sessions.listSessions()[0].entries[0].minutes).toBe(12)
   })
 
   it('asks App to export rather than exporting itself', async () => {

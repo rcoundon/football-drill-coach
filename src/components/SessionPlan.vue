@@ -64,39 +64,60 @@ const total = computed(() =>
 // quietly answer a different question from the panel beside it.
 const pickable = computed(() => patterns.value.filter((pattern) => matchesTags(pattern, pickerTags.value)))
 
-/** Every edit writes through. There is no Save button to forget to press. */
-function commit() {
+/**
+ * Every edit writes through. There is no Save button to forget to press.
+ *
+ * `entries` is mutated optimistically before this runs, so a quota failure
+ * that goes unchecked would report success while the row visibly moved, was
+ * added or was removed with nothing actually saved — the coach reopens the
+ * session later to find their edit was never there. `previous` is the state
+ * `entries` held right before that mutation; a failed write restores it
+ * rather than leaving the optimistic change standing.
+ */
+function commit(previous: Session['entries']) {
   if (!props.session) return
   sessions.saveSession({ ...props.session, entries: [...entries.value] })
+  if (!sessions.lastWriteSucceeded.value) entries.value = previous
 }
 
 function move(index: number, by: number) {
   const to = index + by
   if (to < 0 || to >= entries.value.length) return
+  const before = [...entries.value]
   const [entry] = entries.value.splice(index, 1)
   entries.value.splice(to, 0, entry)
-  commit()
+  commit(before)
 }
 
 function remove(index: number) {
+  const before = [...entries.value]
   entries.value.splice(index, 1)
-  commit()
+  commit(before)
 }
 
-function setMinutes(index: number, value: string) {
-  const minutes = Number(value)
+function setMinutes(index: number, event: Event) {
+  const input = event.target as HTMLInputElement
+  const minutes = Number(input.value)
   // Refuse rather than store: minutes are validated on the way back in, and a
   // zero or blank field would make the whole session unreadable next time it
-  // is opened.
-  if (!Number.isFinite(minutes) || minutes <= 0) return
+  // is opened. `:value` will not repaint the input on its own here — Vue
+  // skips the DOM write when the bound number hasn't changed — so the field
+  // is pushed back to what is actually stored by hand, or a rejected edit
+  // leaves it showing blank (or whatever was typed) instead.
+  if (!Number.isFinite(minutes) || minutes <= 0) {
+    input.value = String(entries.value[index].minutes)
+    return
+  }
+  const before = [...entries.value]
   entries.value[index] = { ...entries.value[index], minutes }
-  commit()
+  commit(before)
 }
 
 function add(pattern: Pattern) {
+  const before = [...entries.value]
   entries.value.push(sessions.newEntry(pattern.id, 10))
   picking.value = false
-  commit()
+  commit(before)
 }
 
 /**
@@ -135,7 +156,7 @@ function currentSession(): Session {
             min="1"
             :value="entry.minutes"
             :aria-label="`Minutes for ${byId.get(entry.patternId)?.name ?? 'this drill'}`"
-            @change="setMinutes(index, ($event.target as HTMLInputElement).value)"
+            @change="setMinutes(index, $event)"
           />
           <span class="meta">min</span>
 
