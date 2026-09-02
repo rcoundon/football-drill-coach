@@ -1,4 +1,4 @@
-import type { Ball, Counter, Drawing, Frame, Label, Marker, Pattern } from '../types'
+import type { Ball, Counter, Drawing, Frame, Label, Marker, Pattern, Session } from '../types'
 import type { BoardSnapshot } from './useBoard'
 import type { Vec } from '../types'
 import {
@@ -10,6 +10,9 @@ import {
   writeCollection,
   writeRaw,
 } from './collection'
+import { parseSession, SESSIONS_KEY, useSessions } from './useSessions'
+
+const sessions = useSessions()
 
 export const PATTERNS_KEY = 'fct.patterns.v1'
 export const DRAFT_KEY = 'fct.draft.v1'
@@ -657,16 +660,21 @@ function loadDraft(): BoardSnapshot | null {
   }
 }
 
-function exportPatternsJson(patterns: Pattern[]): string {
-  return JSON.stringify(patterns, null, 2)
+function exportBundleJson(patterns: Pattern[], sessionList: Session[]): string {
+  return JSON.stringify({ patterns, sessions: sessionList }, null, 2)
 }
 
 /**
- * Validate an exported file whole, then merge. A pattern whose id already
- * exists is added under a NEW id with a suffixed name, so importing can
- * never silently overwrite the coach's existing work.
+ * Validate an exported file whole, then merge both collections.
+ *
+ * A pattern whose id already exists is added under a NEW id with a suffixed
+ * name, so importing can never silently overwrite the coach's work. That
+ * re-idding is why sessions cannot simply be written as they arrive: every
+ * `patternId` in the file would point at an id that had just changed, and
+ * the coach would open a session of entirely missing drills. The remap
+ * threads the new ids through the incoming entries before they land.
  */
-function importPatterns(json: string): Pattern[] {
+function importBundle(json: string): { patterns: Pattern[]; sessions: Session[] } {
   let raw: unknown
   try {
     raw = JSON.parse(json)
@@ -674,7 +682,9 @@ function importPatterns(json: string): Pattern[] {
     throw new Error('That file is not valid JSON.')
   }
 
-  if (!Array.isArray(raw)) throw new Error('That file does not contain a list of patterns.')
+  if (!isObject(raw) || !Array.isArray(raw.patterns) || !Array.isArray(raw.sessions)) {
+    throw new Error('That file is not a saved bundle of drills and sessions.')
+  }
 
   const { patterns, unreadable, damaged } = readLibrary()
   if (unreadable) {
@@ -688,29 +698,87 @@ function importPatterns(json: string): Pattern[] {
   // land as two chips in the filter row for what the coach meant as one tag.
   // Import is where untrusted data enters the library, so it is normalised
   // here, the same way `setTags` normalises a tag typed by hand.
-  const incoming = raw.map((entry) => parsePattern(entry)).map((pattern) =>
-    pattern.tags === undefined ? pattern : { ...pattern, tags: normaliseTags(pattern.tags) },
-  )
+  const incoming = raw.patterns.map((entry) => {
+    const pattern = parsePattern(entry)
+    return { ...pattern, tags: normaliseTags(pattern.tags ?? []) }
+  })
+  const incomingSessions = raw.sessions.map((entry) => parseSession(entry))
 
   // Tracked incrementally: a collision can be with the existing library OR
   // with an earlier entry in this same file. Either way the id must be
-  // unique before it lands in localStorage.
+  // unique before it lands in localStorage. `remap` carries the old id
+  // forward so the sessions below can follow a re-idded pattern to its new one.
   const seenIds = new Set(patterns.map((p) => p.id))
-
+  const remap = new Map<string, string>()
   const added: Pattern[] = []
+
   for (const pattern of incoming) {
     if (!seenIds.has(pattern.id)) {
       seenIds.add(pattern.id)
       added.push(pattern)
       continue
     }
-    const renamed = { ...pattern, id: makeId(), name: `${pattern.name} (imported)` }
-    seenIds.add(renamed.id)
-    added.push(renamed)
+    const fresh = makeId()
+    remap.set(pattern.id, fresh)
+    seenIds.add(fresh)
+    added.push({ ...pattern, id: fresh, name: `${pattern.name} (imported)` })
   }
 
-  recordWrite(writeLibrary([...patterns, ...added], damaged), damaged)
-  return added
+  // The sessions store is read BEFORE either write, so an unreadable one
+  // aborts the whole import rather than leaving patterns written and sessions
+  // destroyed. Nothing has been written at this point, so throwing is clean.
+  const sessionRead = readCollection(SESSIONS_KEY, parseSession)
+  if (sessionRead.unreadable) {
+    throw new Error(
+      'Your saved sessions could not be read, so importing now would overwrite them. Export or clear your saved sessions first, then try again.',
+    )
+  }
+
+  // Patterns first, deliberately. localStorage has no transaction, so if the
+  // second write fails the import is partial either way — and patterns without
+  // their sessions is the additive half. Sessions landing first would leave
+  // entries pointing at drills that were never written: rows the coach has to
+  // clear by hand.
+  //
+  // `recordWrite`'s return says whether damaged rows rode along, not whether
+  // the write landed — that check is `patternsWritten` itself, same as every
+  // other mutator in this file.
+  const patternsWritten = writeLibrary([...patterns, ...added], damaged)
+  if (recordWrite(patternsWritten, damaged)) {
+    lastError.value = damagedMessage(damaged.length)
+  }
+  if (!patternsWritten) {
+    throw new Error('The imported drills could not be saved to this browser.')
+  }
+
+  const sessionIds = new Set(sessionRead.items.map((s) => s.id))
+  const addedSessions = incomingSessions.map((session) => {
+    // Tracked incrementally, exactly as the pattern loop above tracks
+    // `seenIds`: a collision can be with the stored sessions OR with an
+    // earlier session in this same file, and two sessions sharing an id
+    // would render under duplicate keys and have rename and delete hit
+    // whichever one `find` returned first.
+    const id = sessionIds.has(session.id) ? makeId() : session.id
+    sessionIds.add(id)
+    return {
+      ...session,
+      id,
+      entries: session.entries.map((entry) => ({
+        ...entry,
+        patternId: remap.get(entry.patternId) ?? entry.patternId,
+      })),
+    }
+  })
+
+  // Goes through the sessions module's own bulk write rather than poking
+  // `writeCollection` directly here — that keeps the upsert-by-id and
+  // damaged-row handling in the one place that already owns it.
+  sessions.saveSessions(addedSessions)
+  if (!lastWriteSucceeded.value) {
+    throw new Error('The imported sessions could not be saved to this browser.')
+  }
+
+  return { patterns: added, sessions: addedSessions }
 }
 
 const storage = {
@@ -723,8 +791,8 @@ const storage = {
   patternToSnapshot,
   saveDraft,
   loadDraft,
-  importPatterns,
-  exportPatternsJson,
+  importBundle,
+  exportBundleJson,
   lastError,
   lastWriteSucceeded,
 }

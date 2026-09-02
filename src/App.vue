@@ -17,11 +17,13 @@ import TagInput from './components/TagInput.vue'
 import PhaseTimeline from './components/PhaseTimeline.vue'
 import { MAX_LABEL_LENGTH, useBoard } from './composables/useBoard'
 import { useStorage } from './composables/useStorage'
+import { useSessions } from './composables/useSessions'
 import { useExport } from './composables/useExport'
 import { useViewport } from './composables/useViewport'
 
 const board = useBoard()
 const storage = useStorage()
+const sessions = useSessions()
 const { isPortrait, isCompact } = useViewport()
 
 /**
@@ -575,14 +577,17 @@ function exportJson() {
     notice.value = 'There are no saved patterns to export.'
     return
   }
-  exporter.downloadText(storage.exportPatternsJson(patterns), 'tactics-patterns.json')
+  exporter.downloadText(
+    storage.exportBundleJson(patterns, sessions.listSessions()),
+    'tactics-patterns.json',
+  )
 }
 
 async function importJson() {
   try {
     const text = await exporter.pickJsonFile()
-    const added = storage.importPatterns(text)
-    notice.value = `Imported ${added.length} pattern(s).`
+    const added = storage.importBundle(text)
+    notice.value = `Imported ${added.patterns.length} pattern(s).`
   } catch (error) {
     notice.value = error instanceof Error ? error.message : 'That file could not be imported.'
   }
