@@ -12,6 +12,7 @@ import {
   interpolateFrames,
   lerp,
   pointOnCurve,
+  runInto,
   timelineOf,
 } from '../src/animation'
 
@@ -409,5 +410,41 @@ describe('a curved run in playback', () => {
     const a = frame({ counters: [counter('c1', 10, 10)], balls: [] })
     const b = frame({ counters: [], balls: [] })
     expect(interpolateFrames(a, b, 0.5).counters[0].pos).toEqual({ x: 10, y: 10 })
+  })
+})
+
+describe('runInto', () => {
+  it('is null before the first phase', () => {
+    const frames = [frame({ counters: [counter('c1', 10, 10)] })]
+    expect(runInto(frames, 0, 'c1')).toBeNull()
+  })
+
+  it('is null for a player absent from either phase', () => {
+    const frames = [
+      frame({ counters: [counter('c1', 10, 10)] }),
+      frame({ counters: [counter('c1', 30, 10)] }),
+    ]
+    expect(runInto(frames, 1, 'ghost')).toBeNull()
+  })
+
+  it('is null for a player who did not move', () => {
+    const frames = [
+      frame({ counters: [counter('c1', 10, 10)] }),
+      frame({ counters: [counter('c1', 10, 10)] }),
+    ]
+    expect(runInto(frames, 1, 'c1')).toBeNull()
+  })
+
+  it('returns the run into the phase, with the bend read off the arriving frame', () => {
+    const frames = [
+      frame({ counters: [counter('c1', 10, 10)] }),
+      frame({ counters: [{ ...counter('c1', 30, 10), bend: 6, bendAlong: 0.25 }] }),
+    ]
+    expect(runInto(frames, 1, 'c1')).toEqual({
+      from: { x: 10, y: 10 },
+      to: { x: 30, y: 10 },
+      bend: 6,
+      bendAlong: 0.25,
+    })
   })
 })

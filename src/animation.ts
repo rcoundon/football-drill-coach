@@ -116,6 +116,27 @@ export function timelineOf(frames: Frame[]): Timeline {
   }
 }
 
+/**
+ * The run a held player made to reach this phase: where they were, where
+ * they ended up, and the bend that phase already carries.
+ *
+ * Pure and shared rather than folded into the board, because the Inspector
+ * needs to answer the same question — is there a run here, and what does it
+ * look like — and the two must never disagree about it.
+ */
+export function runInto(
+  frames: Frame[],
+  index: number,
+  counterId: string,
+): { from: Vec; to: Vec; bend: number; bendAlong: number } | null {
+  if (index < 1) return null
+  const was = frames[index - 1]?.counters.find((c) => c.id === counterId)
+  const now = frames[index]?.counters.find((c) => c.id === counterId)
+  if (!was || !now) return null
+  if (was.pos.x === now.pos.x && was.pos.y === now.pos.y) return null
+  return { from: was.pos, to: now.pos, bend: now.bend ?? 0, bendAlong: now.bendAlong ?? 0 }
+}
+
 /** Where the ball is actually drawn in a frame, carried or not. */
 export function ballPositionIn(frame: FrameView, ball: Ball): Vec {
   if (ball.attachedTo) {
