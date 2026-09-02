@@ -3,6 +3,7 @@ import type { Pattern, Session } from '../src/types'
 
 const calls = {
   text: [] as string[],
+  textArgs: [] as { value: string; x: number; y: number }[],
   images: 0,
   imageArgs: [] as { x: number; y: number; width: number; height: number }[],
   pages: 0,
@@ -13,8 +14,10 @@ vi.mock('jspdf', () => {
     internal = { pageSize: { getWidth: () => 210, getHeight: () => 297 } }
     setFontSize() { return this }
     setTextColor() { return this }
-    text(value: string | string[]) {
-      calls.text.push(...(Array.isArray(value) ? value : [value]))
+    text(value: string | string[], x: number, y: number) {
+      const values = Array.isArray(value) ? value : [value]
+      calls.text.push(...values)
+      for (const v of values) calls.textArgs.push({ value: v, x, y })
       return this
     }
     addImage(_image: string, _format: string, x: number, y: number, width: number, height: number) {
@@ -66,6 +69,7 @@ function session(entries: Session['entries']): Session {
 
 beforeEach(() => {
   calls.text = []
+  calls.textArgs = []
   calls.images = 0
   calls.imageArgs = []
   calls.pages = 0
@@ -99,6 +103,28 @@ describe('buildSessionPdf', () => {
 
     // The cover, then one page per drill.
     expect(calls.pages).toBe(2)
+  })
+
+  it('continues the cover page running order onto a second page rather than running off the bottom', async () => {
+    const count = 40
+    const entries = Array.from({ length: count }, (_, i) => ({
+      id: `e${i}`,
+      patternId: `p${i}`,
+      minutes: 5,
+    }))
+    const patterns = Array.from({ length: count }, (_, i) => pattern({ id: `p${i}`, name: `Drill ${i}` }))
+
+    await buildSessionPdf({ session: session(entries), patterns })
+
+    // One page break for the running order overflowing the cover, plus one
+    // page per drill.
+    expect(calls.pages).toBe(count + 1)
+
+    // Every running-order line still made it into the document, including
+    // the ones pushed onto the continuation page.
+    const joined = calls.text.join(' | ')
+    expect(joined).toContain('1. Drill 0 — 5 min')
+    expect(joined).toContain(`${count}. Drill ${count - 1} — 5 min`)
   })
 
   it('draws up to four boards for a drill, and says which of how many', async () => {
@@ -204,6 +230,28 @@ describe('buildSessionPdf', () => {
     // at the same content width, so the only thing that can make one taller
     // than the other is the notes block's height being freed to the grid.
     expect(hidden.height).toBeGreaterThan(shown.height)
+  })
+
+  it('keeps the caption under a straight (landscape) board when its notes are hidden, rather than leaving it stranded below freed whitespace', async () => {
+    await buildSessionPdf({
+      session: session([{ id: 'e1', patternId: 'p1', minutes: 10 }]),
+      patterns: [
+        pattern({ id: 'p1', pitch: { type: 'blank', rotated: false }, notesVisible: false }),
+      ],
+    })
+
+    expect(calls.imageArgs).toHaveLength(1)
+    const [image] = calls.imageArgs
+    const caption = calls.textArgs.find((t) => t.value === 'Phase 1 of 1')
+    expect(caption).toBeDefined()
+
+    // A straight pitch is width-bound (see `fitInBox`), so notes-hidden's
+    // freed height cannot be used by the board image and must not be handed
+    // to the grid cell — the caption should sit just under the board, not
+    // tens of millimetres below it in reclaimed whitespace.
+    const gap = caption!.y - (image.y + image.height)
+    expect(gap).toBeGreaterThan(0)
+    expect(gap).toBeLessThan(10)
   })
 
   it('names the drill and phase when a rasterise fails, on top of the underlying reason', async () => {

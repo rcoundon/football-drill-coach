@@ -55,8 +55,16 @@ export type SessionPdfInput = {
  * grid, and the grid's rows grow to use it. When notes will print, the
  * caller omits it and the grid keeps the plain width-derived height so
  * there is room left underneath for the notes block.
+ *
+ * `boardAspect` is this drill's own rasterised aspect (see `fitInBox`), not
+ * the fixed `BOARD_ASPECT` the box shape itself is built from. It caps how
+ * far a freed-height cell can grow: `fitInBox` never draws an ordinary
+ * landscape board any taller than `cellWidth / boardAspect`, so height
+ * claimed past that cap would sit as whitespace under a caption that no
+ * longer sits under the board it names. Only a portrait (rotated) board,
+ * whose own aspect is well below the box's, has real height to reclaim.
  */
-function gridFor(count: number, width: number, maxHeight?: number) {
+function gridFor(count: number, width: number, boardAspect: number, maxHeight?: number) {
   const columns = count === 1 ? 1 : 2
   const rows = Math.ceil(count / columns)
   const cellWidth = (width - GUTTER * (columns - 1)) / columns
@@ -70,7 +78,12 @@ function gridFor(count: number, width: number, maxHeight?: number) {
   // width-derived height: a tight `maxHeight` should leave a scrap of
   // unused space, not squash the boards.
   const cellHeightByHeight = (maxHeight - rows * 5 - (rows - 1) * GUTTER) / rows
-  return { columns, cellWidth, cellHeight: Math.max(cellHeightByWidth, cellHeightByHeight) }
+  const cellHeightCap = cellWidth / boardAspect
+  return {
+    columns,
+    cellWidth,
+    cellHeight: Math.min(Math.max(cellHeightByWidth, cellHeightByHeight), cellHeightCap),
+  }
 }
 
 /**
@@ -131,7 +144,16 @@ export async function buildSessionPdf({
 
   let y = MARGIN + 38
   doc.setFontSize(12)
+  const coverPageHeight = doc.internal.pageSize.getHeight()
   live.forEach((entry, index) => {
+    // A long running order runs off the bottom of the cover page rather
+    // than stopping — around 34 drills at 7mm a line on an A4 page. Rather
+    // than truncate the plan or shrink it illegibly, it continues onto a
+    // fresh page, the same way each drill's own page does further down.
+    if (y > coverPageHeight - MARGIN) {
+      doc.addPage()
+      y = MARGIN + 8
+    }
     const pattern = byId.get(entry.patternId)!
     doc.text(`${index + 1}. ${pattern.name} — ${entry.minutes} min`, MARGIN, y)
     y += 7
@@ -160,16 +182,19 @@ export async function buildSessionPdf({
     const pageHeight = doc.internal.pageSize.getHeight()
     const availableHeight = pageHeight - MARGIN - top
 
+    // The rasterised image's own aspect, which swaps for a rotated board —
+    // see `fitInBox`. Computed before `gridFor` so it can cap how far a
+    // freed-height cell is allowed to grow.
+    const bounds = viewBoundsOf(pattern.pitch)
+    const boardAspect = bounds.width / bounds.height
+
     const picked = sampleFrameIndices(pattern.frames.length)
     const { columns, cellWidth, cellHeight } = gridFor(
       picked.length,
       contentWidth,
+      boardAspect,
       notesHidden ? availableHeight : undefined,
     )
-    // The rasterised image's own aspect, which swaps for a rotated board —
-    // see `fitInBox`.
-    const bounds = viewBoundsOf(pattern.pitch)
-    const boardAspect = bounds.width / bounds.height
 
     for (const [slot, frameIndex] of picked.entries()) {
       // A rasterise failure aborts the whole export rather than shipping a
@@ -204,7 +229,11 @@ export async function buildSessionPdf({
       doc.text(
         `Phase ${frameIndex + 1} of ${pattern.frames.length}`,
         boxX,
-        boxTop + cellHeight + 4,
+        // Under the image as actually drawn, not the cell it was drawn in —
+        // a width-bound board leaves the cell's freed height below it as
+        // whitespace (see `gridFor`), and a caption anchored to the cell
+        // would print orphaned below that gap instead of under the board.
+        boxTop + fitted.y + fitted.height + 4,
       )
     }
 
