@@ -353,3 +353,61 @@ describe('balls are matched by id, not by where they sit in the list', () => {
     expect(held.b2).toBe('c2')
   })
 })
+
+describe('a curved run in playback', () => {
+  it('leaves the straight line between the two phases', () => {
+    const a = frame({ counters: [counter('c1', 10, 10)], balls: [] })
+    const b = frame({ counters: [{ ...counter('c1', 30, 10), bend: 6 }], balls: [] })
+    const view = interpolateFrames(a, b, 0.5)
+    expect(view.counters[0].pos.y).not.toBeCloseTo(10, 6)
+  })
+
+  it('reads the bend off the phase being moved into, not the one being left', () => {
+    const a = frame({ counters: [{ ...counter('c1', 10, 10), bend: 6 }], balls: [] })
+    const b = frame({ counters: [counter('c1', 30, 10)], balls: [] })
+    const view = interpolateFrames(a, b, 0.5)
+    expect(view.counters[0].pos.y).toBeCloseTo(10, 10)
+  })
+
+  it('still arrives exactly where the phase says', () => {
+    const a = frame({ counters: [counter('c1', 10, 10)], balls: [] })
+    const b = frame({ counters: [{ ...counter('c1', 30, 10), bend: 6 }], balls: [] })
+    expect(interpolateFrames(a, b, 1).counters[0].pos).toEqual({ x: 30, y: 10 })
+  })
+
+  it('does not bend a cone', () => {
+    const a = frame({ counters: [], markers: [marker('m1', 10, 10)], balls: [] })
+    const b = frame({
+      counters: [],
+      markers: [{ ...marker('m1', 30, 10), bend: 6 } as unknown as Marker],
+      balls: [],
+    })
+    expect(interpolateFrames(a, b, 0.5).markers[0].pos.y).toBeCloseTo(10, 10)
+  })
+
+  it('carries a held ball around the curve with its carrier', () => {
+    const a = frame({ counters: [counter('c1', 10, 10)], balls: [ball(10, 10, 'c1')] })
+    const b = frame({
+      counters: [{ ...counter('c1', 30, 10), bend: 6 }],
+      balls: [ball(30, 10, 'c1')],
+    })
+    const view = interpolateFrames(a, b, 0.5)
+    expect(view.balls[0].pos.x).toBeCloseTo(view.counters[0].pos.x + BALL_OFFSET.x, 10)
+    expect(view.balls[0].pos.y).toBeCloseTo(view.counters[0].pos.y + BALL_OFFSET.y, 10)
+  })
+
+  it('does not bend a ball in flight', () => {
+    const a = frame({ counters: [counter('c1', 10, 10)], balls: [ball(10, 10, null)] })
+    const b = frame({
+      counters: [{ ...counter('c1', 30, 10), bend: 6 }],
+      balls: [ball(30, 10, null)],
+    })
+    expect(interpolateFrames(a, b, 0.5).balls[0].pos.y).toBeCloseTo(10, 10)
+  })
+
+  it('holds a player with no counterpart in the next phase', () => {
+    const a = frame({ counters: [counter('c1', 10, 10)], balls: [] })
+    const b = frame({ counters: [], balls: [] })
+    expect(interpolateFrames(a, b, 0.5).counters[0].pos).toEqual({ x: 10, y: 10 })
+  })
+})

@@ -139,6 +139,28 @@ function tweenAll<T extends { id: string; pos: Vec }>(from: T[], to: T[], e: num
 }
 
 /**
+ * Move each player towards where the next phase puts them, along the curve
+ * that phase asks for.
+ *
+ * The bend is read off the TARGET, because it describes the move into that
+ * frame — the same leg its `duration` times. A player with no counterpart in
+ * the target holds position, the insurance `tweenAll` gives everything else.
+ *
+ * Separate from `tweenAll` rather than a widening of it: cones and labels
+ * share that function and do not run, so there is no curve for them to take.
+ */
+function tweenCounters(from: Counter[], to: Counter[], e: number): Counter[] {
+  return from.map((item) => {
+    const target = to.find((other) => other.id === item.id)
+    if (!target) return { ...item }
+    return {
+      ...item,
+      pos: pointOnCurve(item.pos, target.pos, target.bend ?? 0, target.bendAlong ?? 0, e),
+    }
+  })
+}
+
+/**
  * How often the exported animation is sampled.
  *
  * 25 a second is 40ms, and GIF expresses delays in hundredths of a second, so
@@ -190,7 +212,7 @@ export function gifSchedule(frames: Frame[], fps = GIF_FPS): GifSample[] {
  */
 export function interpolateFrames(a: Frame, b: Frame, t: number): FrameView {
   const e = easeInOut(t)
-  const counters = tweenAll(a.counters, b.counters, e)
+  const counters = tweenCounters(a.counters, b.counters, e)
 
   /*
    * Per ball, matched by id, exactly as the players are.
