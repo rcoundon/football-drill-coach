@@ -128,6 +128,16 @@ describe('what it covers', () => {
     expect(section.text()).toMatch(/browser/i)
   })
 
+  /**
+   * sessionPdf.ts only prints a drill's notes on its page when that drill's
+   * own `notesVisible` is on — notes a coach has hidden stay hidden in the
+   * PDF too. The help text used to promise "its notes" unconditionally.
+   */
+  it('says a session PDF page carries a drill\'s notes only when they are showing', () => {
+    const section = mountHelp(true).get('[data-help-section="saving"]')
+    expect(section.text()).toMatch(/notes.{0,40}showing/i)
+  })
+
   it('lists keyboard shortcuts in a table, including the Space exception', () => {
     const section = mountHelp(true).get('[data-help-section="shortcuts"]')
     expect(section.find('table').exists()).toBe(true)
