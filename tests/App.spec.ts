@@ -1035,6 +1035,51 @@ describe('exporting the JSON bundle', () => {
   })
 })
 
+describe('importing the JSON bundle', () => {
+  /**
+   * Regression: the notice used to read `Imported ${patterns.length}
+   * pattern(s).` — built from only half of what `importBundle` returns, so
+   * a file carrying sessions said nothing about them.
+   */
+  it('reports both patterns and sessions imported', async () => {
+    const storage = useStorage()
+    const pattern = storage.savePattern('Rondo', sampleSnapshot())
+    const session = useSessions().createSession('Tuesday U12')
+    useSessions().saveSession({ ...session, entries: [useSessions().newEntry(pattern.id, 12)] })
+    const json = storage.exportBundleJson(storage.listPatterns(), useSessions().listSessions())
+    localStorage.clear()
+    vi.spyOn(useExport(), 'pickJsonFile').mockResolvedValue(json)
+    wrapper = mountApp()
+
+    await wrapper.find('[data-import-json]').trigger('click')
+    await vi.waitFor(() => {
+      expect(wrapper!.find('.notice').exists()).toBe(true)
+    })
+
+    expect(wrapper.find('.notice').text()).toBe('Imported 1 pattern(s) and 1 session(s).')
+  })
+
+  /**
+   * The other half of the same bug: a file of sessions with no new patterns
+   * used to read "Imported 0 pattern(s)." and say nothing about the
+   * sessions it had just added.
+   */
+  it('reports the session count for a file with no new patterns', async () => {
+    const storage = useStorage()
+    const session = useSessions().createSession('Tuesday U12')
+    const json = storage.exportBundleJson([], [session])
+    vi.spyOn(useExport(), 'pickJsonFile').mockResolvedValue(json)
+    wrapper = mountApp()
+
+    await wrapper.find('[data-import-json]').trigger('click')
+    await vi.waitFor(() => {
+      expect(wrapper!.find('.notice').exists()).toBe(true)
+    })
+
+    expect(wrapper.find('.notice').text()).toBe('Imported 0 pattern(s) and 1 session(s).')
+  })
+})
+
 describe('tagging while forking a drill', () => {
   it('starts the copy with the original’s tags pressed, and files it under them', async () => {
     const store = useStorage()

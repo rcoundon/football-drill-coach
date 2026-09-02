@@ -656,7 +656,10 @@ async function importJson() {
   try {
     const text = await exporter.pickJsonFile()
     const added = storage.importBundle(text)
-    notice.value = `Imported ${added.patterns.length} pattern(s).`
+    // importBundle returns both collections, so a file carrying sessions —
+    // with or without any new patterns — has to be reported on both counts,
+    // not just the one this used to mention.
+    notice.value = `Imported ${added.patterns.length} pattern(s) and ${added.sessions.length} session(s).`
   } catch (error) {
     notice.value = error instanceof Error ? error.message : 'That file could not be imported.'
   }
