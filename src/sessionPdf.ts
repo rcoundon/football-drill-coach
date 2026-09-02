@@ -48,11 +48,29 @@ export type SessionPdfInput = {
  * straight grid — every cell in the grid is the same shape no matter which
  * drill's boards are going in it. What varies per drill is how the image is
  * placed inside its box; see `fitInBox`.
+ *
+ * `maxHeight` is how a hidden `notesVisible` reaches this function: when a
+ * drill's notes will not print, the caller passes the full height down to
+ * the page's bottom margin instead of leaving it as dead space below the
+ * grid, and the grid's rows grow to use it. When notes will print, the
+ * caller omits it and the grid keeps the plain width-derived height so
+ * there is room left underneath for the notes block.
  */
-function gridFor(count: number, width: number) {
+function gridFor(count: number, width: number, maxHeight?: number) {
   const columns = count === 1 ? 1 : 2
+  const rows = Math.ceil(count / columns)
   const cellWidth = (width - GUTTER * (columns - 1)) / columns
-  return { columns, cellWidth, cellHeight: cellWidth / BOARD_ASPECT }
+  const cellHeightByWidth = cellWidth / BOARD_ASPECT
+  if (maxHeight === undefined) {
+    return { columns, cellWidth, cellHeight: cellHeightByWidth }
+  }
+  // Each row costs its own cell height plus a caption line, and every gap
+  // between rows costs a gutter — the same accounting the caller uses to
+  // place each row (see `boxTop` below). Never shrink below the plain
+  // width-derived height: a tight `maxHeight` should leave a scrap of
+  // unused space, not squash the boards.
+  const cellHeightByHeight = (maxHeight - rows * 5 - (rows - 1) * GUTTER) / rows
+  return { columns, cellWidth, cellHeight: Math.max(cellHeightByWidth, cellHeightByHeight) }
 }
 
 /**
@@ -134,15 +152,40 @@ export async function buildSessionPdf({
       top += 6
     }
 
+    // A drill with its notes turned off has nothing printed below the grid
+    // (see the `notes` block further down), so the grid is handed the whole
+    // remaining page rather than the plain width-derived height that would
+    // otherwise leave that reclaimed space blank.
+    const notesHidden = pattern.notesVisible === false
+    const pageHeight = doc.internal.pageSize.getHeight()
+    const availableHeight = pageHeight - MARGIN - top
+
     const picked = sampleFrameIndices(pattern.frames.length)
-    const { columns, cellWidth, cellHeight } = gridFor(picked.length, contentWidth)
+    const { columns, cellWidth, cellHeight } = gridFor(
+      picked.length,
+      contentWidth,
+      notesHidden ? availableHeight : undefined,
+    )
     // The rasterised image's own aspect, which swaps for a rotated board —
     // see `fitInBox`.
     const bounds = viewBoundsOf(pattern.pitch)
     const boardAspect = bounds.width / bounds.height
 
     for (const [slot, frameIndex] of picked.entries()) {
-      const image = await renderFrameToDataUrl(pattern, frameIndex)
+      // A rasterise failure aborts the whole export rather than shipping a
+      // PDF with a gap in it — but a bare canvas/SVG error names neither
+      // the drill nor the phase, so it is rethrown with both stitched on
+      // for whatever shows the failure notice.
+      let image: string
+      try {
+        image = await renderFrameToDataUrl(pattern, frameIndex)
+      } catch (cause) {
+        const reason = cause instanceof Error ? cause.message : String(cause)
+        throw new Error(
+          `Could not render "${pattern.name}" (phase ${frameIndex + 1} of ${pattern.frames.length}): ${reason}`,
+          { cause },
+        )
+      }
       const column = slot % columns
       const row = Math.floor(slot / columns)
       const boxX = MARGIN + column * (cellWidth + GUTTER)
@@ -169,14 +212,14 @@ export async function buildSessionPdf({
     const notesTop = top + rows * (cellHeight + GUTTER + 5) + 4
 
     // Notes the coach has turned off are off everywhere. A session that
-    // reinstated them would export something they had explicitly hidden,
-    // and it frees the height notes would have used for the board grid
-    // above — nothing here reserves space for text that will not print.
-    const notes = pattern.notesVisible === false ? '' : (pattern.notes ?? '')
+    // reinstated them would export something they had explicitly hidden;
+    // the height they would have used already went to the grid above via
+    // `notesHidden` in `gridFor`, rather than sitting here unused.
+    const notes = notesHidden ? '' : (pattern.notes ?? '')
     if (notes.trim()) {
       doc.setFontSize(11)
       const lines = doc.splitTextToSize(notes, contentWidth) as string[]
-      const room = Math.max(0, Math.floor((doc.internal.pageSize.getHeight() - MARGIN - notesTop) / 5))
+      const room = Math.max(0, Math.floor((pageHeight - MARGIN - notesTop) / 5))
       doc.text(lines.slice(0, room), MARGIN, notesTop)
       if (lines.length > room) {
         doc.text('Notes continue in the app.', MARGIN, notesTop + room * 5)

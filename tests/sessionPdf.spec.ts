@@ -184,4 +184,36 @@ describe('buildSessionPdf', () => {
     expect(rotated.width).toBeLessThan(straight.width)
     expect(rotated.x).toBeGreaterThan(straight.x)
   })
+
+  it('gives a hidden-notes drill the freed height back to its board grid', async () => {
+    await buildSessionPdf({
+      session: session([
+        { id: 'e1', patternId: 'shown', minutes: 10 },
+        { id: 'e2', patternId: 'hidden', minutes: 10 },
+      ]),
+      patterns: [
+        pattern({ id: 'shown', pitch: { type: 'blank', rotated: true }, notesVisible: true }),
+        pattern({ id: 'hidden', pitch: { type: 'blank', rotated: true }, notesVisible: false }),
+      ],
+    })
+
+    expect(calls.imageArgs).toHaveLength(2)
+    const [shown, hidden] = calls.imageArgs
+
+    // Both are the same rotated (portrait) board sampled to a single frame
+    // at the same content width, so the only thing that can make one taller
+    // than the other is the notes block's height being freed to the grid.
+    expect(hidden.height).toBeGreaterThan(shown.height)
+  })
+
+  it('names the drill and phase when a rasterise fails, on top of the underlying reason', async () => {
+    vi.mocked(renderFrameToDataUrl).mockRejectedValueOnce(new Error('canvas is tainted'))
+
+    await expect(
+      buildSessionPdf({
+        session: session([{ id: 'e1', patternId: 'p1', minutes: 12 }]),
+        patterns: [pattern({ name: 'Rondo 4v2' })],
+      }),
+    ).rejects.toThrow('Could not render "Rondo 4v2" (phase 1 of 1): canvas is tainted')
+  })
 })
