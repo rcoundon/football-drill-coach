@@ -172,6 +172,7 @@ describe('while the tour runs', () => {
   /* App owns ending, so that the drill and its name come back together. */
   it('asks App to end the tour when Skip is pressed', async () => {
     const overlay = mountOverlay()
+    expect(overlay.get('[data-tour-skip]').text()).toBe('Skip')
     await overlay.find('[data-tour-skip]').trigger('click')
     expect(overlay.emitted('end')).toBeTruthy()
   })
@@ -202,6 +203,17 @@ describe('the last step', () => {
   beforeEach(() => {
     tutorial.start({ patternId: null, name: '' })
     for (let i = 0; i < tutorial.steps.length; i++) tutorial.next()
+  })
+
+  /*
+   * A coach on the last card is not abandoning the tour, they have finished
+   * it. The button does the same thing either way; the word is what tells
+   * them which of the two it is.
+   */
+  it('says Finish rather than Skip', async () => {
+    const overlay = mountOverlay()
+    await nextTick()
+    expect(overlay.get('[data-tour-skip]').text()).toBe('Finish')
   })
 
   it('offers Help instead of Next', async () => {

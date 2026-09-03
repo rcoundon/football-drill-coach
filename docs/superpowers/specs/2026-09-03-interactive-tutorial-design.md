@@ -28,7 +28,9 @@ is a video with extra steps.
 ## Scope
 
 Eight steps: an opening card, six things to do — place players, label one,
-add a phase, move into it, play it back, draw a pass — and a signpost. The
+add a phase, move into it, draw a pass, watch it back — and a signpost.
+Watching it back comes last of the six deliberately: a playback taken before
+the pass is drawn is a playback of a drill the coach has not finished. The
 signpost names what the tour did not cover — curved runs, groups, saving
 and sharing, presentation mode — and offers a button that closes the tour and
 opens Help.
@@ -73,8 +75,8 @@ it, so every goal is testable headlessly against a real board with no DOM.
 | `label` | `[data-counter]` | Any player has a non-empty label |
 | `phase` | `[data-add-frame]` | The drill has two or more phases |
 | `move` | `[data-counter]` | A player stands somewhere other than where they stood on the previous phase |
-| `play` | `[data-play]` | The drill is playing, or the playhead has left zero |
 | `pass` | `[data-tool="arrow-pass"]` | A drawing with `kind: 'arrow'` and `style: 'pass'` exists |
+| `play` | `[data-play]` | The drill is playing, or the playhead has left zero |
 | `more` | `[data-help]` | Next, or the Open Help button |
 
 Every anchor already exists in the markup. `data-add-counter`,
@@ -191,7 +193,9 @@ no-anchor case: the card still shows, centred, and the step still completes
 when the coach does the thing.
 
 **The card.** Step title, body, a step counter, Skip, Back, and either Next
-or a line saying what to do. It is the only part of the overlay that takes
+or a line saying what to do. Skip reads Finish on the last card: the button
+does the same thing throughout, but a coach who has reached the end has
+finished the tour rather than walked out of it. It is the only part of the overlay that takes
 the pointer.
 
 The card is placed on whichever side has room, measured against the viewport,

@@ -82,14 +82,6 @@ export const STEPS: TutorialStep[] = [
       }),
   },
   {
-    id: 'play',
-    title: 'Play it back',
-    body: 'Press Play. Everyone travels from where they were to where they are, over the time the phase is given.',
-    anchor: '[data-play]',
-    // `at` outlasts `playing`, so the step stays complete after playback ends.
-    goal: (board) => board.playback.playing || board.playback.at > 0,
-  },
-  {
     id: 'pass',
     title: 'Draw a pass',
     body: 'Pick Pass in the rail and drag from one player to another. Run is the same gesture with a solid arrow.',
@@ -105,6 +97,14 @@ export const STEPS: TutorialStep[] = [
       board.state.frames.some((frame) =>
         frame.drawings.some((d) => d.kind === 'arrow' && d.style === 'pass'),
       ),
+  },
+  {
+    id: 'play',
+    title: 'Watch it back',
+    body: 'Press Play and watch the drill back. Everyone travels from where they were to where they are, over the time the phase is given.',
+    anchor: '[data-play]',
+    // `at` outlasts `playing`, so the step stays complete after playback ends.
+    goal: (board) => board.playback.playing || board.playback.at > 0,
   },
   {
     id: 'more',

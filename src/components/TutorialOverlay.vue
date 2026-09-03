@@ -231,7 +231,14 @@ const cardStyle = computed(() => {
         <p class="body">{{ tutorial.step.value.body }}</p>
       </div>
       <div class="actions">
-        <button data-tour-skip class="chip" @click="emit('end')">Skip</button>
+        <!--
+          Same button, same action — but a coach on the last card has
+          finished the tour rather than walked out of it, and the word is
+          what tells them which of the two they are doing.
+        -->
+        <button data-tour-skip class="chip" @click="emit('end')">
+          {{ isLast ? 'Finish' : 'Skip' }}
+        </button>
         <button
           data-tour-back
           class="chip"

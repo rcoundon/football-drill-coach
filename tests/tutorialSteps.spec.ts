@@ -25,7 +25,7 @@ function twoPhaseDrill(): string {
 describe('the step list', () => {
   it('runs in the order the tour teaches', () => {
     expect(STEPS.map((s) => s.id)).toEqual([
-      'welcome', 'place', 'label', 'phase', 'move', 'play', 'pass', 'more',
+      'welcome', 'place', 'label', 'phase', 'move', 'pass', 'play', 'more',
     ])
   })
 
