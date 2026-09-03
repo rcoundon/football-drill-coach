@@ -19,6 +19,20 @@ const step = computed<TutorialStep | null>(() =>
   active.value ? (STEPS[stepIndex.value] ?? null) : null,
 )
 
+/**
+ * The furthest step the coach has reached, which is how the tour tells a
+ * Back from a first arrival.
+ *
+ * Held rather than derived, because nothing else records it: `stepIndex`
+ * alone cannot tell "on this step for the first time" from "on it having
+ * stepped back off a later one", and those two want opposite behaviour from
+ * the goals.
+ */
+const furthest = ref(0)
+
+/** On a step the coach has already been past. */
+const reviewing = computed(() => stepIndex.value < furthest.value)
+
 /*
  * Every read is guarded and every write is swallowed. A coach in a private
  * window, or with a full store, gets a tour that works and forgets it
@@ -137,6 +151,7 @@ function start(park: TutorialPark): boolean {
   board.resetBoard()
   board.clearHistory()
   stepIndex.value = 0
+  furthest.value = 0
   active.value = true
   return true
 }
@@ -167,6 +182,7 @@ function end(): TutorialPark {
   markSeen()
   active.value = false
   stepIndex.value = 0
+  furthest.value = 0
   return draft ? park : { patternId: null, name: park.name }
 }
 
@@ -174,6 +190,7 @@ function next(): void {
   if (!active.value) return
   if (stepIndex.value >= STEPS.length - 1) return
   stepIndex.value += 1
+  furthest.value = Math.max(furthest.value, stepIndex.value)
 }
 
 function back(): void {
@@ -186,10 +203,16 @@ function back(): void {
  * doing the thing now or had already done it before arriving. `playback` is
  * watched beside `state` because it is a separate reactive object, and the
  * one thing the play goal reads.
+ *
+ * Not while the coach is looking back, though. Every step behind them is one
+ * they have already satisfied, so a watcher left running there would undo
+ * their Back in the same tick it happened and the button would look broken.
+ * The goals pick up again the moment they walk forward to where they got to.
  */
 watch(
   [() => board.state, () => board.playback, step],
   () => {
+    if (reviewing.value) return
     const current = step.value
     if (!current?.goal) return
     if (current.goal(board)) next()
@@ -202,6 +225,7 @@ export function useTutorial() {
     active,
     stepIndex,
     step,
+    reviewing,
     steps: STEPS,
     start,
     end,
@@ -216,4 +240,5 @@ export function useTutorial() {
 export function __resetTutorialForTests(): void {
   active.value = false
   stepIndex.value = 0
+  furthest.value = 0
 }

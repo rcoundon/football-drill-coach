@@ -193,7 +193,8 @@ no-anchor case: the card still shows, centred, and the step still completes
 when the coach does the thing.
 
 **The card.** Step title, body, a step counter, Skip, Back, and either Next
-or a line saying what to do. Skip reads Finish on the last card: the button
+or a line saying what to do — Next whenever the step only says something, or
+the coach has stepped back onto it. Skip reads Finish on the last card: the button
 does the same thing throughout, but a coach who has reached the end has
 finished the tour rather than walked out of it. It is the only part of the overlay that takes
 the pointer.
@@ -240,6 +241,14 @@ Back re-enters an earlier step without undoing anything. The board keeps
 whatever the coach built; the card just says the earlier thing again. Undoing
 their work to move a card backwards would be a surprise, and the goals are
 satisfied-or-not rather than a sequence.
+
+Which is exactly why the goals stop watching behind the coach. Every step
+they have passed is one they satisfied to get past it, so a goal still
+running there would complete the moment they arrived and throw them forward
+again in the same tick — a Back button that visibly does nothing. The tour
+holds the furthest step reached; while the coach is behind it the goals are
+quiet, and Next is offered on every card so they can walk back up. Reaching
+the furthest step again hands the tour back to the goals.
 
 Skip ends the tour from any step, restores the parked drill, and records
 `seen`. Escape does the same, handled through `closeTopmostDialog` so that

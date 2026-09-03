@@ -156,6 +156,22 @@ describe('while the tour runs', () => {
     expect(overlay.find('[data-tour-next]').exists()).toBe(false)
   })
 
+  /*
+   * Going back lands on a step the coach has already done, so "Your turn"
+   * would be asking for something they finished — and with the goals paused
+   * behind them, nothing would carry them forward again. Next is the way
+   * back to where they were.
+   */
+  it('offers Next on a step the coach has stepped back onto', async () => {
+    const overlay = mountOverlay()
+    await overlay.find('[data-tour-next]').trigger('click') // onto `place`
+    tutorial.next() // onto `label`, so `place` is behind them
+    await nextTick()
+    await overlay.find('[data-tour-back]').trigger('click')
+    await nextTick()
+    expect(overlay.find('[data-tour-next]').exists()).toBe(true)
+  })
+
   it('cannot go back from the first step', async () => {
     const overlay = mountOverlay()
     await nextTick()

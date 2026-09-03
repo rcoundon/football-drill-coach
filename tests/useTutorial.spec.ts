@@ -270,6 +270,43 @@ describe('moving through the steps', () => {
     expect(tutorial.step.value!.id).toBe('label')
   })
 
+  /*
+   * Every step behind the coach is a step they have already satisfied, so a
+   * Back that leaves the goal watcher running is undone in the same tick it
+   * happens — the card flicks back and forward and the button looks broken.
+   */
+  it('stays on the earlier step rather than snapping forward again', async () => {
+    tutorial.start({ patternId: null, name: '' })
+    tutorial.next() // onto `place`
+    board.addCounter('red')
+    board.addCounter('red')
+    board.addCounter('blue')
+    await nextTick()
+    expect(tutorial.step.value!.id).toBe('label')
+
+    tutorial.back()
+    await nextTick()
+    expect(tutorial.step.value!.id).toBe('place')
+  })
+
+  /* Walking forward again hands the tour back to the goals. */
+  it('watches the goals again once the coach catches up', async () => {
+    tutorial.start({ patternId: null, name: '' })
+    tutorial.next()
+    board.addCounter('red')
+    board.addCounter('red')
+    board.addCounter('blue')
+    await nextTick()
+    tutorial.back()
+    await nextTick()
+
+    tutorial.next() // back to `label`, the furthest they had reached
+    const counter = board.state.counters[0]
+    board.setCounterLabel(counter.id, '9')
+    await nextTick()
+    expect(tutorial.step.value!.id).toBe('phase')
+  })
+
   it('goes back without touching the board', () => {
     tutorial.start({ patternId: null, name: '' })
     tutorial.next()

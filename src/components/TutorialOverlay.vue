@@ -250,8 +250,14 @@ const cardStyle = computed(() => {
         <button v-if="isLast" data-tour-help class="chip chip--go" @click="emit('openHelp')">
           Open Help
         </button>
+        <!--
+          Next on a step that only says something, and on one the coach has
+          stepped back onto — they finished that step to get past it once, so
+          asking them to do it again would be asking for nothing, and with
+          the goals paused behind them nothing else would carry them forward.
+        -->
         <button
-          v-else-if="!tutorial.step.value.goal"
+          v-else-if="!tutorial.step.value.goal || tutorial.reviewing.value"
           data-tour-next
           class="chip chip--go"
           @click="tutorial.next()"
