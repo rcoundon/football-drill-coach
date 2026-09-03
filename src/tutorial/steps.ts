@@ -34,7 +34,7 @@ export type TutorialStep = {
 export const STEPS: TutorialStep[] = [
   {
     id: 'welcome',
-    title: 'Welcome to the board',
+    title: 'Welcome to the drills board',
     body: 'Two minutes and you will have a drill that plays back. Anything you had on the pitch is parked safely and comes back when the tour ends.',
   },
   {
