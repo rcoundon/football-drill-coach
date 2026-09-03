@@ -173,5 +173,11 @@ describe('anchors', () => {
     expect(step('play').anchor).toBe('[data-play]')
     expect(step('pass').anchor).toBe('[data-tool="arrow-pass"]')
     expect(step('more').anchor).toBe('[data-help]')
+    // `label` and `move` are spelled out explicitly, not left to fall out of
+    // omission — the spec is explicit that these two are anchor-less, and an
+    // anchor added to either by mistake would otherwise slip straight past
+    // this test.
+    expect(step('label').anchor).toBeUndefined()
+    expect(step('move').anchor).toBeUndefined()
   })
 })
