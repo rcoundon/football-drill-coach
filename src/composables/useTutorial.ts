@@ -97,12 +97,29 @@ function writePark(park: TutorialPark): void {
  * is direct rather than through App's debounce, because the board is about
  * to be emptied and there is no second chance.
  *
+ * Reusing the one shared draft key rather than a key of its own means a
+ * second tab open on the same drill can still autosave its own draft into it
+ * while this tab's tour runs, overwriting the parked one underneath. Nothing
+ * here can see that tab or stop it — a single shared key has exactly one
+ * writer's worth of safety, and the tour spends it. Accepted, not fixed: a
+ * coach running the tour in two tabs on the same drill at once is not a case
+ * worth a second key over.
+ *
+ * The save is checked, not just fired: `saveDraft` swallows a quota failure
+ * rather than throwing, so `lastError` is the only sign one happened. A
+ * coach's drill that never reached storage must not then be erased from
+ * memory too — this app keeps no other copy of it — so a failed save aborts
+ * the whole start before either the park key or the board is touched. The
+ * error is already on screen: App renders `storage.lastError` as a
+ * dismissible banner.
+ *
  * `resetBoard` keeps the pitch type and rotation, so a tour taken on a phone
  * runs on the pitch the coach was already looking at.
  */
 function start(park: TutorialPark): void {
   if (active.value) return
   storage.saveDraft(board.snapshot())
+  if (storage.lastError.value) return
   writePark(park)
   board.resetBoard()
   board.clearHistory()

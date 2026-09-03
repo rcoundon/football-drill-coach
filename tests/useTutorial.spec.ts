@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { useBoard, __resetBoardForTests } from '../src/composables/useBoard'
 import { useStorage, DRAFT_KEY } from '../src/composables/useStorage'
@@ -16,6 +16,7 @@ beforeEach(() => {
   localStorage.clear()
   __resetBoardForTests()
   __resetTutorialForTests()
+  useStorage().lastError.value = null
 })
 
 /** A drill worth parking: two players and a name on the board. */
@@ -69,6 +70,52 @@ describe('starting', () => {
     tutorial.next()
     tutorial.start({ patternId: 'p2', name: 'Other' })
     expect(tutorial.stepIndex.value).toBe(1)
+  })
+
+  /*
+   * `saveDraft` swallows a `QuotaExceededError` rather than throwing — it
+   * sets `lastError` and returns nothing useful to check. A `start` that
+   * presses on regardless empties the board and wipes the undo stack for a
+   * drill that never reached storage: the worst outcome this app has, since
+   * it keeps no copy anywhere else.
+   */
+  describe('when the draft cannot be written', () => {
+    beforeEach(() => {
+      // jsdom's Storage is a legacy platform object: assigning
+      // `localStorage.setItem = fn` directly is silently dropped, so the
+      // override has to go through the prototype, same as collection.spec.ts.
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        const error = new Error('full')
+        error.name = 'QuotaExceededError'
+        throw error
+      })
+    })
+
+    it('does not touch the board', () => {
+      aDrill()
+      tutorial.start({ patternId: 'p1', name: 'Rondo' })
+      vi.restoreAllMocks()
+      expect(board.state.counters).toHaveLength(2)
+    })
+
+    it('does not start the tour', () => {
+      tutorial.start({ patternId: 'p1', name: 'Rondo' })
+      vi.restoreAllMocks()
+      expect(tutorial.active.value).toBe(false)
+    })
+
+    it('does not park the drill', () => {
+      tutorial.start({ patternId: 'p1', name: 'Rondo' })
+      vi.restoreAllMocks()
+      expect(localStorage.getItem(TUTORIAL_PARK_KEY)).toBeNull()
+    })
+
+    it('leaves the undo stack alone', () => {
+      aDrill()
+      tutorial.start({ patternId: 'p1', name: 'Rondo' })
+      vi.restoreAllMocks()
+      expect(board.canUndo.value).toBe(true)
+    })
   })
 })
 

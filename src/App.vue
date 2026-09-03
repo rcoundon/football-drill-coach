@@ -509,11 +509,19 @@ function onBoardReset() {
  * because they are App's to own — and clearing them is what stops the
  * autosave writing the tour's board over the coach's saved drill:
  * `scheduleAutosave` already returns early when there is neither.
+ *
+ * `tutorial.start` can refuse — a draft it could not write, most likely —
+ * without saying so beyond leaving the tour inactive, in which case the
+ * board it left alone is still the drill this pattern id and name describe.
+ * Clearing them anyway would sever that pairing for nothing: the drill would
+ * sit there unsaved-looking and autosave would fall silent over it, all for
+ * a tour that never opened.
  */
 function startTour(): void {
   if (board.isDerived.value || presenting.value) return
   helpOpen.value = false
   tutorial.start({ patternId: currentPatternId.value, name: currentName.value })
+  if (!tutorial.active.value) return
   currentPatternId.value = null
   currentName.value = ''
   saveStatus.value = 'unsaved'
