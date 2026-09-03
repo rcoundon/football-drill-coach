@@ -273,9 +273,18 @@ function scheduleAutosave(): void {
  * files it — including the first time, on a board that has never been
  * saved. Naming it is the coach deciding what it is called, which is the
  * one thing autosave could not do on its own.
+ *
+ * The header stays live and clickable through the tour deliberately — the
+ * board is fully live, and so is everything around it. But `scheduleAutosave`
+ * only stays quiet while the name field is empty, and it is only empty until
+ * a coach curious about the header types into it: a second later the tour's
+ * empty board would be filed as a brand-new pattern. So the name is still
+ * taken — the field itself has to keep working — but nothing schedules a
+ * write while the tour owns the board.
  */
 function onHeaderRename(name: string): void {
   currentName.value = name
+  if (tutorial.active.value) return
   scheduleAutosave()
 }
 
