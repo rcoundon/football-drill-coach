@@ -76,7 +76,7 @@ it, so every goal is testable headlessly against a real board with no DOM.
 | `phase` | `[data-add-frame]` | The drill has two or more phases |
 | `move` | `[data-counter]` | A player stands somewhere other than where they stood on the previous phase |
 | `pass` | `[data-tool="arrow-pass"]` | A drawing with `kind: 'arrow'` and `style: 'pass'` exists |
-| `play` | `[data-play]` | The drill is playing, or the playhead has left zero |
+| `play` | `[data-play]` | The drill is playing |
 | `more` | `[data-help]` | Next, or the Open Help button |
 
 Every anchor already exists in the markup. `data-add-counter`,
@@ -103,6 +103,15 @@ lesson.
 The `pass` goal reads the drawing as it is being drawn, so a stroke too short
 to survive `finishDrawing` still completes the step. That is the right way
 round: the coach chose the tool and drew on the pitch, which is the lesson.
+
+The `play` goal asks whether the drill is running, and nothing else. The
+playhead's position is not a record of having played: landing on a phase
+parks it at that phase's start time, so by the time the coach reaches this
+step — two phases in, standing on the second — it has been past zero since
+they pressed Add phase, and a goal reading it would complete the step before
+they could read the card. Scrubbing is out for the same reason: it moves the
+playhead without playing anything back, which is the one thing the step asks
+them to watch.
 
 ## Persistence
 

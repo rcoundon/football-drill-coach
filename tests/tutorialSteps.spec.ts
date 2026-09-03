@@ -131,10 +131,38 @@ describe('the play goal', () => {
     board.pause()
   })
 
-  it('stays true once the playhead has left the start', () => {
+  /*
+   * Pressing Play is what the step asks for, and what it waits for. Scrubbing
+   * moves the playhead without ever playing anything back, and the whole
+   * point of the step is that the coach watches the drill run.
+   */
+  it('is not satisfied by dragging the scrubber instead', () => {
     twoPhaseDrill()
     board.scrubTo(200)
+    expect(step('play').goal!(board)).toBe(false)
+  })
+})
+
+/*
+ * Landing on a phase parks the playhead at that phase's start time, which is
+ * not zero for anything past the first — so a goal that only asks whether
+ * the playhead has left zero is already true by the time the coach gets
+ * here, and the step advances past itself before they can read it.
+ */
+describe('the play goal, on the drill the tour has built by then', () => {
+  it('is false on a second phase nobody has played yet', () => {
+    twoPhaseDrill()
+    board.goToFrame(1)
+    expect(board.playback.at).toBeGreaterThan(0)
+    expect(step('play').goal!(board)).toBe(false)
+  })
+
+  it('is true once the coach presses Play', () => {
+    twoPhaseDrill()
+    board.goToFrame(1)
+    board.play()
     expect(step('play').goal!(board)).toBe(true)
+    board.pause()
   })
 })
 

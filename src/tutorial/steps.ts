@@ -103,8 +103,17 @@ export const STEPS: TutorialStep[] = [
     title: 'Watch it back',
     body: 'Press Play and watch the drill back. Everyone travels from where they were to where they are, over the time the phase is given.',
     anchor: '[data-play]',
-    // `at` outlasts `playing`, so the step stays complete after playback ends.
-    goal: (board) => board.playback.playing || board.playback.at > 0,
+    /*
+     * The drill running, and nothing else. `at` is not a record of having
+     * played: landing on a phase parks the playhead at that phase's start
+     * time, so by the time the coach reaches this step — two phases in, and
+     * standing on the second — `at` has been past zero since they pressed
+     * Add phase, and a goal reading it would complete the step before they
+     * could read the card. Scrubbing is out for the same reason: it moves
+     * the playhead without ever playing the drill back, which is the one
+     * thing this step is asking them to watch.
+     */
+    goal: (board) => board.playback.playing,
   },
   {
     id: 'more',
