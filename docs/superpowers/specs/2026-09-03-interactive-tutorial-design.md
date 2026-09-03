@@ -97,8 +97,10 @@ One key beside the existing ones, `fct.tutorial.v1`, holding
 at startup. It is a flag, not a resume point — a coach who skipped at step 3
 and comes back wants to start at the beginning, not at step 3.
 
-A second key, `fct.tutorial-park.v1`, holds the parked drill while the tour
-runs (see below). It exists only between the start of a tour and its end.
+A second key, `fct.tutorial-park.v1`, holds `{ patternId, name }` — which
+saved drill the board was showing when the tour started. It exists only
+between the start of a tour and its end. The board itself is not parked
+here; the draft already does that (see below).
 
 Both are read through the same guarded shape the existing storage uses: a
 malformed or unreadable value is treated as absent rather than thrown.
@@ -123,29 +125,36 @@ first of those.
 
 The tour needs an empty board. The coach may not have one.
 
-On start: snapshot the board, write the snapshot to `fct.tutorial-park.v1`
-along with the current pattern id and name, then reset the board to empty and
-clear the pattern id and name.
+The board is parked in the draft, which is where the working board already
+lives. On start the tour writes the current board to the draft immediately —
+synchronously, rather than waiting on the 400ms debounce — parks the pattern
+id and name under `fct.tutorial-park.v1`, clears both, and empties the board.
+On finish or skip it reads the draft back onto the board, restores the id and
+name, and deletes the park key.
 
-On finish or skip: put all three back and delete the key.
+Reusing the draft rather than inventing a second snapshot store means the
+tour needs no snapshot validator of its own, and it makes an interrupted tour
+correct for free: while the tour runs the draft is not written, so it still
+holds the coach's drill, and a refresh restores it through the startup path
+that already exists. All the startup needs to add is the park key — present
+means restore the id and name and delete it, without starting a tour.
 
-Restoring uses `restoreSnapshot`, not `loadSnapshot` — the tour is not
-something the coach did, so neither parking nor unparking may become an undo
-entry. The history is cleared at both ends for the same reason: a coach must
-not be able to Ctrl+Z from their restored drill back into a half-finished
-tour board.
+Emptying is `resetBoard` followed by `clearHistory`; restoring is
+`restoreSnapshot` followed by `clearHistory`. Neither may leave an undo
+entry: the tour is not something the coach did, and a coach must not be able
+to Ctrl+Z from their restored drill back into a half-finished tour board.
+`resetBoard` deliberately keeps the pitch type and rotation, so a tour taken
+on a portrait phone runs on the pitch the coach was already looking at.
 
-Clearing the pattern id and name is what stops the autosave writing the tour's
-board over the coach's saved drill: `scheduleAutosave` already returns early
-when there is neither, so parking makes the existing guard do the work.
+`clearHistory` is new — a small addition to `useBoard` that empties the undo
+and redo stacks. Nothing else in the app has needed it, because nothing else
+puts state on the board that the coach did not put there.
 
-The draft autosave is a separate matter and is suspended outright while the
-tour is active, because the draft is what a refresh restores. Instead, the
-park key is what a refresh finds: on startup, a park key present means a tour
-was interrupted, so the app restores the parked drill and drops the key
-before doing anything else. A coach who refreshes mid-tour gets their drill
-back and no tour. That is the right outcome — the alternative is resuming a
-tour they may have been trying to escape.
+Clearing the pattern id and name is what stops the autosave writing the
+tour's board over the coach's saved drill: `scheduleAutosave` already returns
+early when there is neither, so parking makes the existing guard do the work.
+The draft watcher is suspended outright while the tour is active, for the
+reason above.
 
 ## The overlay
 
@@ -224,6 +233,7 @@ a coach who cannot see the spotlight can still follow the words.
 - `src/components/TutorialOverlay.vue` — spotlight and card.
 - `src/components/HelpPanel.vue` — a Take the tour button in the header, and
   an emitted event for it.
+- `src/composables/useBoard.ts` — a `clearHistory()` export.
 - `src/App.vue` — mounts the overlay, wires the Help button, adds the tour to
   `isDialogOpen` and `closeTopmostDialog`, suspends the draft watcher while
   the tour is active, and restores an interrupted park on startup.
@@ -238,12 +248,14 @@ file knew the tutorial existed.
 - Goals: each predicate against a real `useBoard`, false before the action
   and true after. The `move` goal specifically returns false on the first
   phase, where there is no previous frame to have moved from.
-- The machine: start parks and empties the board; finish and skip both
-  restore it, its pattern id and its name; neither leaves an undo entry;
-  both record `seen`.
-- Startup: a park key present restores the drill and clears the key without
-  starting a tour. A first visit with no draft and no `seen` starts one. A
-  visit with `seen` does not. A visit with a draft does not.
+- The machine: start writes the board to the draft, empties the board and
+  parks the pattern id and name; finish and skip both put the board, id and
+  name back; neither leaves an undo entry; both record `seen` and delete the
+  park key.
+- `clearHistory` leaves `canUndo` false and a following `undo` a no-op.
+- Startup: a park key present restores the pattern id and name and clears the
+  key without starting a tour. A first visit with no draft and no `seen`
+  starts one. A visit with `seen` does not. A visit with a draft does not.
 - Advancing: a step with a goal advances when the board changes to satisfy
   it, and a step whose goal is already true on entry advances immediately.
 - The overlay: renders the card for the current step; resolves an anchor to
