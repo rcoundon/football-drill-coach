@@ -82,6 +82,19 @@ export const STEPS: TutorialStep[] = [
       }),
   },
   {
+    id: 'ball',
+    title: 'Give someone the ball',
+    body: 'Drag the ball onto a player. They get a white ring and carry it wherever they run, until you drag it back onto open grass.',
+    anchor: '[data-ball]',
+    /*
+     * Read across every phase, like the pass below: possession belongs to
+     * the phase it was given on, so a coach who hands the ball over and then
+     * steps to the next phase has still handed it over.
+     */
+    goal: (board) =>
+      board.state.frames.some((frame) => frame.balls.some((b) => b.attachedTo !== null)),
+  },
+  {
     id: 'pass',
     title: 'Draw a pass',
     body: 'Pick Pass in the rail and drag from one player to another. Run is the same gesture with a solid arrow.',

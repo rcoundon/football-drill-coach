@@ -27,16 +27,20 @@ is a video with extra steps.
 
 ## Scope
 
-Eight steps: an opening card, six things to do — place players, label one,
-add a phase, move into it, draw a pass, watch it back — and a signpost.
-Watching it back comes last of the six deliberately: a playback taken before
-the pass is drawn is a playback of a drill the coach has not finished. The
-signpost names what the tour did not cover — curved runs, groups, saving
-and sharing, presentation mode — and offers a button that closes the tour and
-opens Help.
+Nine steps: an opening card, seven things to do — place players, label one,
+add a phase, move into it, give someone the ball, draw a pass, watch it back
+— and a signpost. Watching it back comes last of the seven deliberately: a
+playback taken before the drill is finished is a playback of something the
+coach has not made yet. The signpost names what the tour did not cover —
+curved runs, groups, saving and sharing, presentation mode — and offers a
+button that closes the tour and opens Help.
 
-Not taught by the tour: cones, text labels, ball possession, sessions, export,
-undo. All are in Help, and the tour's job is the spine, not the whole surface.
+Possession earns its place: a ball belonging to a player is how most drills
+start, and a pass drawn between two players who have never held one teaches
+half the idea.
+
+Not taught by the tour: cones, text labels, sessions, export, undo. All are
+in Help, and the tour's job is the spine, not the whole surface.
 
 ## Data
 
@@ -75,6 +79,7 @@ it, so every goal is testable headlessly against a real board with no DOM.
 | `label` | `[data-counter]` | Any player has a non-empty label |
 | `phase` | `[data-add-frame]` | The drill has two or more phases |
 | `move` | `[data-counter]` | A player stands somewhere other than where they stood on the previous phase |
+| `ball` | `[data-ball]` | Some ball, on some phase, belongs to a player |
 | `pass` | `[data-tool="arrow-pass"]` | A drawing with `kind: 'arrow'` and `style: 'pass'` exists |
 | `play` | `[data-play]` | The drill is playing |
 | `more` | `[data-help]` | Next, or the Open Help button |

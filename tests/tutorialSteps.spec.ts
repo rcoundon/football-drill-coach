@@ -25,7 +25,7 @@ function twoPhaseDrill(): string {
 describe('the step list', () => {
   it('runs in the order the tour teaches', () => {
     expect(STEPS.map((s) => s.id)).toEqual([
-      'welcome', 'place', 'label', 'phase', 'move', 'pass', 'play', 'more',
+      'welcome', 'place', 'label', 'phase', 'move', 'ball', 'pass', 'play', 'more',
     ])
   })
 
@@ -166,6 +166,28 @@ describe('the play goal, on the drill the tour has built by then', () => {
   })
 })
 
+describe('the ball goal', () => {
+  it('is false while the ball is loose on the grass', () => {
+    board.addCounter('red')
+    expect(step('ball').goal!(board)).toBe(false)
+  })
+
+  it('is true once a player is carrying it', () => {
+    const c = board.addCounter('red')
+    board.dropBall(board.state.balls[0].id, c.pos)
+    expect(step('ball').goal!(board)).toBe(true)
+  })
+
+  /* Possession is set on the phase it happened on, like everything else. */
+  it('finds a carrier on another phase', () => {
+    const c = board.addCounter('red')
+    board.dropBall(board.state.balls[0].id, c.pos)
+    board.addFrame()
+    board.goToFrame(0)
+    expect(step('ball').goal!(board)).toBe(true)
+  })
+})
+
 describe('the pass goal', () => {
   it('is false with nothing drawn', () => {
     expect(step('pass').goal!(board)).toBe(false)
@@ -199,6 +221,7 @@ describe('anchors', () => {
     expect(step('place').anchor).toBe('[data-add-counter="red"]')
     expect(step('phase').anchor).toBe('[data-add-frame]')
     expect(step('play').anchor).toBe('[data-play]')
+    expect(step('ball').anchor).toBe('[data-ball]')
     expect(step('pass').anchor).toBe('[data-tool="arrow-pass"]')
     expect(step('more').anchor).toBe('[data-help]')
     /*
