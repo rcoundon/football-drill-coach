@@ -71,6 +71,13 @@ describe('while the tour runs', () => {
     expect(overlay.find('[data-tour-card]').text()).toContain(`1 of ${tutorial.steps.length}`)
   })
 
+  /* The spec calls for the step counter to be announced, not only shown. */
+  it('announces the step counter', async () => {
+    const overlay = mountOverlay()
+    await nextTick()
+    expect(overlay.find('[data-tour-count]').attributes('aria-live')).toBe('polite')
+  })
+
   it('offers Next on a step that only says something', async () => {
     const overlay = mountOverlay()
     await nextTick()

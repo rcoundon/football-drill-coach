@@ -172,7 +172,14 @@ const cardStyle = computed(() => {
       :aria-label="tutorial.step.value.title"
       :style="cardStyle"
     >
-      <p class="count">Step {{ tutorial.stepIndex.value + 1 }} of {{ tutorial.steps.length }}</p>
+      <!--
+        Live, same as the body below: which step this is changes on every
+        advance, and a screen reader only catches that if it is announced
+        rather than merely redrawn.
+      -->
+      <p data-tour-count class="count" aria-live="polite">
+        Step {{ tutorial.stepIndex.value + 1 }} of {{ tutorial.steps.length }}
+      </p>
       <h2>{{ tutorial.step.value.title }}</h2>
       <!--
         Live, so a step completing is spoken rather than only seen. The
