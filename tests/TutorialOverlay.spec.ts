@@ -149,6 +149,34 @@ describe('the spotlight', () => {
   })
 
   /*
+   * With no anchor, `rect` is `null` before the resize and `null` after it —
+   * equal, so it cannot be what tells the dim box a resize happened. It has
+   * to track the viewport itself, or an orientation change on a no-anchor
+   * step leaves the old size painted over the new one.
+   */
+  it('tracks a genuine viewport resize while a no-anchor step is showing', async () => {
+    tutorial.start({ patternId: null, name: '' })
+    const overlay = mountOverlay()
+    await nextTick()
+
+    const originalWidth = window.innerWidth
+    const originalHeight = window.innerHeight
+    try {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: 500 })
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: 700 })
+      window.dispatchEvent(new Event('resize'))
+      await nextTick()
+
+      const style = overlay.get('[data-tour-dim]').attributes('style')
+      expect(style).toContain('width: 500px')
+      expect(style).toContain('height: 700px')
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth })
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: originalHeight })
+    }
+  })
+
+  /*
    * A control that is not on screen at this width — the rail lies down on a
    * phone and not every anchor survives — must not take the step away. The
    * card still shows and the goal still completes.

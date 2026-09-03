@@ -13,6 +13,16 @@ const GAP = 12
 
 const rect = ref<DOMRect | null>(null)
 
+/*
+ * The viewport, read fresh on every `measure()`. `getBoundingClientRect()`
+ * returns a new object each call, so `rect` re-triggers `dims` and
+ * `cardStyle` on its own — but a no-anchor step sets `rect` to `null` every
+ * time, and `null` equals `null`, so nothing would tell those computeds a
+ * resize had happened. A plain object here, replaced wholesale rather than
+ * mutated, gives them the same fresh-reference trigger `rect` already has.
+ */
+const viewport = ref({ w: window.innerWidth, h: window.innerHeight })
+
 const isLast = computed(() => tutorial.stepIndex.value === tutorial.steps.length - 1)
 
 /**
@@ -23,6 +33,7 @@ const isLast = computed(() => tutorial.stepIndex.value === tutorial.steps.length
  * still completes. The tour never depends on a control being visible.
  */
 function measure(): void {
+  viewport.value = { w: window.innerWidth, h: window.innerHeight }
   const selector = tutorial.step.value?.anchor
   if (!selector) {
     rect.value = null
@@ -89,8 +100,7 @@ function px(n: number): string {
  */
 const dims = computed<Box[]>(() => {
   const r = rect.value
-  const w = window.innerWidth
-  const h = window.innerHeight
+  const { w, h } = viewport.value
   if (!r || r.width === 0 || r.height === 0) {
     return [{ top: '0px', left: '0px', width: px(w), height: px(h) }]
   }
@@ -112,8 +122,7 @@ const dims = computed<Box[]>(() => {
  */
 const cardStyle = computed(() => {
   const r = rect.value
-  const w = window.innerWidth
-  const h = window.innerHeight
+  const { w, h } = viewport.value
   if (!r || r.width === 0 || r.height === 0) {
     return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
   }
