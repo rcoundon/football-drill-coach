@@ -173,20 +173,21 @@ const cardStyle = computed(() => {
       :style="cardStyle"
     >
       <!--
-        Live, same as the body below: which step this is changes on every
-        advance, and a screen reader only catches that if it is announced
-        rather than merely redrawn.
+        One live region for the counter, the title and the body together,
+        not three. The counter and body were each `aria-live="polite"` on
+        their own, with a plain `h2` between them — so a step completing
+        spoke the number and the instruction but never the title, and two
+        regions updating in the same tick risk a reader dropping one of
+        them. Wrapping every advance in a single update is what a step
+        completing actually is: one change, announced once.
       -->
-      <p data-tour-count class="count" aria-live="polite">
-        Step {{ tutorial.stepIndex.value + 1 }} of {{ tutorial.steps.length }}
-      </p>
-      <h2>{{ tutorial.step.value.title }}</h2>
-      <!--
-        Live, so a step completing is spoken rather than only seen. The
-        instruction is in the words, so a coach who cannot see the spotlight
-        can still follow the tour.
-      -->
-      <p class="body" aria-live="polite">{{ tutorial.step.value.body }}</p>
+      <div data-tour-live aria-live="polite">
+        <p data-tour-count class="count">
+          Step {{ tutorial.stepIndex.value + 1 }} of {{ tutorial.steps.length }}
+        </p>
+        <h2>{{ tutorial.step.value.title }}</h2>
+        <p class="body">{{ tutorial.step.value.body }}</p>
+      </div>
       <div class="actions">
         <button data-tour-skip class="chip" @click="emit('end')">Skip</button>
         <button

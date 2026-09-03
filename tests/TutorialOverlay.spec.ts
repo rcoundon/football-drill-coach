@@ -3,6 +3,7 @@ import { mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import TutorialOverlay from '../src/components/TutorialOverlay.vue'
 import { __resetBoardForTests } from '../src/composables/useBoard'
+import { useStorage } from '../src/composables/useStorage'
 import { useTutorial, __resetTutorialForTests } from '../src/composables/useTutorial'
 
 const tutorial = useTutorial()
@@ -12,6 +13,10 @@ beforeEach(() => {
   localStorage.clear()
   __resetBoardForTests()
   __resetTutorialForTests()
+  // `lastError` is a module singleton, same as `useTutorial.spec.ts` already
+  // resets it for: a future test in this file that trips a storage error
+  // would otherwise leave every `start()` after it silently refusing to run.
+  useStorage().lastError.value = null
 })
 
 afterEach(() => {
@@ -75,7 +80,24 @@ describe('while the tour runs', () => {
   it('announces the step counter', async () => {
     const overlay = mountOverlay()
     await nextTick()
-    expect(overlay.find('[data-tour-count]').attributes('aria-live')).toBe('polite')
+    expect(overlay.find('[data-tour-live]').attributes('aria-live')).toBe('polite')
+    expect(overlay.find('[data-tour-live]').find('[data-tour-count]').exists()).toBe(true)
+  })
+
+  /*
+   * Second review, Finding 8. The counter and the body were each their own
+   * `aria-live="polite"` region, with a plain, silent `h2` between them — a
+   * screen reader heard the number and the instruction but never the title
+   * itself, and two regions updating in the same tick risk a reader dropping
+   * one of them. One region for all three closes both gaps at once.
+   */
+  it('announces the title in the same live region as the counter and body', async () => {
+    const overlay = mountOverlay()
+    await nextTick()
+    const live = overlay.find('[data-tour-live]')
+    expect(live.attributes('aria-live')).toBe('polite')
+    expect(live.find('h2').text()).toBe(tutorial.steps[0].title)
+    expect(live.text()).toContain(tutorial.steps[0].body)
   })
 
   it('offers Next on a step that only says something', async () => {
