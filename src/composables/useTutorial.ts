@@ -115,16 +115,30 @@ function writePark(park: TutorialPark): void {
  *
  * `resetBoard` keeps the pitch type and rotation, so a tour taken on a phone
  * runs on the pitch the coach was already looking at.
+ *
+ * Returns whether it actually started, so a caller that infers "did nothing"
+ * from `active` — which reads `true` for a tour already running as readily
+ * as for one this call just opened — cannot mistake the one for the other.
+ * `App`'s `startTour` used to make exactly that mistake: reachable through
+ * the `more` step's own Help button, which lets a coach reach "Take the
+ * tour" a second time while the first tour is still up.
  */
-function start(park: TutorialPark): void {
-  if (active.value) return
+function start(park: TutorialPark): boolean {
+  if (active.value) return false
+  // The tour needs a board it can safely empty; `isDerived` covers playback,
+  // scrubbing and a GIF export mid-sample — none of which `resetBoard` can
+  // meaningfully act on. `App`'s `startTour` already checks this before
+  // calling in, but the invariant belongs beside the code that depends on
+  // it, not only in one caller of it.
+  if (board.isDerived.value) return false
   storage.saveDraft(board.snapshot())
-  if (storage.lastError.value) return
+  if (storage.lastError.value) return false
   writePark(park)
   board.resetBoard()
   board.clearHistory()
   stepIndex.value = 0
   active.value = true
+  return true
 }
 
 /**

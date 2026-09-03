@@ -65,11 +65,35 @@ describe('starting', () => {
     expect(board.state.pitch.rotated).toBe(true)
   })
 
-  it('does nothing if a tour is already running', () => {
+  it('does nothing if a tour is already running, and says so', () => {
     tutorial.start({ patternId: 'p1', name: 'Rondo' })
     tutorial.next()
-    tutorial.start({ patternId: 'p2', name: 'Other' })
+    // `active` reads true for the tour already running exactly as it would
+    // for one this call just opened — a caller that infers success from
+    // `active` alone cannot tell the two apart, which is what the return
+    // value is for.
+    expect(tutorial.start({ patternId: 'p2', name: 'Other' })).toBe(false)
     expect(tutorial.stepIndex.value).toBe(1)
+  })
+
+  it('says so when it does start', () => {
+    expect(tutorial.start({ patternId: null, name: '' })).toBe(true)
+  })
+
+  /*
+   * Second review, Finding 6. The `locked()` protection this depends on used
+   * to live only in App's `startTour`. Not reachable today — `resetBoard`
+   * always succeeds — but the invariant belongs beside the code that
+   * assumes it, not only in one caller of it.
+   */
+  it('refuses to start on a derived board', () => {
+    board.beginExport()
+    try {
+      expect(tutorial.start({ patternId: null, name: '' })).toBe(false)
+      expect(tutorial.active.value).toBe(false)
+    } finally {
+      board.endExport()
+    }
   })
 
   /*
