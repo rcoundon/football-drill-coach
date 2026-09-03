@@ -2,6 +2,18 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch, nextTick } from 'vue'
 import { useTutorial } from '../composables/useTutorial'
 
+/**
+ * Whether one of App's own dialogs is standing over the tour right now —
+ * the rename prompt the `label` step's own action opens, chiefly. Those
+ * dialogs carry no `z-index` of their own, and this component's `.tour`
+ * has the highest in the app, so left alone it would paint over the very
+ * dialog its step just caused to open. Stepping out of the way entirely,
+ * rather than only lowering `.tour`'s `z-index`, is what keeps this
+ * component's own stacking free of every other dialog in the app — nothing
+ * here has to know their order, only that one of them is up.
+ */
+const props = withDefaults(defineProps<{ blocked?: boolean }>(), { blocked: false })
+
 const emit = defineEmits<{ end: []; openHelp: [] }>()
 
 const tutorial = useTutorial()
@@ -150,7 +162,7 @@ const cardStyle = computed(() => {
     `data-transient` so an export taken mid-tour is clean, the same way the
     bend handles and endpoint rings are already treated.
   -->
-  <div v-if="tutorial.active.value && tutorial.step.value" class="tour" data-transient>
+  <div v-if="tutorial.active.value && tutorial.step.value && !props.blocked" class="tour" data-transient>
     <div v-for="(box, i) in dims" :key="i" data-tour-dim class="dim" :style="box"></div>
 
     <section

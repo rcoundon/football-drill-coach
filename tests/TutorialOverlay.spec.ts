@@ -109,6 +109,27 @@ describe('while the tour runs', () => {
     await overlay.find('[data-tour-skip]').trigger('click')
     expect(overlay.emitted('end')).toBeTruthy()
   })
+
+  /*
+   * A step's own action can open one of App's small prompts on top of the
+   * live board — double-pressing a player on `label` opens the rename
+   * prompt. That prompt has no `z-index` of its own, and the tour's card
+   * has the highest in the app, so without stepping aside the card paints
+   * over the very dialog it just caused to open.
+   */
+  it('steps aside while one of App\'s own dialogs is open', async () => {
+    wrapper = mount(TutorialOverlay, { attachTo: document.body, props: { blocked: true } })
+    await nextTick()
+    expect(wrapper.find('.tour').exists()).toBe(false)
+  })
+
+  it('comes back once that dialog closes', async () => {
+    wrapper = mount(TutorialOverlay, { attachTo: document.body, props: { blocked: true } })
+    await nextTick()
+    await wrapper.setProps({ blocked: false })
+    await nextTick()
+    expect(wrapper.find('[data-tour-card]').exists()).toBe(true)
+  })
 })
 
 describe('the last step', () => {

@@ -792,6 +792,27 @@ const isDialogOpen = computed(
 )
 
 /**
+ * Whether one of App's own small prompts is standing over the tour.
+ *
+ * The board stays live through the tour on purpose, so a coach can reach
+ * these the ordinary way — double-pressing a player on the `label` step
+ * opens the rename prompt right there. Every one of them is a full-viewport
+ * overlay with no `z-index` of its own, same as the tour's card, and the
+ * card's `z-index: 60` is the highest in the app — so without this it paints
+ * over the very dialog its own step just caused to open. The tour's card
+ * steps aside instead; the panels (Help, the libraries) are deliberately not
+ * in this list, since the tour sits above those.
+ */
+const tourBlockedByDialog = computed(
+  () =>
+    savePromptOpen.value ||
+    deleteDrillPromptOpen.value ||
+    resetPromptOpen.value ||
+    renamePromptOpen.value ||
+    labelTarget.value !== null,
+)
+
+/**
  * Close the innermost thing that is open, and say whether there was one.
  *
  * Prompts before panels, one per press: a coach who has the library open and
@@ -1175,7 +1196,7 @@ watch(
 
     <HelpPanel :open="helpOpen" @close="helpOpen = false" @startTour="startTour" />
 
-    <TutorialOverlay @end="endTour" @openHelp="onTourHelp" />
+    <TutorialOverlay :blocked="tourBlockedByDialog" @end="endTour" @openHelp="onTourHelp" />
 
     <div v-if="labelTarget" class="overlay" @click.self="labelTarget = null">
       <div class="prompt" role="dialog" aria-label="Label text">
