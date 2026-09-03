@@ -27,9 +27,9 @@ is a video with extra steps.
 
 ## Scope
 
-Seven steps covering placing players, labelling, adding a phase, moving into
-it, playing it back, and drawing a pass. An eighth and final step is a
-signpost: it names what the tour did not cover — curved runs, groups, saving
+Eight steps: an opening card, six things to do — place players, label one,
+add a phase, move into it, play it back, draw a pass — and a signpost. The
+signpost names what the tour did not cover — curved runs, groups, saving
 and sharing, presentation mode — and offers a button that closes the tour and
 opens Help.
 
@@ -73,7 +73,7 @@ it, so every goal is testable headlessly against a real board with no DOM.
 | `label` | — | Any player has a non-empty label |
 | `phase` | `[data-add-frame]` | The drill has two or more phases |
 | `move` | — | A player stands somewhere other than where they stood on the previous phase |
-| `play` | `[data-play]` | The drill has been played — `playback.at` has passed zero |
+| `play` | `[data-play]` | The drill is playing, or the playhead has left zero |
 | `pass` | `[data-tool="arrow-pass"]` | A drawing of kind `arrow-pass` exists |
 | `more` | `[data-help]` | Next, or the Open Help button |
 
@@ -185,9 +185,10 @@ does the next step's action early completes that step early too, because each
 step's goal is checked on entry as well as on change.
 
 Advancing is a watcher over `board.state` — the same deep watch the autosave
-already uses — plus a check when the step becomes current. Goals are cheap
-predicates over arrays that are already reactive, so there is nothing to
-throttle.
+already uses — and over `board.playback`, which is a separate reactive object
+and the only thing the `play` goal reads. Plus a check when the step becomes
+current. Goals are cheap predicates over data that is already reactive, so
+there is nothing to throttle.
 
 Back re-enters an earlier step without undoing anything. The board keeps
 whatever the coach built; the card just says the earlier thing again. Undoing
