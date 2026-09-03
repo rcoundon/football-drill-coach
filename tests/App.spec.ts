@@ -8,6 +8,12 @@ import { __resetViewportForTests } from '../src/composables/useViewport'
 import { useExport } from '../src/composables/useExport'
 import { useSessions } from '../src/composables/useSessions'
 import { PITCH_H, PITCH_W } from '../src/geometry'
+import {
+  useTutorial,
+  __resetTutorialForTests,
+  TUTORIAL_KEY,
+  TUTORIAL_PARK_KEY,
+} from '../src/composables/useTutorial'
 
 // jsdom has no canvas package installed, so decoding a rasterised board never
 // settles at all rather than rejecting (see the comment on this same point
@@ -69,6 +75,10 @@ async function pressCounter(app: VueWrapper) {
 beforeEach(() => {
   localStorage.clear()
   __resetBoardForTests()
+  __resetTutorialForTests()
+  // Every test below is about something other than the tour, and a first
+  // visit now opens one. The tour's own tests clear this again.
+  localStorage.setItem(TUTORIAL_KEY, JSON.stringify({ seen: true }))
   useStorage().lastError.value = null
   // No longer the same ref as the line above — each store owns its own pair
   // now, so both need resetting between tests.
@@ -2523,5 +2533,148 @@ describe('autosave during playback', () => {
 
     board.pause()
     void storage
+  })
+})
+
+/*
+ * The tour runs on the real board, so the coach's drill is parked in the
+ * draft and handed back at the end — name, library id and all. These tests
+ * are the ones that clear the seen flag the beforeEach sets.
+ */
+describe('the tutorial', () => {
+  beforeEach(() => localStorage.removeItem(TUTORIAL_KEY))
+
+  it('opens by itself on a first visit', async () => {
+    wrapper = mountApp()
+    await nextTick()
+    expect(wrapper.find('[data-tour-card]').exists()).toBe(true)
+  })
+
+  it('does not open again once it has been seen', async () => {
+    localStorage.setItem(TUTORIAL_KEY, JSON.stringify({ seen: true }))
+    wrapper = mountApp()
+    await nextTick()
+    expect(wrapper.find('[data-tour-card]').exists()).toBe(false)
+  })
+
+  /* A coach with work in progress is not on a first visit. */
+  it('does not open on a board restored from a draft', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    useStorage().saveDraft(board.snapshot())
+    __resetBoardForTests()
+    wrapper = mountApp()
+    await nextTick()
+    expect(wrapper.find('[data-tour-card]').exists()).toBe(false)
+  })
+
+  it('starts from the help panel', async () => {
+    localStorage.setItem(TUTORIAL_KEY, JSON.stringify({ seen: true }))
+    wrapper = mountApp()
+    await wrapper.find('[data-help]').trigger('click')
+    await wrapper.find('[data-start-tour]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-tour-card]').exists()).toBe(true)
+  })
+
+  it('closes help on the way into the tour', async () => {
+    localStorage.setItem(TUTORIAL_KEY, JSON.stringify({ seen: true }))
+    wrapper = mountApp()
+    await wrapper.find('[data-help]').trigger('click')
+    await wrapper.find('[data-start-tour]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[aria-label="Help"][role="dialog"]').exists()).toBe(false)
+  })
+
+  it('parks the drill and hands it back on Skip', async () => {
+    const board = useBoard()
+    localStorage.setItem(TUTORIAL_KEY, JSON.stringify({ seen: true }))
+    wrapper = mountApp()
+    board.addCounter('red')
+    board.addCounter('blue')
+    await nextTick()
+
+    await wrapper.find('[data-help]').trigger('click')
+    await wrapper.find('[data-start-tour]').trigger('click')
+    await nextTick()
+    expect(board.state.counters).toHaveLength(0)
+
+    await wrapper.find('[data-tour-skip]').trigger('click')
+    await nextTick()
+    expect(board.state.counters).toHaveLength(2)
+  })
+
+  it("hands the drill's name back with it", async () => {
+    localStorage.setItem(TUTORIAL_KEY, JSON.stringify({ seen: true }))
+    wrapper = mountApp()
+    const field = wrapper.find('[data-current-pattern]')
+    await field.setValue('Rondo')
+    await field.trigger('change')
+    await wrapper.find('[data-help]').trigger('click')
+    await wrapper.find('[data-start-tour]').trigger('click')
+    await nextTick()
+    expect(drillName(wrapper)).toBe('')
+
+    await wrapper.find('[data-tour-skip]').trigger('click')
+    await nextTick()
+    expect(drillName(wrapper)).toBe('Rondo')
+  })
+
+  it('closes on Escape, drill and all', async () => {
+    const board = useBoard()
+    wrapper = mountApp()
+    await nextTick()
+    board.addCounter('red')
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await nextTick()
+    expect(wrapper.find('[data-tour-card]').exists()).toBe(false)
+  })
+
+  it('opens help from the last step', async () => {
+    wrapper = mountApp()
+    await nextTick()
+    const tutorial = useTutorial()
+    for (let i = 0; i < tutorial.steps.length; i++) tutorial.next()
+    await nextTick()
+    await wrapper.find('[data-tour-help]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-tour-card]').exists()).toBe(false)
+    expect(wrapper.find('[aria-label="Help"][role="dialog"]').exists()).toBe(true)
+  })
+
+  /*
+   * The draft is what a refresh restores. Writing the tour's board over it
+   * would lose the coach's drill for the sake of an empty pitch.
+   */
+  it("leaves the draft holding the coach's drill while it runs", async () => {
+    const board = useBoard()
+    localStorage.setItem(TUTORIAL_KEY, JSON.stringify({ seen: true }))
+    wrapper = mountApp()
+    board.addCounter('red')
+    board.addCounter('blue')
+    await nextTick()
+    await wrapper.find('[data-help]').trigger('click')
+    await wrapper.find('[data-start-tour]').trigger('click')
+    await nextTick()
+
+    board.addCounter('red')
+    await new Promise((resolve) => setTimeout(resolve, 600))
+    expect(useStorage().loadDraft()!.frames[0].counters).toHaveLength(2)
+  })
+
+  /* A refresh mid-tour: the drill comes back through the draft, its name
+   * through the park, and no tour reopens. */
+  it('recovers an interrupted tour on the next startup', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    useStorage().saveDraft(board.snapshot())
+    localStorage.setItem(TUTORIAL_PARK_KEY, JSON.stringify({ patternId: null, name: 'Rondo' }))
+    __resetBoardForTests()
+
+    wrapper = mountApp()
+    await nextTick()
+    expect(wrapper.find('[data-tour-card]').exists()).toBe(false)
+    expect(drillName(wrapper)).toBe('Rondo')
+    expect(localStorage.getItem(TUTORIAL_PARK_KEY)).toBeNull()
   })
 })

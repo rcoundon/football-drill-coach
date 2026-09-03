@@ -17,16 +17,19 @@ import HelpPanel from './components/HelpPanel.vue'
 import Inspector from './components/Inspector.vue'
 import TagInput from './components/TagInput.vue'
 import PhaseTimeline from './components/PhaseTimeline.vue'
+import TutorialOverlay from './components/TutorialOverlay.vue'
 import { MAX_LABEL_LENGTH, useBoard } from './composables/useBoard'
 import { useStorage } from './composables/useStorage'
 import { useSessions } from './composables/useSessions'
 import { buildSessionPdf } from './sessionPdf'
 import { useExport } from './composables/useExport'
 import { useViewport } from './composables/useViewport'
+import { useTutorial } from './composables/useTutorial'
 
 const board = useBoard()
 const storage = useStorage()
 const sessions = useSessions()
+const tutorial = useTutorial()
 const { isPortrait, isCompact } = useViewport()
 
 /**
@@ -500,6 +503,37 @@ function onBoardReset() {
 }
 
 /**
+ * Park the open drill and hand the board to the tour.
+ *
+ * The pattern id and name are cleared here rather than inside the tour,
+ * because they are App's to own — and clearing them is what stops the
+ * autosave writing the tour's board over the coach's saved drill:
+ * `scheduleAutosave` already returns early when there is neither.
+ */
+function startTour(): void {
+  if (board.isDerived.value || presenting.value) return
+  helpOpen.value = false
+  tutorial.start({ patternId: currentPatternId.value, name: currentName.value })
+  currentPatternId.value = null
+  currentName.value = ''
+  saveStatus.value = 'unsaved'
+}
+
+/** Close the tour and put the coach's drill, and its identity, back. */
+function endTour(): void {
+  const park = tutorial.end()
+  currentPatternId.value = park.patternId
+  currentName.value = park.name
+  saveStatus.value = park.patternId ? 'saved' : 'unsaved'
+}
+
+/** The last step's way out: end the tour, then show them where the rest is. */
+function onTourHelp(): void {
+  endTour()
+  helpOpen.value = true
+}
+
+/**
  * The board reports where a label should go, or which one to edit; the text
  * itself is typed here, in the same small dialog the other prompts use.
  */
@@ -728,6 +762,7 @@ function dismissStoreError(): void {
 
 const isDialogOpen = computed(
   () =>
+    tutorial.active.value ||
     savePromptOpen.value ||
     deleteDrillPromptOpen.value ||
     resetPromptOpen.value ||
@@ -747,6 +782,10 @@ const isDialogOpen = computed(
  * the thing they were about to go back to.
  */
 function closeTopmostDialog(): boolean {
+  if (tutorial.active.value) {
+    endTour()
+    return true
+  }
   if (savePromptOpen.value) {
     savePromptOpen.value = false
     return true
@@ -932,6 +971,21 @@ onMounted(() => {
      */
     board.restoreSnapshot({ ...board.snapshot(), pitch: { ...board.state.pitch, rotated: true } })
   }
+
+  /*
+   * A park left behind means a tour was cut short by a refresh. The board
+   * itself came back through the draft above; this is only how the drill's
+   * identity gets back to the header. No tour reopens — a coach who
+   * refreshed may well have been trying to escape it.
+   */
+  const park = tutorial.takePark()
+  if (park) {
+    currentPatternId.value = park.patternId
+    currentName.value = park.name
+    saveStatus.value = park.patternId ? 'saved' : 'unsaved'
+  } else if (!draft && !tutorial.hasSeen()) {
+    startTour()
+  }
   window.addEventListener('keydown', onKeydown)
 })
 
@@ -951,8 +1005,13 @@ watch(
     // Playing moves the playhead, not the drill. Writing a draft several
     // times a second during a play-through risks restoring a half-tweened
     // board on the next start, and none of it is a change worth saving.
-    if (board.isDerived.value) return
+    // The draft is what a refresh restores, and while the tour runs it holds
+    // the coach's parked drill. Writing the tour's empty board over it would
+    // lose their work for the sake of an empty pitch — cleared here, ahead of
+    // the guard, so a write already pending from just before either guard took
+    // hold cannot land later with whatever the board holds by then.
     clearTimeout(saveTimer)
+    if (board.isDerived.value || tutorial.active.value) return
     saveTimer = setTimeout(() => storage.saveDraft(board.snapshot()), 400)
     // The draft keeps the working board across a refresh; this keeps the
     // drill itself up to date in the library, so Save is something a coach
@@ -1090,7 +1149,9 @@ watch(
       @exportPdf="exportSessionPdf"
     />
 
-    <HelpPanel :open="helpOpen" @close="helpOpen = false" />
+    <HelpPanel :open="helpOpen" @close="helpOpen = false" @startTour="startTour" />
+
+    <TutorialOverlay @end="endTour" @openHelp="onTourHelp" />
 
     <div v-if="labelTarget" class="overlay" @click.self="labelTarget = null">
       <div class="prompt" role="dialog" aria-label="Label text">
