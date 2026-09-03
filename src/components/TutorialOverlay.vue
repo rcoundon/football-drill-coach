@@ -127,33 +127,50 @@ const dims = computed<Box[]>(() => {
 /**
  * Put the card wherever there is room, measured against the viewport.
  *
- * Below, then above, then to one side, then centred. Chosen by measurement
- * rather than by a per-step opinion about direction, because the rail runs
- * down the edge on a desktop and along the bottom on a portrait phone, and
- * the same step has to work in both.
+ * Which axis is tried first depends on where the anchor sits, because a
+ * control that hugs an edge nearly always has its neighbours along that
+ * edge with it. The rail's colour swatches sit one under the other down
+ * the left, so a card dropped below the red one lands on the rest of the
+ * colours the step is asking the coach to choose from; stepping sideways
+ * clears the whole rail in one move. Out in the middle of the pitch there
+ * is no such run of neighbours, and below reads better than beside.
+ *
+ * Measured rather than given per step, because the rail runs down the edge
+ * on a desktop and along the bottom on a portrait phone, and the same step
+ * has to work in both. Within an axis the roomier side wins, and a card
+ * that fits nowhere goes back to the middle.
  */
 const cardStyle = computed(() => {
   const r = rect.value
   const { w, h } = viewport.value
-  if (!r || r.width === 0 || r.height === 0) {
-    return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
-  }
+  const middle = { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
+  if (!r || r.width === 0 || r.height === 0) return middle
+
   const clampLeft = (left: number) => px(Math.min(Math.max(GAP, left), Math.max(GAP, w - CARD_W - GAP)))
   const clampTop = (top: number) => px(Math.min(Math.max(GAP, top), Math.max(GAP, h - CARD_H - GAP)))
 
-  if (h - r.bottom >= CARD_H + GAP) {
-    return { top: px(r.bottom + GAP), left: clampLeft(r.left) }
+  const below = () =>
+    h - r.bottom >= CARD_H + GAP ? { top: px(r.bottom + GAP), left: clampLeft(r.left) } : null
+  const above = () =>
+    r.top >= CARD_H + GAP ? { top: px(r.top - CARD_H - GAP), left: clampLeft(r.left) } : null
+  const right = () =>
+    w - r.right >= CARD_W + GAP ? { top: clampTop(r.top), left: px(r.right + GAP) } : null
+  const left = () =>
+    r.left >= CARD_W + GAP ? { top: clampTop(r.top), left: px(r.left - CARD_W - GAP) } : null
+
+  // Which edge the anchor is nearest, and so which way its neighbours run.
+  const toSide = Math.min(r.left, w - r.right)
+  const toEndwise = Math.min(r.top, h - r.bottom)
+
+  const vertical = h - r.bottom >= r.top ? [below, above] : [above, below]
+  const horizontal = w - r.right >= r.left ? [right, left] : [left, right]
+  const order = toSide <= toEndwise ? [...horizontal, ...vertical] : [...vertical, ...horizontal]
+
+  for (const place of order) {
+    const at = place()
+    if (at) return at
   }
-  if (r.top >= CARD_H + GAP) {
-    return { top: px(r.top - CARD_H - GAP), left: clampLeft(r.left) }
-  }
-  if (w - r.right >= CARD_W + GAP) {
-    return { top: clampTop(r.top), left: px(r.right + GAP) }
-  }
-  if (r.left >= CARD_W + GAP) {
-    return { top: clampTop(r.top), left: px(r.left - CARD_W - GAP) }
-  }
-  return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
+  return middle
 })
 </script>
 

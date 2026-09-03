@@ -42,6 +42,29 @@ function redSwatch(): void {
   document.body.appendChild(el)
 }
 
+/**
+ * An anchor out in the middle of the pitch, well clear of every edge —
+ * which is where the two steps about a player point.
+ */
+const MIDDLE_RECT = {
+  left: 500, top: 360, width: 24, height: 24,
+  right: 524, bottom: 384, x: 500, y: 360, toJSON: () => ({}),
+} as DOMRect
+
+function playerCounter(): void {
+  const el = document.createElement('div')
+  el.setAttribute('data-counter', '')
+  el.getBoundingClientRect = () => MIDDLE_RECT
+  document.body.appendChild(el)
+}
+
+/** The numbers the card's placement is measured against. */
+function cardBox(overlay: VueWrapper): Record<string, number> {
+  const style = overlay.get('[data-tour-card]').attributes('style') ?? ''
+  const read = (prop: string) => Number(new RegExp(`${prop}:\\s*(-?\\d+)px`).exec(style)?.[1] ?? NaN)
+  return { top: read('top'), left: read('left') }
+}
+
 function mountOverlay() {
   wrapper = mount(TutorialOverlay, { attachTo: document.body })
   return wrapper
@@ -189,6 +212,32 @@ describe('the spotlight', () => {
     const overlay = mountOverlay()
     await nextTick()
     expect(overlay.findAll('[data-tour-dim]')).toHaveLength(4)
+  })
+
+  /*
+   * The rail runs down the left edge, and its swatches sit one under the
+   * other — so a card placed below the red swatch lands on the rest of the
+   * colours the step is asking the coach to choose from. Anything hugging
+   * an edge has to be stepped away from, not stepped past.
+   */
+  it('steps sideways off a control that hugs an edge', async () => {
+    redSwatch()
+    tutorial.start({ patternId: null, name: '' })
+    tutorial.next() // `place`, which anchors to the red swatch
+    const overlay = mountOverlay()
+    await nextTick()
+    expect(cardBox(overlay).left).toBeGreaterThanOrEqual(RECT.right)
+  })
+
+  /* Out in the middle there is no rail to clear, and under reads better. */
+  it('drops below an anchor that is clear of every edge', async () => {
+    playerCounter()
+    tutorial.start({ patternId: null, name: '' })
+    tutorial.next()
+    tutorial.next() // `label`, which anchors to a player
+    const overlay = mountOverlay()
+    await nextTick()
+    expect(cardBox(overlay).top).toBeGreaterThanOrEqual(MIDDLE_RECT.bottom)
   })
 
   it('covers the screen with one box when the step has no anchor', async () => {

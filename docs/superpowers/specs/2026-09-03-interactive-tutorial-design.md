@@ -195,10 +195,17 @@ or a line saying what to do. It is the only part of the overlay that takes
 the pointer.
 
 The card is placed on whichever side of the anchor has room, measured against
-the viewport, falling back to centred. It must clear the rail in both of its
+the viewport, falling back to centred. Which axis is tried first depends on
+where the anchor sits: a control that hugs an edge nearly always has its
+neighbours along that edge with it, so the card steps away from the edge
+rather than along it. The rail's colour swatches sit one under the other, and
+a card dropped below the red one covers the rest of the colours the step is
+asking the coach to choose from. An anchor out in the middle of the pitch has
+no such run of neighbours, and below reads better than beside.
+
+That measurement is also what makes one step work in both of the rail's
 layouts — down the edge on a desktop, along the bottom on a portrait phone —
-and the placement search is what handles that, rather than a per-step
-opinion about direction.
+rather than a per-step opinion about direction.
 
 The whole overlay carries `data-transient`, so an export taken mid-tour is
 clean, matching how the bend handles and endpoint rings are already treated.
