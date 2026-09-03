@@ -173,11 +173,17 @@ describe('anchors', () => {
     expect(step('play').anchor).toBe('[data-play]')
     expect(step('pass').anchor).toBe('[data-tool="arrow-pass"]')
     expect(step('more').anchor).toBe('[data-help]')
-    // `label` and `move` are spelled out explicitly, not left to fall out of
-    // omission — the spec is explicit that these two are anchor-less, and an
-    // anchor added to either by mistake would otherwise slip straight past
-    // this test.
-    expect(step('label').anchor).toBeUndefined()
-    expect(step('move').anchor).toBeUndefined()
+    /*
+     * Both steps about a player point at one. Pressing a colour drops
+     * players at the middle of the pitch, which is exactly where a card
+     * with no anchor sits — so an anchor-less `label` step covered the very
+     * players it was asking the coach to double-press.
+     */
+    expect(step('label').anchor).toBe('[data-counter]')
+    expect(step('move').anchor).toBe('[data-counter]')
+    // Spelled out, not left to fall out of omission: the opening card is
+    // the one step that deliberately has nothing to point at, and an anchor
+    // added to it by mistake would otherwise slip straight past this test.
+    expect(step('welcome').anchor).toBeUndefined()
   })
 })

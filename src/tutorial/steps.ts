@@ -48,6 +48,13 @@ export const STEPS: TutorialStep[] = [
     id: 'label',
     title: 'Give one a number',
     body: 'Double-press a player and type up to four characters. Most drills read fine from colour alone, so this is for the player the session is about.',
+    /*
+     * A player, not a control. Pressing a colour drops players at the middle
+     * of the pitch, which is exactly where a card with no anchor sits — so
+     * this step used to cover the very players it was asking the coach to
+     * press. Pointing at one moves the card clear and says which to press.
+     */
+    anchor: '[data-counter]',
     goal: (board) => board.state.counters.some((c) => c.label !== ''),
   },
   {
@@ -61,6 +68,9 @@ export const STEPS: TutorialStep[] = [
     id: 'move',
     title: 'Move somebody',
     body: 'Drag a player somewhere new. The gap between where they stood on the last phase and where they stand on this one is their run.',
+    // The same player, for the same reason. The hole does not follow them
+    // mid-drag, which costs nothing: the step is over the moment they land.
+    anchor: '[data-counter]',
     goal: (board) =>
       board.state.frames.some((frame, index) => {
         if (index === 0) return false

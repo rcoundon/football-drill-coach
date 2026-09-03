@@ -70,17 +70,25 @@ it, so every goal is testable headlessly against a real board with no DOM.
 | --- | --- | --- |
 | `welcome` | — | Next |
 | `place` | `[data-add-counter="red"]` | Three or more players are on the board |
-| `label` | — | Any player has a non-empty label |
+| `label` | `[data-counter]` | Any player has a non-empty label |
 | `phase` | `[data-add-frame]` | The drill has two or more phases |
-| `move` | — | A player stands somewhere other than where they stood on the previous phase |
+| `move` | `[data-counter]` | A player stands somewhere other than where they stood on the previous phase |
 | `play` | `[data-play]` | The drill is playing, or the playhead has left zero |
 | `pass` | `[data-tool="arrow-pass"]` | A drawing with `kind: 'arrow'` and `style: 'pass'` exists |
 | `more` | `[data-help]` | Next, or the Open Help button |
 
 Every anchor already exists in the markup. `data-add-counter`,
-`data-add-frame`, `data-play`, `data-tool` and `data-help` are attributes
-those components carry today for their own reasons. No component gains an
-attribute for the tutorial's sake, and no component imports it.
+`data-add-frame`, `data-play`, `data-tool`, `data-counter` and `data-help`
+are attributes those components carry today for their own reasons. No
+component gains an attribute for the tutorial's sake, and no component
+imports it.
+
+The two steps about a player point at one rather than at a control, and
+`[data-counter]` resolves to the first player on the pitch. They have to
+point at something: pressing a colour drops players at the middle of the
+pitch, which is exactly where a card with no anchor sits, so an anchor-less
+`label` step covered the very players it asked the coach to press. Only the
+opening card has nothing to point at.
 
 Three players rather than two on `place`: two is a pass, three is a drill,
 and the extra press costs nothing while making the pitch look like something
