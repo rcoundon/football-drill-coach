@@ -25,6 +25,20 @@ const GAP = 12
 
 const rect = ref<DOMRect | null>(null)
 
+/**
+ * The anchor's immediate group — what the card has to clear, as opposed to
+ * what the spotlight cuts a hole in.
+ *
+ * A control that hugs an edge nearly always sits in a block of its
+ * neighbours: the rail's colours are a grid two columns wide, so a card that
+ * steps past the red swatch alone still covers the blue one beside it. The
+ * parent element is that block, and it costs no per-step knowledge and no
+ * new markup to ask for it. It can be useless — the whole pitch, or a body
+ * that jsdom gives no size — so it is only ever a first preference, and the
+ * anchor itself is what the placement falls back to.
+ */
+const group = ref<DOMRect | null>(null)
+
 /*
  * The viewport, read fresh on every `measure()`. `getBoundingClientRect()`
  * returns a new object each call, so `rect` re-triggers `dims` and
@@ -49,10 +63,13 @@ function measure(): void {
   const selector = tutorial.step.value?.anchor
   if (!selector) {
     rect.value = null
+    group.value = null
     return
   }
   const el = document.querySelector(selector)
   rect.value = el ? el.getBoundingClientRect() : null
+  const parent = el?.parentElement?.getBoundingClientRect() ?? null
+  group.value = parent && parent.width > 0 && parent.height > 0 ? parent : null
 }
 
 let observer: ResizeObserver | null = null
@@ -149,28 +166,36 @@ const cardStyle = computed(() => {
   const clampLeft = (left: number) => px(Math.min(Math.max(GAP, left), Math.max(GAP, w - CARD_W - GAP)))
   const clampTop = (top: number) => px(Math.min(Math.max(GAP, top), Math.max(GAP, h - CARD_H - GAP)))
 
-  const below = () =>
-    h - r.bottom >= CARD_H + GAP ? { top: px(r.bottom + GAP), left: clampLeft(r.left) } : null
-  const above = () =>
-    r.top >= CARD_H + GAP ? { top: px(r.top - CARD_H - GAP), left: clampLeft(r.left) } : null
-  const right = () =>
-    w - r.right >= CARD_W + GAP ? { top: clampTop(r.top), left: px(r.right + GAP) } : null
-  const left = () =>
-    r.left >= CARD_W + GAP ? { top: clampTop(r.top), left: px(r.left - CARD_W - GAP) } : null
+  /** The first side of `box` the card fits beside, or nothing. */
+  function beside(box: DOMRect): Record<string, string> | null {
+    const below = () =>
+      h - box.bottom >= CARD_H + GAP ? { top: px(box.bottom + GAP), left: clampLeft(box.left) } : null
+    const above = () =>
+      box.top >= CARD_H + GAP ? { top: px(box.top - CARD_H - GAP), left: clampLeft(box.left) } : null
+    const right = () =>
+      w - box.right >= CARD_W + GAP ? { top: clampTop(box.top), left: px(box.right + GAP) } : null
+    const left = () =>
+      box.left >= CARD_W + GAP ? { top: clampTop(box.top), left: px(box.left - CARD_W - GAP) } : null
 
-  // Which edge the anchor is nearest, and so which way its neighbours run.
-  const toSide = Math.min(r.left, w - r.right)
-  const toEndwise = Math.min(r.top, h - r.bottom)
+    // Which edge the box is nearest, and so which way its neighbours run.
+    const toSide = Math.min(box.left, w - box.right)
+    const toEndwise = Math.min(box.top, h - box.bottom)
 
-  const vertical = h - r.bottom >= r.top ? [below, above] : [above, below]
-  const horizontal = w - r.right >= r.left ? [right, left] : [left, right]
-  const order = toSide <= toEndwise ? [...horizontal, ...vertical] : [...vertical, ...horizontal]
+    const vertical = h - box.bottom >= box.top ? [below, above] : [above, below]
+    const horizontal = w - box.right >= box.left ? [right, left] : [left, right]
+    const order = toSide <= toEndwise ? [...horizontal, ...vertical] : [...vertical, ...horizontal]
 
-  for (const place of order) {
-    const at = place()
-    if (at) return at
+    for (const place of order) {
+      const at = place()
+      if (at) return at
+    }
+    return null
   }
-  return middle
+
+  // The group first, so the card clears the anchor's neighbours as well as
+  // the anchor. A group too big to step around — the whole pitch behind a
+  // player — leaves the anchor itself, which is the old behaviour.
+  return (group.value && beside(group.value)) ?? beside(r) ?? middle
 })
 </script>
 

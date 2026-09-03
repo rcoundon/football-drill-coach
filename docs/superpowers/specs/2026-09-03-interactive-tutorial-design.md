@@ -194,14 +194,23 @@ when the coach does the thing.
 or a line saying what to do. It is the only part of the overlay that takes
 the pointer.
 
-The card is placed on whichever side of the anchor has room, measured against
-the viewport, falling back to centred. Which axis is tried first depends on
-where the anchor sits: a control that hugs an edge nearly always has its
-neighbours along that edge with it, so the card steps away from the edge
-rather than along it. The rail's colour swatches sit one under the other, and
-a card dropped below the red one covers the rest of the colours the step is
-asking the coach to choose from. An anchor out in the middle of the pitch has
-no such run of neighbours, and below reads better than beside.
+The card is placed on whichever side has room, measured against the viewport,
+falling back to centred. Two things shape that search.
+
+It clears the anchor's group rather than the anchor. A control that hugs an
+edge nearly always sits in a block of its neighbours — the rail's colours are
+a grid two columns wide — and a card that steps past the red swatch alone
+still covers the blue one beside it. The anchor's parent element is that
+block, which costs no per-step knowledge and no new markup. A group too big
+to step around, the whole pitch behind a player, leaves the anchor itself.
+
+And the axis is chosen from which edge that box is nearest, because
+neighbours run along the edge their block hugs: the card steps sideways off
+the rail rather than down it. An anchor out in the middle of the pitch has no
+such run, and below reads better than beside.
+
+The spotlight still cuts its hole over the anchor alone. The group is about
+what the card must not cover, not about what the coach is being shown.
 
 That measurement is also what makes one step work in both of the rail's
 layouts — down the edge on a desktop, along the bottom on a portrait phone —

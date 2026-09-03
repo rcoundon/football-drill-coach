@@ -31,15 +31,29 @@ const RECT = {
 } as DOMRect
 
 /**
- * Put the red swatch on the page, which is what the `place` step anchors to.
- * jsdom gives every element a zero rect, and a zero rect is how the overlay
- * recognises an anchor that is not really on screen — so it is stubbed.
+ * The grid the swatches sit in: two columns of colours down the left edge.
+ * The red swatch is only its top-left cell, so this is the box a card has
+ * to clear to leave the colours visible.
+ */
+const GRID_RECT = {
+  left: 90, top: 190, width: 120, height: 200,
+  right: 210, bottom: 390, x: 90, y: 190, toJSON: () => ({}),
+} as DOMRect
+
+/**
+ * Put the red swatch on the page, in its grid, which is what the `place`
+ * step anchors to. jsdom gives every element a zero rect, and a zero rect is
+ * how the overlay recognises an anchor that is not really on screen — so
+ * both are stubbed.
  */
 function redSwatch(): void {
+  const grid = document.createElement('div')
+  grid.getBoundingClientRect = () => GRID_RECT
   const el = document.createElement('button')
   el.setAttribute('data-add-counter', 'red')
   el.getBoundingClientRect = () => RECT
-  document.body.appendChild(el)
+  grid.appendChild(el)
+  document.body.appendChild(grid)
 }
 
 /**
@@ -227,6 +241,20 @@ describe('the spotlight', () => {
     const overlay = mountOverlay()
     await nextTick()
     expect(cardBox(overlay).left).toBeGreaterThanOrEqual(RECT.right)
+  })
+
+  /*
+   * Clearing the swatch alone is not enough: the colours are laid out in a
+   * grid two columns wide, so a card that steps past the red one still sits
+   * on the blue one beside it.
+   */
+  it('clears the whole group the control belongs to, not just the control', async () => {
+    redSwatch()
+    tutorial.start({ patternId: null, name: '' })
+    tutorial.next()
+    const overlay = mountOverlay()
+    await nextTick()
+    expect(cardBox(overlay).left).toBeGreaterThanOrEqual(GRID_RECT.right)
   })
 
   /* Out in the middle there is no rail to clear, and under reads better. */
