@@ -134,6 +134,15 @@ function start(park: TutorialPark): void {
  * is not something the coach did, so it must not be undoable — and the
  * history goes with it, or Ctrl+Z would walk from the restored drill into a
  * half-finished tour board.
+ *
+ * A missing draft — a second tab's own autosave landing on the shared draft
+ * key while this one parked it, or storage cleared mid-tour — leaves the
+ * empty tour board on screen with nothing restored onto it. Handing back the
+ * parked patternId regardless would tell App that empty board IS the coach's
+ * saved drill, and the next edit would autosave it over that drill under its
+ * own id. So the id only comes back when the drill it names actually did;
+ * the name is kept either way, since it costs nothing to show on an empty
+ * board and the id is what does the damage.
  */
 function end(): TutorialPark {
   const park = readPark() ?? { patternId: null, name: '' }
@@ -144,7 +153,7 @@ function end(): TutorialPark {
   markSeen()
   active.value = false
   stepIndex.value = 0
-  return park
+  return draft ? park : { patternId: null, name: park.name }
 }
 
 function next(): void {

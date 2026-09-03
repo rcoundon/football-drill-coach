@@ -152,6 +152,38 @@ describe('ending', () => {
     expect(localStorage.getItem(TUTORIAL_PARK_KEY)).toBeNull()
   })
 
+  /*
+   * A missing draft is reachable through a second tab's ordinary autosave
+   * overwriting the shared draft key while this tab's tour runs, or through
+   * storage cleared mid-tour — not only through Critical 1's now-closed
+   * path. Handing back the parked patternId regardless would tell App the
+   * empty tour board IS that saved drill; the next edit would then autosave
+   * the empty board over it under that id. The name is kept — it costs
+   * nothing on an empty board — but the id is what does the damage, so it
+   * is not.
+   */
+  describe('when the draft did not come back', () => {
+    it('hands back no patternId', () => {
+      tutorial.start({ patternId: 'p1', name: 'Rondo' })
+      localStorage.removeItem(DRAFT_KEY)
+      expect(tutorial.end().patternId).toBeNull()
+    })
+
+    it('keeps the name', () => {
+      tutorial.start({ patternId: 'p1', name: 'Rondo' })
+      localStorage.removeItem(DRAFT_KEY)
+      expect(tutorial.end().name).toBe('Rondo')
+    })
+
+    it('leaves the empty tour board on screen rather than inventing one', () => {
+      aDrill()
+      tutorial.start({ patternId: 'p1', name: 'Rondo' })
+      localStorage.removeItem(DRAFT_KEY)
+      tutorial.end()
+      expect(board.state.counters).toHaveLength(0)
+    })
+  })
+
   it('leaves nothing to undo from the restored drill', () => {
     aDrill()
     tutorial.start({ patternId: null, name: '' })

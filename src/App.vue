@@ -985,12 +985,19 @@ onMounted(() => {
    * itself came back through the draft above; this is only how the drill's
    * identity gets back to the header. No tour reopens — a coach who
    * refreshed may well have been trying to escape it.
+   *
+   * `draft` is what proves the board on screen actually is that pattern: a
+   * park with no matching draft — cleared, or overwritten by a second tab's
+   * own autosave — leaves the empty tour board here instead, and reporting
+   * the parked id over it would tell the rest of the app this empty board IS
+   * that saved drill. The next stray edit would then autosave over it. The
+   * name still costs nothing to show on an empty board, so it is kept.
    */
   const park = tutorial.takePark()
   if (park) {
-    currentPatternId.value = park.patternId
+    currentPatternId.value = draft ? park.patternId : null
     currentName.value = park.name
-    saveStatus.value = park.patternId ? 'saved' : 'unsaved'
+    saveStatus.value = draft && park.patternId ? 'saved' : 'unsaved'
   } else if (!draft && !tutorial.hasSeen()) {
     startTour()
   }
