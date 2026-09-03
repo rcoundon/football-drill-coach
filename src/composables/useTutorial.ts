@@ -94,11 +94,13 @@ function takePark(): TutorialPark | null {
   return park
 }
 
-function writePark(park: TutorialPark): void {
+/** Whether the park landed. See `start` for why the caller has to care. */
+function writePark(park: TutorialPark): boolean {
   try {
     localStorage.setItem(TUTORIAL_PARK_KEY, JSON.stringify(park))
+    return true
   } catch {
-    // The tour still runs; the drill's name just will not survive a refresh.
+    return false
   }
 }
 
@@ -119,13 +121,17 @@ function writePark(park: TutorialPark): void {
  * coach running the tour in two tabs on the same drill at once is not a case
  * worth a second key over.
  *
- * The save is checked, not just fired: `saveDraft` swallows a quota failure
- * rather than throwing, so `lastError` is the only sign one happened. A
- * coach's drill that never reached storage must not then be erased from
- * memory too — this app keeps no other copy of it — so a failed save aborts
- * the whole start before either the park key or the board is touched. The
- * error is already on screen: App renders `storage.lastError` as a
- * dismissible banner.
+ * Both writes are checked, not just fired, and the board is not touched
+ * until both have landed. Neither one throws: `saveDraft` swallows a quota
+ * failure and leaves `lastError` as the only sign of it, and the park write
+ * swallows its own. Between them they are everything needed to put the board
+ * back, so dismantling it before they are both stored risks the two halves
+ * of the same promise — the drill itself, which this app keeps no other copy
+ * of, and which saved drill it was, without which it comes back nameless and
+ * unfiled and the coach has to go looking for it in the library. A failed
+ * draft is already on screen, since App renders `storage.lastError` as a
+ * dismissible banner; a failed park is not, and shows only as a Take the
+ * tour that declines to start.
  *
  * `resetBoard` keeps the pitch type and rotation, so a tour taken on a phone
  * runs on the pitch the coach was already looking at.
@@ -147,7 +153,7 @@ function start(park: TutorialPark): boolean {
   if (board.isDerived.value) return false
   storage.saveDraft(board.snapshot())
   if (storage.lastError.value) return false
-  writePark(park)
+  if (!writePark(park)) return false
   board.resetBoard()
   board.clearHistory()
   stepIndex.value = 0

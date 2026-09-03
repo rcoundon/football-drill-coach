@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { useBoard, __resetBoardForTests } from '../src/composables/useBoard'
 import { useStorage, DRAFT_KEY } from '../src/composables/useStorage'
@@ -139,6 +139,42 @@ describe('starting', () => {
       tutorial.start({ patternId: 'p1', name: 'Rondo' })
       vi.restoreAllMocks()
       expect(board.canUndo.value).toBe(true)
+    })
+  })
+
+  /*
+   * The park is the other half of the same promise. A drill that reached the
+   * draft but whose identity did not comes back nameless and unfiled — the
+   * library still holds it, but the board no longer knows which entry it is,
+   * and the coach has to go and find it. Dismantling the board is only safe
+   * once everything needed to put it back has landed.
+   */
+  describe('when the park cannot be written', () => {
+    beforeEach(() => {
+      const real = Storage.prototype.setItem
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+        this: Storage,
+        key: string,
+        value: string,
+      ) {
+        if (key === TUTORIAL_PARK_KEY) throw new Error('full')
+        real.call(this, key, value)
+      })
+    })
+
+    // Unconditional, not at the end of each test: an assertion that fails
+    // before its own restore would leak this stub into every test after it.
+    afterEach(() => vi.restoreAllMocks())
+
+    it('does not touch the board', () => {
+      aDrill()
+      tutorial.start({ patternId: 'p1', name: 'Rondo' })
+      expect(board.state.counters).toHaveLength(2)
+    })
+
+    it('does not start the tour, and says so', () => {
+      expect(tutorial.start({ patternId: 'p1', name: 'Rondo' })).toBe(false)
+      expect(tutorial.active.value).toBe(false)
     })
   })
 })

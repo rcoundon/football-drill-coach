@@ -165,6 +165,13 @@ id and name under `fct.tutorial-park.v1`, clears both, and empties the board.
 On finish or skip it reads the draft back onto the board, restores the id and
 name, and deletes the park key.
 
+Neither write is allowed to fail silently. The draft holds the drill and the
+park holds which saved drill it is, and between them they are everything
+needed to put the board back — so if either one does not land, the tour
+declines to start and the board is left alone. A drill that reached the draft
+but whose identity did not would come back nameless and unfiled, with the
+coach left to find it in the library again.
+
 Reusing the draft rather than inventing a second snapshot store means the
 tour needs no snapshot validator of its own, and it makes an interrupted tour
 correct for free: while the tour runs the draft is not written, so it still
