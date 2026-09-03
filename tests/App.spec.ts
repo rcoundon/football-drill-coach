@@ -2620,6 +2620,65 @@ describe('the tutorial', () => {
     expect(drillName(wrapper)).toBe('Rondo')
   })
 
+  /*
+   * The header stays live during the tour on purpose — the coach can wander
+   * — but `scheduleAutosave`'s empty-name-and-no-id guard is only quiet
+   * until a name is typed. Without a guard of its own, the curious coach who
+   * types into the header a second after the tour opens gets the tour's
+   * empty board filed as a brand-new pattern in their library.
+   */
+  it('does not autosave the tour board just because the coach typed a name into it', async () => {
+    vi.useFakeTimers()
+    try {
+      localStorage.setItem(TUTORIAL_KEY, JSON.stringify({ seen: true }))
+      const storage = useStorage()
+      wrapper = mountApp()
+      await nextTick()
+      await wrapper.find('[data-help]').trigger('click')
+      await wrapper.find('[data-start-tour]').trigger('click')
+      await nextTick()
+
+      const field = wrapper.find('[data-current-pattern]')
+      await field.setValue('Scratch')
+      await field.trigger('change')
+      vi.advanceTimersByTime(1500)
+      await nextTick()
+
+      expect(storage.listPatterns()).toHaveLength(0)
+      expect(wrapper.find('[data-save-status]').text()).toMatch(/not saved/i)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  /*
+   * The board stays live through the tour, and the header's Reset button
+   * opens the same centred, `z-index`-less prompt every one of App's own
+   * dialogs does. The tour's card used to paint over it regardless — it
+   * carries the highest `z-index` in the app — leaving two dialogs sitting
+   * in the same spot.
+   */
+  it('gives way to a header dialog opened while the tour runs, and comes back once it closes', async () => {
+    localStorage.setItem(TUTORIAL_KEY, JSON.stringify({ seen: true }))
+    wrapper = mountApp()
+    await nextTick()
+    await wrapper.find('[data-help]').trigger('click')
+    await wrapper.find('[data-start-tour]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-tour-card]').exists()).toBe(true)
+
+    await wrapper.find('[data-reset]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-confirm-reset]').exists()).toBe(true)
+    expect(wrapper.find('[data-tour-card]').exists()).toBe(false)
+
+    const cancel = wrapper.findAll('.prompt-actions .chip').find((b) => b.text() === 'Cancel')
+    await cancel!.trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-confirm-reset]').exists()).toBe(false)
+    expect(wrapper.find('[data-tour-card]').exists()).toBe(true)
+  })
+
   it('closes on Escape, drill and all', async () => {
     const board = useBoard()
     wrapper = mountApp()
@@ -2675,6 +2734,66 @@ describe('the tutorial', () => {
     await nextTick()
     expect(wrapper.find('[data-tour-card]').exists()).toBe(false)
     expect(drillName(wrapper)).toBe('Rondo')
+    expect(localStorage.getItem(TUTORIAL_PARK_KEY)).toBeNull()
+  })
+
+  /*
+   * A quota failure during `tutorial.start`'s draft write leaves the tour
+   * inactive and the board exactly as it was — but the toolbar used to clear
+   * the open pattern's id and name regardless, orphaning a perfectly saved
+   * drill from the identity that lets Save update it rather than fork it.
+   */
+  it('keeps the open drill and its saved status when the tour cannot park it', async () => {
+    vi.useFakeTimers()
+    try {
+      localStorage.setItem(TUTORIAL_KEY, JSON.stringify({ seen: true }))
+      const board = useBoard()
+      const storage = useStorage()
+      storage.savePattern('High press', board.snapshot())
+      wrapper = mountApp()
+      await nextTick()
+      await openLibraryAndLoad(wrapper)
+      // The load itself re-fires the board's deep watch, which schedules the
+      // ordinary autosave — let it settle to 'saved' before the scenario below.
+      vi.advanceTimersByTime(1000)
+      await nextTick()
+      expect(drillName(wrapper)).toContain('High press')
+      expect(wrapper.find('[data-save-status]').text()).toMatch(/saved (just now|\d+m ago)/i)
+
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        const error = new Error('full')
+        error.name = 'QuotaExceededError'
+        throw error
+      })
+      await wrapper.find('[data-help]').trigger('click')
+      await wrapper.find('[data-start-tour]').trigger('click')
+      await nextTick()
+      vi.restoreAllMocks()
+
+      expect(wrapper.find('[data-tour-card]').exists()).toBe(false)
+      expect(drillName(wrapper)).toContain('High press')
+      expect(wrapper.find('[data-save-status]').text()).toMatch(/saved (just now|\d+m ago)/i)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  /*
+   * The startup recovery path takes the same shortcut `end()` used to: it
+   * trusted the parked patternId without checking that the draft it names
+   * actually came back. A park surviving with no matching draft — a second
+   * tab's own autosave landed on the shared draft key in between — must not
+   * tell the app the empty tour board on screen IS that saved drill.
+   */
+  it('does not treat the empty tour board as the parked drill when the draft is gone', async () => {
+    localStorage.setItem(TUTORIAL_PARK_KEY, JSON.stringify({ patternId: 'p1', name: 'Rondo' }))
+    // No draft under DRAFT_KEY: nothing to restore the board from.
+
+    wrapper = mountApp()
+    await nextTick()
+    expect(wrapper.find('[data-tour-card]').exists()).toBe(false)
+    expect(drillName(wrapper)).toBe('Rondo')
+    expect(wrapper.find('[data-save-status]').text()).toMatch(/not saved/i)
     expect(localStorage.getItem(TUTORIAL_PARK_KEY)).toBeNull()
   })
 })
