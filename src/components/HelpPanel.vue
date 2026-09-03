@@ -6,7 +6,7 @@
  * the same way and this panel needs no listener of its own.
  */
 defineProps<{ open: boolean }>()
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: []; startTour: [] }>()
 </script>
 
 <template>
@@ -14,7 +14,10 @@ const emit = defineEmits<{ close: [] }>()
     <section class="panel" role="dialog" aria-label="Help">
       <header class="head">
         <h2>Help</h2>
-        <button data-close class="chip" @click="emit('close')">Close</button>
+        <div class="button-group">
+          <button data-start-tour class="chip" @click="emit('startTour')">Take the tour</button>
+          <button data-close class="chip" @click="emit('close')">Close</button>
+        </div>
       </header>
 
       <!--
@@ -314,6 +317,7 @@ const emit = defineEmits<{ close: [] }>()
   border-bottom: 1px solid var(--border);
 }
 .head h2 { margin: 0; font-size: 1.1rem; }
+.button-group { display: flex; gap: 0.5rem; }
 
 .section { margin-bottom: 1.5rem; }
 .section:last-child { margin-bottom: 0; }
