@@ -175,4 +175,9 @@ describe('taking the tour', () => {
     await wrapper.find('[data-start-tour]').trigger('click')
     expect(wrapper.emitted('close')).toBeFalsy()
   })
+
+  it('tells a coach the tour exists, in the section about the board', () => {
+    const wrapper = mountHelp(true)
+    expect(wrapper.find('[data-help-section="board"]').text()).toContain('tour')
+  })
 })

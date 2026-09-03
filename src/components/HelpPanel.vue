@@ -52,6 +52,11 @@ const emit = defineEmits<{ close: []; startTour: [] }>()
             Up to eight balls, one per grid or queue or lane. <kbd>B</kbd> hides them all at
             once, rings included, and remembers who had what for when you show them again.
           </li>
+          <li>
+            New to this? <strong>Take the tour</strong> at the top of this panel walks you
+            through a drill on the real board in a couple of minutes. Whatever is on the pitch
+            is parked while it runs and comes straight back.
+          </li>
         </ul>
       </section>
 
