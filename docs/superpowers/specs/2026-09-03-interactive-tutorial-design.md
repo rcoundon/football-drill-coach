@@ -74,7 +74,7 @@ it, so every goal is testable headlessly against a real board with no DOM.
 | `phase` | `[data-add-frame]` | The drill has two or more phases |
 | `move` | — | A player stands somewhere other than where they stood on the previous phase |
 | `play` | `[data-play]` | The drill is playing, or the playhead has left zero |
-| `pass` | `[data-tool="arrow-pass"]` | A drawing of kind `arrow-pass` exists |
+| `pass` | `[data-tool="arrow-pass"]` | A drawing with `kind: 'arrow'` and `style: 'pass'` exists |
 | `more` | `[data-help]` | Next, or the Open Help button |
 
 Every anchor already exists in the markup. `data-add-counter`,
@@ -89,6 +89,10 @@ worth playing back.
 The `move` goal is deliberately "anyone moved", not "the player you were
 told to move". A coach who drags a different player has understood the
 lesson.
+
+The `pass` goal reads the drawing as it is being drawn, so a stroke too short
+to survive `finishDrawing` still completes the step. That is the right way
+round: the coach chose the tool and drew on the pitch, which is the lesson.
 
 ## Persistence
 
