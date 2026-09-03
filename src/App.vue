@@ -17,16 +17,19 @@ import HelpPanel from './components/HelpPanel.vue'
 import Inspector from './components/Inspector.vue'
 import TagInput from './components/TagInput.vue'
 import PhaseTimeline from './components/PhaseTimeline.vue'
+import TutorialOverlay from './components/TutorialOverlay.vue'
 import { MAX_LABEL_LENGTH, useBoard } from './composables/useBoard'
 import { useStorage } from './composables/useStorage'
 import { useSessions } from './composables/useSessions'
 import { buildSessionPdf } from './sessionPdf'
 import { useExport } from './composables/useExport'
 import { useViewport } from './composables/useViewport'
+import { useTutorial } from './composables/useTutorial'
 
 const board = useBoard()
 const storage = useStorage()
 const sessions = useSessions()
+const tutorial = useTutorial()
 const { isPortrait, isCompact } = useViewport()
 
 /**
@@ -231,8 +234,19 @@ function markSaved(): void {
  * every update after. `savePattern` mints an id when passed none and hands
  * back what it saved; capturing that id here is what turns the second
  * keystroke into an update of the same drill rather than a second one.
+ *
+ * Guarded on the tour itself, not only on its callers. `onHeaderRename` and
+ * the board watcher below both stay quiet while the tour is active, but a
+ * timer armed in the second before the tour started survives it — `startTour`
+ * clears the pattern id and name, not this timer — and a name typed into the
+ * still-live header during the tour would then reach this function with
+ * `id=null, name='X'` once that stale timer fires, filing the tour's empty
+ * board as a brand-new library pattern. The explicit Save button is left
+ * alone: pressing it is the coach asking, and the tour deliberately leaves
+ * the app usable.
  */
 function autosavePattern(): void {
+  if (tutorial.active.value) return
   if (board.isDerived.value) return
   const id = currentPatternId.value
   const name = currentName.value.trim()
@@ -270,9 +284,18 @@ function scheduleAutosave(): void {
  * files it — including the first time, on a board that has never been
  * saved. Naming it is the coach deciding what it is called, which is the
  * one thing autosave could not do on its own.
+ *
+ * The header stays live and clickable through the tour deliberately — the
+ * board is fully live, and so is everything around it. But `scheduleAutosave`
+ * only stays quiet while the name field is empty, and it is only empty until
+ * a coach curious about the header types into it: a second later the tour's
+ * empty board would be filed as a brand-new pattern. So the name is still
+ * taken — the field itself has to keep working — but nothing schedules a
+ * write while the tour owns the board.
  */
 function onHeaderRename(name: string): void {
   currentName.value = name
+  if (tutorial.active.value) return
   scheduleAutosave()
 }
 
@@ -500,6 +523,66 @@ function onBoardReset() {
 }
 
 /**
+ * Park the open drill and hand the board to the tour.
+ *
+ * The pattern id and name are cleared here rather than inside the tour,
+ * because they are App's to own — and clearing them is what stops the
+ * autosave writing the tour's board over the coach's saved drill:
+ * `scheduleAutosave` already returns early when there is neither.
+ *
+ * `tutorial.start` can refuse — a draft it could not write, most likely, or
+ * a tour already running, reachable through the `more` step's own Help
+ * button putting "Take the tour" back in front of a coach mid-tour — without
+ * saying so beyond leaving the tour inactive... except that a tour already
+ * active also leaves it "inactive" in no sense at all: `active` reads `true`
+ * either way, so it cannot be what this checks. `start` reports whether it
+ * actually started for exactly that reason. Whichever way it refuses, the
+ * board it left alone is still the drill this pattern id and name describe,
+ * or — for the already-running case — still the drill the running tour
+ * itself parked. Clearing them anyway would sever that pairing for nothing:
+ * the drill would sit there unsaved-looking and autosave would fall silent
+ * over it, all for a tour that never (newly) opened.
+ */
+function startTour(): void {
+  if (board.isDerived.value || presenting.value) return
+  helpOpen.value = false
+  const started = tutorial.start({ patternId: currentPatternId.value, name: currentName.value })
+  if (!started) return
+  currentPatternId.value = null
+  currentName.value = ''
+  saveStatus.value = 'unsaved'
+}
+
+/** Close the tour and put the coach's drill, and its identity, back. */
+function endTour(): void {
+  const park = tutorial.end()
+  currentPatternId.value = park.patternId
+  currentName.value = park.name
+  saveStatus.value = park.patternId ? 'saved' : 'unsaved'
+}
+
+/** The last step's way out: end the tour, then show them where the rest is. */
+function onTourHelp(): void {
+  endTour()
+  helpOpen.value = true
+}
+
+/**
+ * The real Help button doesn't know a tour is running — the header stays
+ * live throughout, on purpose — so a coach who presses it rather than the
+ * card's own "Open Help" must land in the same place: the tour ends, Help
+ * opens on top of a clean board. Left alone, Help opened underneath the
+ * tour's dimming, with the card floating over it — Help carries no
+ * `z-index` of its own, and `.tour`'s is the highest in the app — and
+ * neither Escape (which only reaches the tour, one dialog at a time) nor
+ * anything else closed the mess. `endTour` first, same as `onTourHelp`
+ * above, is idempotent when this fires after that has already run.
+ */
+watch(helpOpen, (open) => {
+  if (open && tutorial.active.value) endTour()
+})
+
+/**
  * The board reports where a label should go, or which one to edit; the text
  * itself is typed here, in the same small dialog the other prompts use.
  */
@@ -703,7 +786,6 @@ watch(renameCounterId, (id) => focusWhenOpen(id !== null, () => renameLabelInput
   flush: 'post',
 })
 
-/** True while anything modal is on screen. */
 /**
  * The one error banner, fed by two independent stores.
  *
@@ -726,6 +808,20 @@ function dismissStoreError(): void {
   else sessions.lastError.value = null
 }
 
+/**
+ * Whether one of App's own dialogs is up — the only thing the shortcut gate
+ * in `onKeydown` reads this for.
+ *
+ * The tour deliberately does not belong here, even though it is a dialog by
+ * every other measure: the board is fully live while it runs — "every tool
+ * works, undo works, the coach can wander" — and the `pass` step's whole
+ * point is the coach reaching for `p` themselves. Folding `tutorial.active`
+ * in here once took every shortcut away for the length of the tour, tool
+ * letters included, because this computed has exactly one consumer and that
+ * consumer cannot tell "the tour is up" apart from "a real dialog is up".
+ * `closeTopmostDialog` reasons about the tour on its own terms below and
+ * does not read this at all.
+ */
 const isDialogOpen = computed(
   () =>
     savePromptOpen.value ||
@@ -740,11 +836,45 @@ const isDialogOpen = computed(
 )
 
 /**
+ * Whether one of App's own small prompts is standing over the tour.
+ *
+ * The board stays live through the tour on purpose, so a coach can reach
+ * these the ordinary way — double-pressing a player on the `label` step
+ * opens the rename prompt right there. Every one of them is a full-viewport
+ * overlay with no `z-index` of its own, same as the tour's card, and the
+ * card's `z-index: 60` is the highest in the app — so without this it paints
+ * over the very dialog its own step just caused to open. The tour's card
+ * steps aside instead; the panels (Help, the libraries) are deliberately not
+ * in this list, since the tour sits above those.
+ */
+const tourBlockedByDialog = computed(
+  () =>
+    savePromptOpen.value ||
+    deleteDrillPromptOpen.value ||
+    resetPromptOpen.value ||
+    renamePromptOpen.value ||
+    labelTarget.value !== null,
+)
+
+/**
  * Close the innermost thing that is open, and say whether there was one.
  *
  * Prompts before panels, one per press: a coach who has the library open and
  * a prompt over it means the prompt, and closing both at once would take away
  * the thing they were about to go back to.
+ *
+ * The tour sits between the five prompts above and the panels below —
+ * deliberately not first. The board stays live through the tour, so a coach
+ * can open any of those five the ordinary way, and `tourBlockedByDialog`
+ * already steps the tour's own card aside for exactly that. Checking the
+ * tour first used to mean Escape closed the tour instead of the prompt it
+ * opened: the drill came back parked-and-restored underneath a Reset prompt
+ * that was still open, still wired to the button, and now pointing at the
+ * coach's just-restored work rather than the empty tour board it was opened
+ * over. One of these five closing first is what the coach who pressed
+ * Escape from inside one of them actually asked for; the tour still sits
+ * above the panels beneath it, matching the spec's "outermost thing on
+ * screen" for everything that is not one of the board's own dialogs.
  */
 function closeTopmostDialog(): boolean {
   if (savePromptOpen.value) {
@@ -765,6 +895,10 @@ function closeTopmostDialog(): boolean {
   }
   if (labelTarget.value !== null) {
     labelTarget.value = null
+    return true
+  }
+  if (tutorial.active.value) {
+    endTour()
     return true
   }
   // The editor before the library it was opened from: closing both on one
@@ -932,6 +1066,28 @@ onMounted(() => {
      */
     board.restoreSnapshot({ ...board.snapshot(), pitch: { ...board.state.pitch, rotated: true } })
   }
+
+  /*
+   * A park left behind means a tour was cut short by a refresh. The board
+   * itself came back through the draft above; this is only how the drill's
+   * identity gets back to the header. No tour reopens — a coach who
+   * refreshed may well have been trying to escape it.
+   *
+   * `draft` is what proves the board on screen actually is that pattern: a
+   * park with no matching draft — cleared, or overwritten by a second tab's
+   * own autosave — leaves the empty tour board here instead, and reporting
+   * the parked id over it would tell the rest of the app this empty board IS
+   * that saved drill. The next stray edit would then autosave over it. The
+   * name still costs nothing to show on an empty board, so it is kept.
+   */
+  const park = tutorial.takePark()
+  if (park) {
+    currentPatternId.value = draft ? park.patternId : null
+    currentName.value = park.name
+    saveStatus.value = draft && park.patternId ? 'saved' : 'unsaved'
+  } else if (!draft && !tutorial.hasSeen()) {
+    startTour()
+  }
   window.addEventListener('keydown', onKeydown)
 })
 
@@ -951,8 +1107,13 @@ watch(
     // Playing moves the playhead, not the drill. Writing a draft several
     // times a second during a play-through risks restoring a half-tweened
     // board on the next start, and none of it is a change worth saving.
-    if (board.isDerived.value) return
+    // The draft is what a refresh restores, and while the tour runs it holds
+    // the coach's parked drill. Writing the tour's empty board over it would
+    // lose their work for the sake of an empty pitch — cleared here, ahead of
+    // the guard, so a write already pending from just before either guard took
+    // hold cannot land later with whatever the board holds by then.
     clearTimeout(saveTimer)
+    if (board.isDerived.value || tutorial.active.value) return
     saveTimer = setTimeout(() => storage.saveDraft(board.snapshot()), 400)
     // The draft keeps the working board across a refresh; this keeps the
     // drill itself up to date in the library, so Save is something a coach
@@ -1090,7 +1251,9 @@ watch(
       @exportPdf="exportSessionPdf"
     />
 
-    <HelpPanel :open="helpOpen" @close="helpOpen = false" />
+    <HelpPanel :open="helpOpen" @close="helpOpen = false" @startTour="startTour" />
+
+    <TutorialOverlay :blocked="tourBlockedByDialog" @end="endTour" @openHelp="onTourHelp" />
 
     <div v-if="labelTarget" class="overlay" @click.self="labelTarget = null">
       <div class="prompt" role="dialog" aria-label="Label text">

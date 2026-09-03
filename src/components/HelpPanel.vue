@@ -6,7 +6,7 @@
  * the same way and this panel needs no listener of its own.
  */
 defineProps<{ open: boolean }>()
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: []; startTour: [] }>()
 </script>
 
 <template>
@@ -14,7 +14,10 @@ const emit = defineEmits<{ close: [] }>()
     <section class="panel" role="dialog" aria-label="Help">
       <header class="head">
         <h2>Help</h2>
-        <button data-close class="chip" @click="emit('close')">Close</button>
+        <div class="button-group">
+          <button data-start-tour class="chip" @click="emit('startTour')">Take the tour</button>
+          <button data-close class="chip" @click="emit('close')">Close</button>
+        </div>
       </header>
 
       <!--
@@ -48,6 +51,11 @@ const emit = defineEmits<{ close: [] }>()
           <li>
             Up to eight balls, one per grid or queue or lane. <kbd>B</kbd> hides them all at
             once, rings included, and remembers who had what for when you show them again.
+          </li>
+          <li>
+            New to this? <strong>Take the tour</strong> at the top of this panel walks you
+            through a drill on the real board in a couple of minutes. Whatever is on the pitch
+            is parked while it runs and comes straight back.
           </li>
         </ul>
       </section>
@@ -237,9 +245,11 @@ const emit = defineEmits<{ close: [] }>()
             phase, since one phase is what PNG is for.
           </li>
           <li>
-            <strong>Export and Import.</strong> Export writes every saved drill to one JSON
-            file, for a backup or another machine. Import never overwrites: a drill whose id is
-            already here arrives as a new one, marked <em>(imported)</em>.
+            <strong>Back up everything</strong>, under Share, writes every saved drill and
+            session to one file. Keep it as a backup, carry it to another machine — or send
+            it to another coach, which is the way to hand your drills to an assistant or a
+            club. <strong>Import</strong> reads one back in, and never overwrites: a drill
+            already here arrives as a second copy, marked <em>(imported)</em>.
           </li>
           <li>
             <strong>Tags</strong> file a drill under your own words. Naming one asks for them:
@@ -312,8 +322,16 @@ const emit = defineEmits<{ close: [] }>()
   background: var(--surface-1);
   /* The text scrolls under this, and without a line it arrives inside it. */
   border-bottom: 1px solid var(--border);
+  /*
+   * Keep it: every `.points li` is `position: relative` to hang its bullet
+   * on, which makes each one a positioned element painted after this
+   * sticky one. Without a z-index the points scrolled straight through the
+   * header — over the heading, over Close — and took its presses with them.
+   */
+  z-index: 1;
 }
 .head h2 { margin: 0; font-size: 1.1rem; }
+.button-group { display: flex; gap: 0.5rem; }
 
 .section { margin-bottom: 1.5rem; }
 .section:last-child { margin-bottom: 0; }

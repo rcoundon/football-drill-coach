@@ -151,3 +151,33 @@ describe('what it covers', () => {
     expect(text).not.toContain('moment')
   })
 })
+
+/*
+ * The one way back to the tour once it has been taken or skipped. It sits in
+ * the header beside Close, because a coach looking for "show me again" opens
+ * Help and looks at the top.
+ */
+describe('taking the tour', () => {
+  it('offers it in the header', () => {
+    const wrapper = mountHelp(true)
+    expect(wrapper.find('[data-start-tour]').exists()).toBe(true)
+  })
+
+  it('asks App to start it', async () => {
+    const wrapper = mountHelp(true)
+    await wrapper.find('[data-start-tour]').trigger('click')
+    expect(wrapper.emitted('startTour')).toBeTruthy()
+  })
+
+  /* App closes the panel itself, so the panel must not also ask for it. */
+  it('does not ask to be closed as well', async () => {
+    const wrapper = mountHelp(true)
+    await wrapper.find('[data-start-tour]').trigger('click')
+    expect(wrapper.emitted('close')).toBeFalsy()
+  })
+
+  it('tells a coach the tour exists, in the section about the board', () => {
+    const wrapper = mountHelp(true)
+    expect(wrapper.find('[data-help-section="board"]').text()).toContain('tour')
+  })
+})

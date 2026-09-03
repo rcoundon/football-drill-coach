@@ -522,6 +522,23 @@ function restoreSnapshot(snap: BoardSnapshot): void {
 }
 
 /**
+ * Empty the undo and redo stacks.
+ *
+ * For board state the coach did not put there. The tutorial parks their
+ * drill, runs on an empty board and hands the drill back, and none of those
+ * three are things a coach should be able to walk backwards into.
+ *
+ * The stroke entries go too: they are looked up by identity in the stacks
+ * that are being emptied, so a stroke whose start survived this call would
+ * find nothing to take back on release.
+ */
+function clearHistory(): void {
+  undoStack.value = []
+  redoStack.value = []
+  strokeUndoEntries.clear()
+}
+
+/**
  * Add a moment, as a copy of the one the coach is on.
  *
  * A copy rather than a blank board, because the next frame of a drill is
@@ -1592,6 +1609,7 @@ const board = {
   snapshot,
   loadSnapshot,
   restoreSnapshot,
+  clearHistory,
   resetBoard,
   clearCounters,
   addFrame,

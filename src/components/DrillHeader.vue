@@ -308,7 +308,23 @@ function commitName(): void {
           :title="exporting ? 'Already building an animation' : 'Save the drill as an animation'"
           @click="choose(() => emit('exportGif'))"
         >Export GIF</button>
-        <button data-export-json class="menu-item" role="menuitem" @click="choose(() => emit('exportJson'))">Export JSON</button>
+        <!--
+          Named for the job, not the file. PNG and GIF are pictures a coach
+          already knows the names of; JSON is a word from our side of the
+          screen, and a menu is not where anyone learns it.
+
+          The tooltip says the file also goes to another coach, because this
+          is the only way to hand drills to one and nothing about "backup"
+          suggests it. Only says: a tablet never shows a tooltip, so Help and
+          the tour's closing card carry the same sentence.
+        -->
+        <button
+          data-export-json
+          class="menu-item"
+          role="menuitem"
+          title="Save every drill and session to one file — keep it as a backup, carry it to another machine, or send it to another coach for them to import"
+          @click="choose(() => emit('exportJson'))"
+        >Back up everything</button>
       </div>
     </div>
 
