@@ -245,9 +245,10 @@ const emit = defineEmits<{ close: []; startTour: [] }>()
             phase, since one phase is what PNG is for.
           </li>
           <li>
-            <strong>Export and Import.</strong> Export writes every saved drill to one JSON
-            file, for a backup or another machine. Import never overwrites: a drill whose id is
-            already here arrives as a new one, marked <em>(imported)</em>.
+            <strong>Back up everything</strong>, under Share, writes every saved drill and
+            session to one file — for a backup, or for moving to another machine.
+            <strong>Import</strong> reads one back in, and never overwrites: a drill already
+            here arrives as a second copy, marked <em>(imported)</em>.
           </li>
           <li>
             <strong>Tags</strong> file a drill under your own words. Naming one asks for them:

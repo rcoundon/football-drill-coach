@@ -168,6 +168,17 @@ describe('the Share menu', () => {
     }
   })
 
+  /*
+   * The backup is named for what it does, not for the file it writes. PNG
+   * and GIF are pictures a coach already knows; JSON is a word from our side
+   * of the screen, and a menu is not where anyone learns it.
+   */
+  it('names the backup after the job, not the file format', async () => {
+    const wrapper = mountHeader()
+    await wrapper.find('[data-share-menu]').trigger('click')
+    expect(wrapper.get('[data-export-json]').text()).toBe('Back up everything')
+  })
+
   /** A GIF of a single still is a worse PNG. */
   it('offers no GIF while the drill is a single moment', async () => {
     const wrapper = mountHeader()

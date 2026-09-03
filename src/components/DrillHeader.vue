@@ -308,7 +308,18 @@ function commitName(): void {
           :title="exporting ? 'Already building an animation' : 'Save the drill as an animation'"
           @click="choose(() => emit('exportGif'))"
         >Export GIF</button>
-        <button data-export-json class="menu-item" role="menuitem" @click="choose(() => emit('exportJson'))">Export JSON</button>
+        <!--
+          Named for the job, not the file. PNG and GIF are pictures a coach
+          already knows the names of; JSON is a word from our side of the
+          screen, and a menu is not where anyone learns it.
+        -->
+        <button
+          data-export-json
+          class="menu-item"
+          role="menuitem"
+          title="Save every drill and session to one file, for a backup or another machine"
+          @click="choose(() => emit('exportJson'))"
+        >Back up everything</button>
       </div>
     </div>
 
