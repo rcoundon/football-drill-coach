@@ -179,6 +179,18 @@ describe('the Share menu', () => {
     expect(wrapper.get('[data-export-json]').text()).toBe('Back up everything')
   })
 
+  /*
+   * A coach who wants to hand a session to an assistant has no other way to
+   * do it, and nothing about the word "backup" suggests one. The tooltip is
+   * the smallest place to say so, and Help says it again for the tablets
+   * that never show a tooltip at all.
+   */
+  it('says the backup file is how drills reach another coach', async () => {
+    const wrapper = mountHeader()
+    await wrapper.find('[data-share-menu]').trigger('click')
+    expect(wrapper.get('[data-export-json]').attributes('title')).toContain('another coach')
+  })
+
   /** A GIF of a single still is a worse PNG. */
   it('offers no GIF while the drill is a single moment', async () => {
     const wrapper = mountHeader()

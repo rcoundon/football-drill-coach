@@ -246,9 +246,10 @@ const emit = defineEmits<{ close: []; startTour: [] }>()
           </li>
           <li>
             <strong>Back up everything</strong>, under Share, writes every saved drill and
-            session to one file — for a backup, or for moving to another machine.
-            <strong>Import</strong> reads one back in, and never overwrites: a drill already
-            here arrives as a second copy, marked <em>(imported)</em>.
+            session to one file. Keep it as a backup, carry it to another machine — or send
+            it to another coach, which is the way to hand your drills to an assistant or a
+            club. <strong>Import</strong> reads one back in, and never overwrites: a drill
+            already here arrives as a second copy, marked <em>(imported)</em>.
           </li>
           <li>
             <strong>Tags</strong> file a drill under your own words. Naming one asks for them:
