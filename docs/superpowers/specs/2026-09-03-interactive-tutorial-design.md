@@ -111,19 +111,24 @@ malformed or unreadable value is treated as absent rather than thrown.
 
 ## Starting
 
-The tour starts by itself once, on a first visit: no `fct.tutorial.v1`, no
-saved draft, and no dialog already open. It never starts on a coach who has
-work in progress, because a first visit does not have any.
+The tour starts by itself once, on a first visit: no `fct.tutorial.v1` and no
+saved draft. It never starts on a coach who has work in progress, because a
+first visit does not have any, and a first visit has no dialog open either.
 
 Afterwards it starts only from a "Take the tour" button at the top of the
 Help panel, beside the Close button. A coach who skipped it, or who wants it
 again, opens Help and presses that.
 
-The tour refuses to start while any dialog is open, while presenting, and
-while the drill is playing or being scrubbed — the same `isDialogOpen`,
-`presenting` and `isDerived` conditions the rest of the app already reasons
-about. Pressing Take the tour in Help closes Help first, which satisfies the
-first of those.
+The tour refuses to start while presenting, and while the drill is playing or
+being scrubbed — the same `presenting` and `isDerived` conditions the rest of
+the app already reasons about, checked in App and again in the tour's own
+`start`, which reports whether it actually began.
+
+There is deliberately no `isDialogOpen` check. Only two things start a tour,
+and neither can run with a dialog in the way: the first-visit autostart fires
+before anything is open, and the Help button closes Help on its way through.
+A guard here would be a condition with no reachable case, and `isDialogOpen`
+is wanted for the opposite purpose — see the note on shortcuts below.
 
 ## The parked drill
 
