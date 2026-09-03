@@ -1,0 +1,262 @@
+# Interactive tutorial
+
+## The problem
+
+A coach opening this app for the first time sees an empty pitch, a rail of
+eight icons, and a timeline with one phase in it. Nothing on screen says
+that a drill is built by moving players between phases, which is the one
+idea the whole app rests on. The Help panel explains it, but Help is a wall
+of text a coach opens after they are already stuck, and it teaches by
+description rather than by doing.
+
+The tutorial teaches the spine of the app — place, phase, move, play — by
+having the coach actually do it on the real board, and then hands them off
+to Help for everything else.
+
+## Shape
+
+A guided tour that watches the board rather than driving it. Each step
+spotlights one control, says one thing, and completes only when the coach
+performs the action for real. The overlay never takes the pointer: the coach
+presses the actual rail, drags the actual player. Nothing is simulated.
+
+Rejected: a passive click-through carousel of coach-marks. It costs the same
+overlay work and teaches nothing — a coach who reads nine cards has read nine
+cards. Also rejected: a scripted demo that animates the board for them, which
+is a video with extra steps.
+
+## Scope
+
+Seven steps covering placing players, labelling, adding a phase, moving into
+it, playing it back, and drawing a pass. An eighth and final step is a
+signpost: it names what the tour did not cover — curved runs, groups, saving
+and sharing, presentation mode — and offers a button that closes the tour and
+opens Help.
+
+Not taught by the tour: cones, text labels, ball possession, sessions, export,
+undo. All are in Help, and the tour's job is the spine, not the whole surface.
+
+## Data
+
+Steps are data, not components. One array, one file.
+
+```ts
+export type TutorialStep = {
+  /** Stable across reorders; the persisted progress records it. */
+  id: string
+  title: string
+  /** One or two sentences. Plain text, no markup. */
+  body: string
+  /**
+   * CSS selector for the element to spotlight. Absent means a card centred
+   * on the screen with nothing cut out, which is what the opening and
+   * closing steps want.
+   */
+  anchor?: string
+  /**
+   * What the coach has to do. Absent means the step advances on a Next
+   * press, which is the right control for a step that only says something.
+   */
+  goal?: (board: Board) => boolean
+}
+```
+
+`Board` is the object `useBoard()` returns. A goal is a pure predicate over
+it, so every goal is testable headlessly against a real board with no DOM.
+
+### The steps
+
+| id | Anchor | Completes when |
+| --- | --- | --- |
+| `welcome` | — | Next |
+| `place` | `[data-add-counter="red"]` | Three or more players are on the board |
+| `label` | — | Any player has a non-empty label |
+| `phase` | `[data-add-frame]` | The drill has two or more phases |
+| `move` | — | A player stands somewhere other than where they stood on the previous phase |
+| `play` | `[data-play]` | The drill has been played — `playback.at` has passed zero |
+| `pass` | `[data-tool="arrow-pass"]` | A drawing of kind `arrow-pass` exists |
+| `more` | `[data-help]` | Next, or the Open Help button |
+
+Every anchor already exists in the markup. `data-add-counter`,
+`data-add-frame`, `data-play`, `data-tool` and `data-help` are attributes
+those components carry today for their own reasons. No component gains an
+attribute for the tutorial's sake, and no component imports it.
+
+Three players rather than two on `place`: two is a pass, three is a drill,
+and the extra press costs nothing while making the pitch look like something
+worth playing back.
+
+The `move` goal is deliberately "anyone moved", not "the player you were
+told to move". A coach who drags a different player has understood the
+lesson.
+
+## Persistence
+
+One key beside the existing ones, `fct.tutorial.v1`, holding
+`{ seen: boolean }`. Written when the tour is finished or skipped; read once
+at startup. It is a flag, not a resume point — a coach who skipped at step 3
+and comes back wants to start at the beginning, not at step 3.
+
+A second key, `fct.tutorial-park.v1`, holds the parked drill while the tour
+runs (see below). It exists only between the start of a tour and its end.
+
+Both are read through the same guarded shape the existing storage uses: a
+malformed or unreadable value is treated as absent rather than thrown.
+
+## Starting
+
+The tour starts by itself once, on a first visit: no `fct.tutorial.v1`, no
+saved draft, and no dialog already open. It never starts on a coach who has
+work in progress, because a first visit does not have any.
+
+Afterwards it starts only from a "Take the tour" button at the top of the
+Help panel, beside the Close button. A coach who skipped it, or who wants it
+again, opens Help and presses that.
+
+The tour refuses to start while any dialog is open, while presenting, and
+while the drill is playing or being scrubbed — the same `isDialogOpen`,
+`presenting` and `isDerived` conditions the rest of the app already reasons
+about. Pressing Take the tour in Help closes Help first, which satisfies the
+first of those.
+
+## The parked drill
+
+The tour needs an empty board. The coach may not have one.
+
+On start: snapshot the board, write the snapshot to `fct.tutorial-park.v1`
+along with the current pattern id and name, then reset the board to empty and
+clear the pattern id and name.
+
+On finish or skip: put all three back and delete the key.
+
+Restoring uses `restoreSnapshot`, not `loadSnapshot` — the tour is not
+something the coach did, so neither parking nor unparking may become an undo
+entry. The history is cleared at both ends for the same reason: a coach must
+not be able to Ctrl+Z from their restored drill back into a half-finished
+tour board.
+
+Clearing the pattern id and name is what stops the autosave writing the tour's
+board over the coach's saved drill: `scheduleAutosave` already returns early
+when there is neither, so parking makes the existing guard do the work.
+
+The draft autosave is a separate matter and is suspended outright while the
+tour is active, because the draft is what a refresh restores. Instead, the
+park key is what a refresh finds: on startup, a park key present means a tour
+was interrupted, so the app restores the parked drill and drops the key
+before doing anything else. A coach who refreshes mid-tour gets their drill
+back and no tour. That is the right outcome — the alternative is resuming a
+tour they may have been trying to escape.
+
+## The overlay
+
+`TutorialOverlay.vue` renders when the tour is active. Two parts.
+
+**The spotlight.** Four fixed-position dimmed rectangles surrounding the
+anchor's bounding box, leaving a hole over it. Four boxes rather than an SVG
+mask or a giant `box-shadow`: it is the one approach where the hole genuinely
+has nothing over it, so the coach's press reaches the control underneath with
+no `pointer-events` juggling. With no anchor, one dimmed rectangle over
+everything.
+
+The anchor rect is read with `getBoundingClientRect` and refreshed on window
+resize, on scroll, and by a `ResizeObserver` on the anchor. An anchor that
+does not resolve — a control not on screen at this width — degrades to the
+no-anchor case: the card still shows, centred, and the step still completes
+when the coach does the thing.
+
+**The card.** Step title, body, a step counter, Skip, Back, and either Next
+or a line saying what to do. It is the only part of the overlay that takes
+the pointer.
+
+The card is placed on whichever side of the anchor has room, measured against
+the viewport, falling back to centred. It must clear the rail in both of its
+layouts — down the edge on a desktop, along the bottom on a portrait phone —
+and the placement search is what handles that, rather than a per-step
+opinion about direction.
+
+The whole overlay carries `data-transient`, so an export taken mid-tour is
+clean, matching how the bend handles and endpoint rings are already treated.
+
+## Behaviour during a step
+
+The board is fully live. Every tool works, undo works, the coach can wander.
+A step completes the moment its goal reads true and not before; a coach who
+does the next step's action early completes that step early too, because each
+step's goal is checked on entry as well as on change.
+
+Advancing is a watcher over `board.state` — the same deep watch the autosave
+already uses — plus a check when the step becomes current. Goals are cheap
+predicates over arrays that are already reactive, so there is nothing to
+throttle.
+
+Back re-enters an earlier step without undoing anything. The board keeps
+whatever the coach built; the card just says the earlier thing again. Undoing
+their work to move a card backwards would be a surprise, and the goals are
+satisfied-or-not rather than a sequence.
+
+Skip ends the tour from any step, restores the parked drill, and records
+`seen`. Escape does the same, handled through `closeTopmostDialog` so that
+the tour sits in the app's one existing precedence order rather than
+competing with it. It sits above every panel: a tour is the outermost thing
+on screen while it runs.
+
+## Accessibility
+
+The card is `role="dialog"` with an accessible name from its title, and the
+step counter is announced. The body text and the completion state live in an
+`aria-live="polite"` region, so a step completing is spoken rather than only
+seen.
+
+Focus is not trapped, deliberately: the coach has to reach the real controls,
+and a trap would put the tour's own card between them and the board. Tab
+order is the page's, with the card last.
+
+The dimming is decoration. Every step's instruction is in the card's text, so
+a coach who cannot see the spotlight can still follow the words.
+
+## Files
+
+- `src/tutorial/steps.ts` — the step array and the `TutorialStep` type.
+- `src/composables/useTutorial.ts` — the machine: `active`, `stepIndex`,
+  `step`, `start`, `next`, `back`, `skip`, `finish`, and the park/unpark
+  pair. A module-level singleton, like `useBoard`.
+- `src/components/TutorialOverlay.vue` — spotlight and card.
+- `src/components/HelpPanel.vue` — a Take the tour button in the header, and
+  an emitted event for it.
+- `src/App.vue` — mounts the overlay, wires the Help button, adds the tour to
+  `isDialogOpen` and `closeTopmostDialog`, suspends the draft watcher while
+  the tour is active, and restores an interrupted park on startup.
+
+The storage helpers for both keys live in `useTutorial.ts` rather than
+`useStorage.ts`. `useStorage` is about drills; the tour's two keys are about
+the app's own state, and putting them there would be the only reason that
+file knew the tutorial existed.
+
+## Testing
+
+- Goals: each predicate against a real `useBoard`, false before the action
+  and true after. The `move` goal specifically returns false on the first
+  phase, where there is no previous frame to have moved from.
+- The machine: start parks and empties the board; finish and skip both
+  restore it, its pattern id and its name; neither leaves an undo entry;
+  both record `seen`.
+- Startup: a park key present restores the drill and clears the key without
+  starting a tour. A first visit with no draft and no `seen` starts one. A
+  visit with `seen` does not. A visit with a draft does not.
+- Advancing: a step with a goal advances when the board changes to satisfy
+  it, and a step whose goal is already true on entry advances immediately.
+- The overlay: renders the card for the current step; resolves an anchor to
+  a spotlight; falls back to centred when the anchor is missing from the DOM;
+  carries `data-transient`.
+- Escape ends the tour, and does so before it reaches any other dialog.
+
+## Deliberately not built
+
+Resuming a tour part-way through. Branching or optional steps. A tour that
+covers every tool. A second tour for advanced features — the signpost step
+sends people to Help, which is where that material already lives and where it
+can be kept up to date in one place.
+
+Driving the board on the coach's behalf, in any step. If a step cannot be
+expressed as "here is the control, do the thing", it does not belong in the
+tour.
