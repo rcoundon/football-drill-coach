@@ -98,7 +98,7 @@ export const STEPS: TutorialStep[] = [
   },
   {
     id: 'more',
-    title: 'That is the spine of it',
+    title: "We've covered the core concepts",
     body: 'Curved runs, moving players as a group, saving to your library and presenting full screen are all in Help, along with every keyboard shortcut.',
     anchor: '[data-help]',
   },
