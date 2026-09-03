@@ -322,6 +322,13 @@ const emit = defineEmits<{ close: []; startTour: [] }>()
   background: var(--surface-1);
   /* The text scrolls under this, and without a line it arrives inside it. */
   border-bottom: 1px solid var(--border);
+  /*
+   * Keep it: every `.points li` is `position: relative` to hang its bullet
+   * on, which makes each one a positioned element painted after this
+   * sticky one. Without a z-index the points scrolled straight through the
+   * header — over the heading, over Close — and took its presses with them.
+   */
+  z-index: 1;
 }
 .head h2 { margin: 0; font-size: 1.1rem; }
 .button-group { display: flex; gap: 0.5rem; }
