@@ -333,3 +333,42 @@ describe('clearCounters', () => {
     expect(board.addCounter('red').pos).toEqual(centre)
   })
 })
+
+/**
+ * For state the coach did not put on the board. The tutorial parks their
+ * drill and hands it back, and without this a coach could Ctrl+Z from their
+ * restored drill into a half-finished tour board.
+ */
+describe('clearHistory', () => {
+  it('leaves nothing to undo', () => {
+    const board = useBoard()
+    board.addCounter('red')
+    expect(board.canUndo.value).toBe(true)
+    board.clearHistory()
+    expect(board.canUndo.value).toBe(false)
+  })
+
+  it('makes a following undo a no-op rather than a throw', () => {
+    const board = useBoard()
+    board.addCounter('red')
+    board.clearHistory()
+    board.undo()
+    expect(board.state.counters).toHaveLength(1)
+  })
+
+  it('drops the redo stack too', () => {
+    const board = useBoard()
+    board.addCounter('red')
+    board.undo()
+    expect(board.canRedo.value).toBe(true)
+    board.clearHistory()
+    expect(board.canRedo.value).toBe(false)
+  })
+
+  it('leaves the board itself alone', () => {
+    const board = useBoard()
+    const counter = board.addCounter('blue')
+    board.clearHistory()
+    expect(board.counterById(counter.id)!.color).toBe('blue')
+  })
+})
