@@ -2796,4 +2796,144 @@ describe('the tutorial', () => {
     expect(wrapper.find('[data-save-status]').text()).toMatch(/not saved/i)
     expect(localStorage.getItem(TUTORIAL_PARK_KEY)).toBeNull()
   })
+
+  /*
+   * Second review, Finding 1. The tour sits above every panel, but a Reset
+   * prompt opened from the still-live header while the tour runs is not one
+   * of those panels — `tourBlockedByDialog` already steps the card aside for
+   * it. `closeTopmostDialog` used to check the tour first regardless, so
+   * Escape ended the tour and restored the coach's drill while the prompt
+   * stayed open, pointed at a live Reset button now sitting over the
+   * drill it had just been handed back.
+   */
+  it('closes a header prompt opened mid-tour on Escape, without ending the tour', async () => {
+    localStorage.setItem(TUTORIAL_KEY, JSON.stringify({ seen: true }))
+    wrapper = mountApp()
+    await nextTick()
+    await wrapper.find('[data-help]').trigger('click')
+    await wrapper.find('[data-start-tour]').trigger('click')
+    await nextTick()
+
+    await wrapper.find('[data-reset]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-confirm-reset]').exists()).toBe(true)
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await nextTick()
+
+    expect(wrapper.find('[data-confirm-reset]').exists()).toBe(false)
+    expect(wrapper.find('[data-tour-card]').exists()).toBe(true)
+  })
+
+  /*
+   * Second review, Finding 2. `startTour` clears the pattern id and name,
+   * but not a timer `scheduleAutosave` armed a moment earlier — and the
+   * header keeps writing `currentName` during the tour by design. A stale
+   * timer firing after the tour starts reads whatever the coach typed since,
+   * with no id, and files the tour's empty board as a new library pattern.
+   */
+  it('does not let a timer armed just before the tour started file the empty tour board', async () => {
+    vi.useFakeTimers()
+    try {
+      localStorage.setItem(TUTORIAL_KEY, JSON.stringify({ seen: true }))
+      const storage = useStorage()
+      wrapper = mountApp()
+      await nextTick()
+
+      // Arm the autosave timer on the ordinary board, before the tour exists.
+      const field = wrapper.find('[data-current-pattern]')
+      await field.setValue('Rondo')
+      await field.trigger('change')
+      vi.advanceTimersByTime(500) // still short of the 1000ms debounce
+
+      await wrapper.find('[data-help]').trigger('click')
+      await wrapper.find('[data-start-tour]').trigger('click')
+      await nextTick()
+
+      // The header stays live on purpose — a coach curious about it types
+      // into the empty tour board's name field.
+      await field.setValue('Scratch')
+      await field.trigger('change')
+
+      vi.advanceTimersByTime(1500)
+      await nextTick()
+
+      expect(storage.listPatterns()).toHaveLength(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  /*
+   * Second review, Finding 3. `tutorial.start` returns early — a no-op — for
+   * a tour already running, which `active` alone cannot distinguish from a
+   * tour this call just opened. `startTour` used to infer success from
+   * `active`, so pressing Take the tour while one was already up fell
+   * through and cleared the header's name anyway. Reachable through the
+   * `more` step's real Help button; simulated directly here since Finding 5
+   * closes that exact route by ending the tour the moment Help opens.
+   */
+  it('does not clear the drill name when Take the tour is pressed while a tour is already active', async () => {
+    localStorage.setItem(TUTORIAL_KEY, JSON.stringify({ seen: true }))
+    wrapper = mountApp()
+    const field = wrapper.find('[data-current-pattern]')
+    await field.setValue('Rondo')
+    await field.trigger('change')
+
+    // Help opened first, while no tour is running, so the watcher behind
+    // Finding 5 has nothing to react to yet.
+    await wrapper.find('[data-help]').trigger('click')
+    await nextTick()
+
+    useTutorial().start({ patternId: null, name: 'Somewhere else' })
+
+    await wrapper.find('[data-start-tour]').trigger('click')
+    await nextTick()
+
+    expect(drillName(wrapper)).toBe('Rondo')
+  })
+
+  /*
+   * Second review, Finding 4. `isDialogOpen` had exactly one consumer — the
+   * shortcut gate — and folding the tour into it silently took every
+   * keyboard shortcut away for the length of the tour, including `p` for
+   * the Pass tool on the very step whose goal is drawing a pass.
+   */
+  it('still switches tool with a shortcut while the tour is running', async () => {
+    localStorage.setItem(TUTORIAL_KEY, JSON.stringify({ seen: true }))
+    wrapper = mountApp()
+    await nextTick()
+    await wrapper.find('[data-help]').trigger('click')
+    await wrapper.find('[data-start-tour]').trigger('click')
+    await nextTick()
+
+    fire({ key: 'p' })
+    await nextTick()
+
+    expect(wrapper.find('[data-tool="arrow-pass"]').classes()).toContain('is-active')
+  })
+
+  /*
+   * Second review, Finding 5. The `more` step spotlights the real Help
+   * button and leaves a genuine hole over it, so a coach can press it
+   * instead of the card's own "Open Help". Left unhandled, Help opened
+   * underneath the tour's dimming with the card floating over it — Help
+   * carries no `z-index`, `.tour`'s is the highest in the app — and the
+   * tour never ended.
+   */
+  it('ends the tour if the real Help button is pressed while it is running', async () => {
+    localStorage.setItem(TUTORIAL_KEY, JSON.stringify({ seen: true }))
+    wrapper = mountApp()
+    await nextTick()
+    await wrapper.find('[data-help]').trigger('click')
+    await wrapper.find('[data-start-tour]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-tour-card]').exists()).toBe(true)
+
+    await wrapper.find('[data-help]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.find('[data-tour-card]').exists()).toBe(false)
+    expect(wrapper.find('[aria-label="Help"][role="dialog"]').exists()).toBe(true)
+  })
 })

@@ -239,8 +239,11 @@ a coach who cannot see the spotlight can still follow the words.
   an emitted event for it.
 - `src/composables/useBoard.ts` — a `clearHistory()` export.
 - `src/App.vue` — mounts the overlay, wires the Help button, adds the tour to
-  `isDialogOpen` and `closeTopmostDialog`, suspends the draft watcher while
-  the tour is active, and restores an interrupted park on startup.
+  `closeTopmostDialog`, suspends the draft watcher while the tour is active,
+  and restores an interrupted park on startup. Not `isDialogOpen`: that
+  computed's one consumer is the keyboard-shortcut gate, and folding the
+  tour into it there would contradict "Every tool works" above by disabling
+  every shortcut, tool letters included, for the length of the tour.
 
 The storage helpers for both keys live in `useTutorial.ts` rather than
 `useStorage.ts`. `useStorage` is about drills; the tour's two keys are about

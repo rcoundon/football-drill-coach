@@ -234,8 +234,19 @@ function markSaved(): void {
  * every update after. `savePattern` mints an id when passed none and hands
  * back what it saved; capturing that id here is what turns the second
  * keystroke into an update of the same drill rather than a second one.
+ *
+ * Guarded on the tour itself, not only on its callers. `onHeaderRename` and
+ * the board watcher below both stay quiet while the tour is active, but a
+ * timer armed in the second before the tour started survives it — `startTour`
+ * clears the pattern id and name, not this timer — and a name typed into the
+ * still-live header during the tour would then reach this function with
+ * `id=null, name='X'` once that stale timer fires, filing the tour's empty
+ * board as a brand-new library pattern. The explicit Save button is left
+ * alone: pressing it is the coach asking, and the tour deliberately leaves
+ * the app usable.
  */
 function autosavePattern(): void {
+  if (tutorial.active.value) return
   if (board.isDerived.value) return
   const id = currentPatternId.value
   const name = currentName.value.trim()
@@ -519,18 +530,24 @@ function onBoardReset() {
  * autosave writing the tour's board over the coach's saved drill:
  * `scheduleAutosave` already returns early when there is neither.
  *
- * `tutorial.start` can refuse — a draft it could not write, most likely —
- * without saying so beyond leaving the tour inactive, in which case the
- * board it left alone is still the drill this pattern id and name describe.
- * Clearing them anyway would sever that pairing for nothing: the drill would
- * sit there unsaved-looking and autosave would fall silent over it, all for
- * a tour that never opened.
+ * `tutorial.start` can refuse — a draft it could not write, most likely, or
+ * a tour already running, reachable through the `more` step's own Help
+ * button putting "Take the tour" back in front of a coach mid-tour — without
+ * saying so beyond leaving the tour inactive... except that a tour already
+ * active also leaves it "inactive" in no sense at all: `active` reads `true`
+ * either way, so it cannot be what this checks. `start` reports whether it
+ * actually started for exactly that reason. Whichever way it refuses, the
+ * board it left alone is still the drill this pattern id and name describe,
+ * or — for the already-running case — still the drill the running tour
+ * itself parked. Clearing them anyway would sever that pairing for nothing:
+ * the drill would sit there unsaved-looking and autosave would fall silent
+ * over it, all for a tour that never (newly) opened.
  */
 function startTour(): void {
   if (board.isDerived.value || presenting.value) return
   helpOpen.value = false
-  tutorial.start({ patternId: currentPatternId.value, name: currentName.value })
-  if (!tutorial.active.value) return
+  const started = tutorial.start({ patternId: currentPatternId.value, name: currentName.value })
+  if (!started) return
   currentPatternId.value = null
   currentName.value = ''
   saveStatus.value = 'unsaved'
@@ -549,6 +566,21 @@ function onTourHelp(): void {
   endTour()
   helpOpen.value = true
 }
+
+/**
+ * The real Help button doesn't know a tour is running — the header stays
+ * live throughout, on purpose — so a coach who presses it rather than the
+ * card's own "Open Help" must land in the same place: the tour ends, Help
+ * opens on top of a clean board. Left alone, Help opened underneath the
+ * tour's dimming, with the card floating over it — Help carries no
+ * `z-index` of its own, and `.tour`'s is the highest in the app — and
+ * neither Escape (which only reaches the tour, one dialog at a time) nor
+ * anything else closed the mess. `endTour` first, same as `onTourHelp`
+ * above, is idempotent when this fires after that has already run.
+ */
+watch(helpOpen, (open) => {
+  if (open && tutorial.active.value) endTour()
+})
 
 /**
  * The board reports where a label should go, or which one to edit; the text
@@ -754,7 +786,6 @@ watch(renameCounterId, (id) => focusWhenOpen(id !== null, () => renameLabelInput
   flush: 'post',
 })
 
-/** True while anything modal is on screen. */
 /**
  * The one error banner, fed by two independent stores.
  *
@@ -777,9 +808,22 @@ function dismissStoreError(): void {
   else sessions.lastError.value = null
 }
 
+/**
+ * Whether one of App's own dialogs is up — the only thing the shortcut gate
+ * in `onKeydown` reads this for.
+ *
+ * The tour deliberately does not belong here, even though it is a dialog by
+ * every other measure: the board is fully live while it runs — "every tool
+ * works, undo works, the coach can wander" — and the `pass` step's whole
+ * point is the coach reaching for `p` themselves. Folding `tutorial.active`
+ * in here once took every shortcut away for the length of the tour, tool
+ * letters included, because this computed has exactly one consumer and that
+ * consumer cannot tell "the tour is up" apart from "a real dialog is up".
+ * `closeTopmostDialog` reasons about the tour on its own terms below and
+ * does not read this at all.
+ */
 const isDialogOpen = computed(
   () =>
-    tutorial.active.value ||
     savePromptOpen.value ||
     deleteDrillPromptOpen.value ||
     resetPromptOpen.value ||
@@ -818,12 +862,21 @@ const tourBlockedByDialog = computed(
  * Prompts before panels, one per press: a coach who has the library open and
  * a prompt over it means the prompt, and closing both at once would take away
  * the thing they were about to go back to.
+ *
+ * The tour sits between the five prompts above and the panels below —
+ * deliberately not first. The board stays live through the tour, so a coach
+ * can open any of those five the ordinary way, and `tourBlockedByDialog`
+ * already steps the tour's own card aside for exactly that. Checking the
+ * tour first used to mean Escape closed the tour instead of the prompt it
+ * opened: the drill came back parked-and-restored underneath a Reset prompt
+ * that was still open, still wired to the button, and now pointing at the
+ * coach's just-restored work rather than the empty tour board it was opened
+ * over. One of these five closing first is what the coach who pressed
+ * Escape from inside one of them actually asked for; the tour still sits
+ * above the panels beneath it, matching the spec's "outermost thing on
+ * screen" for everything that is not one of the board's own dialogs.
  */
 function closeTopmostDialog(): boolean {
-  if (tutorial.active.value) {
-    endTour()
-    return true
-  }
   if (savePromptOpen.value) {
     savePromptOpen.value = false
     return true
@@ -842,6 +895,10 @@ function closeTopmostDialog(): boolean {
   }
   if (labelTarget.value !== null) {
     labelTarget.value = null
+    return true
+  }
+  if (tutorial.active.value) {
+    endTour()
     return true
   }
   // The editor before the library it was opened from: closing both on one
