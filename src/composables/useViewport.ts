@@ -11,8 +11,23 @@ import { readonly, ref, type Ref } from 'vue'
  */
 export const COMPACT_MAX_PX = 1023
 
+/**
+ * Below this the header cannot hold everything it holds on a desktop.
+ *
+ * It is one non-wrapping row, and adding up its own minimums — the mark, a
+ * name that will not shrink past 6rem, the drill menu, the save status,
+ * undo, redo, Share and Help, with a gap between each — it needs about
+ * 590px, and rather more on a touch screen, where the icon buttons grow to
+ * 44px. A portrait phone offers 360 to 430. Everything past the name used to
+ * simply overflow the right edge, which took Help with it — and Help is
+ * where "Take the tour" lives, so a coach who skipped the tour on a phone
+ * had no way back to it.
+ */
+export const NARROW_MAX_PX = 640
+
 const isCompact = ref(false)
 const isPortrait = ref(false)
+const isNarrow = ref(false)
 let watching = false
 
 function track(query: string, target: Ref<boolean>): void {
@@ -30,6 +45,7 @@ function startWatching(): void {
   if (watching) return
   watching = true
   track(`(max-width: ${COMPACT_MAX_PX}px)`, isCompact)
+  track(`(max-width: ${NARROW_MAX_PX}px)`, isNarrow)
   track('(orientation: portrait)', isPortrait)
 }
 
@@ -39,6 +55,7 @@ export function useViewport() {
   return {
     isCompact: readonly(isCompact),
     isPortrait: readonly(isPortrait),
+    isNarrow: readonly(isNarrow),
   }
 }
 
@@ -47,4 +64,5 @@ export function __resetViewportForTests(): void {
   watching = false
   isCompact.value = false
   isPortrait.value = false
+  isNarrow.value = false
 }

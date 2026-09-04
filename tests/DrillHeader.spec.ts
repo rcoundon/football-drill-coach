@@ -1,9 +1,25 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import DrillHeader from '../src/components/DrillHeader.vue'
 import { useBoard, __resetBoardForTests } from '../src/composables/useBoard'
+import { __resetViewportForTests } from '../src/composables/useViewport'
 
-beforeEach(() => __resetBoardForTests())
+beforeEach(() => {
+  __resetBoardForTests()
+  __resetViewportForTests()
+})
+
+afterEach(() => __resetViewportForTests())
+
+/** A screen too narrow for the header's full row, as a phone in portrait. */
+function stubNarrow(narrow: boolean): void {
+  window.matchMedia = ((query: string) => ({
+    matches: query.includes('max-width: 640px') ? narrow : false,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  })) as unknown as typeof window.matchMedia
+  __resetViewportForTests()
+}
 
 function mountHeader(props: Record<string, unknown> = {}) {
   return mount(DrillHeader, { props, attachTo: document.body })
@@ -327,5 +343,77 @@ describe('the destructive group', () => {
     expect(wrapper.find('[data-clear-drawings]').attributes('disabled')).toBeDefined()
     expect(wrapper.find('[data-reset]').attributes('disabled')).toBeDefined()
     board.endScrub()
+  })
+})
+
+/*
+ * The header is one row that does not wrap, and it needs about 590px to hold
+ * everything — nearer 610 on a touch screen. A portrait phone gives it 360.
+ * Everything past the name used to overflow the right edge and be gone: the
+ * save status, Share, and Help, which is where "Take the tour" lives. So a
+ * coach who skipped the tour on a phone had no way back to it.
+ */
+describe('on a screen too narrow for the whole row', () => {
+  it('drops the save status and the divider, which are the row telling itself things', () => {
+    stubNarrow(true)
+    const wrapper = mountHeader({ patternName: 'Press trigger', saveStatus: 'saved' })
+    expect(wrapper.find('[data-save-status]').exists()).toBe(false)
+  })
+
+  it('keeps the name, the menu and undo where they were', () => {
+    stubNarrow(true)
+    const wrapper = mountHeader({ patternName: 'Press trigger' })
+    for (const hook of ['data-current-pattern', 'data-drill-menu', 'data-undo', 'data-redo']) {
+      expect(wrapper.find(`[${hook}]`).exists(), hook).toBe(true)
+    }
+  })
+
+  it('takes Share and Help out of the row', () => {
+    stubNarrow(true)
+    const wrapper = mountHeader()
+    expect(wrapper.find('[data-share-menu]').exists()).toBe(false)
+    // Still in the component, but in the menu rather than sitting in the row.
+    expect(wrapper.find('.header > [data-help]').exists()).toBe(false)
+    expect(wrapper.find('.menu [data-help]').exists()).toBe(true)
+  })
+
+  /* Into the one menu that is reachable at any width. */
+  it('offers Help and every export from the drill menu instead', async () => {
+    stubNarrow(true)
+    const board = useBoard()
+    board.addFrame()
+    const wrapper = mountHeader()
+    await wrapper.find('[data-drill-menu]').trigger('click')
+    for (const hook of ['data-export-png', 'data-export-gif', 'data-export-json', 'data-help']) {
+      expect(wrapper.find(`[${hook}]`).isVisible(), hook).toBe(true)
+    }
+  })
+
+  it('asks the app for help from there, and closes behind itself', async () => {
+    stubNarrow(true)
+    const wrapper = mountHeader()
+    await wrapper.find('[data-drill-menu]').trigger('click')
+    await wrapper.find('[data-help]').trigger('click')
+    expect(wrapper.emitted('help')).toHaveLength(1)
+    expect(wrapper.find('[data-help]').isVisible()).toBe(false)
+  })
+
+  /*
+   * One at a time, wherever it is. The tour spotlights `[data-help]`, and a
+   * second copy hidden in the row would be the one `querySelector` found.
+   */
+  it('never has two of the same control at once', () => {
+    stubNarrow(true)
+    const wrapper = mountHeader()
+    expect(wrapper.findAll('[data-help]')).toHaveLength(1)
+    expect(wrapper.findAll('[data-export-json]')).toHaveLength(1)
+  })
+
+  it('leaves the wide layout exactly as it was', () => {
+    stubNarrow(false)
+    const wrapper = mountHeader({ patternName: 'Press trigger', saveStatus: 'saved' })
+    expect(wrapper.find('[data-save-status]').exists()).toBe(true)
+    expect(wrapper.find('[data-share-menu]').exists()).toBe(true)
+    expect(wrapper.find('[data-help]').exists()).toBe(true)
   })
 })
