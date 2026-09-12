@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useBoard } from '../composables/useBoard'
+import { useViewport } from '../composables/useViewport'
 
 const props = withDefaults(
   defineProps<{
@@ -39,6 +40,15 @@ const emit = defineEmits<{
 }>()
 
 const board = useBoard()
+
+/*
+ * Below this the row cannot hold everything, so the save status goes and
+ * Share and Help fold into the drill menu — which is reachable at any width
+ * because it is an icon, not a row of them. Moved rather than duplicated and
+ * hidden: the tour spotlights `[data-help]`, and a second copy behind
+ * `display: none` would be the one `querySelector` handed it.
+ */
+const { isNarrow } = useViewport()
 
 /**
  * True while a drawing sits on some frame, current or not.
@@ -216,6 +226,34 @@ function commitName(): void {
           @click="choose(() => emit('duplicateDrill'))"
         >Duplicate</button>
         <button data-import-json class="menu-item" role="menuitem" @click="choose(() => emit('importJson'))">Import…</button>
+
+        <!--
+          Where Share and Help go when the row is too narrow to hold them.
+          The same buttons with the same hooks, moved rather than copied, so
+          only ever one of each exists.
+        -->
+        <template v-if="isNarrow">
+          <div class="menu-divider"></div>
+          <button data-export-png class="menu-item" role="menuitem" @click="choose(() => emit('exportPng'))">Export PNG</button>
+          <button
+            v-if="board.state.frames.length > 1"
+            data-export-gif
+            class="menu-item"
+            role="menuitem"
+            :disabled="exporting"
+            :title="exporting ? 'Already building an animation' : 'Save the drill as an animation'"
+            @click="choose(() => emit('exportGif'))"
+          >Export GIF</button>
+          <button
+            data-export-json
+            class="menu-item"
+            role="menuitem"
+            title="Save every drill and session to one file — keep it as a backup, carry it to another machine, or send it to another coach for them to import"
+            @click="choose(() => emit('exportJson'))"
+          >Back up everything</button>
+          <div class="menu-divider"></div>
+          <button data-help class="menu-item" role="menuitem" @click="choose(() => emit('help'))">Help</button>
+        </template>
         <!--
           Everything below the divider takes something away. They are here
           rather than beside the routine controls because one mis-tap next to
@@ -257,7 +295,7 @@ function commitName(): void {
       </div>
     </div>
 
-    <span data-save-status class="status">{{ statusLabel }}</span>
+    <span v-if="!isNarrow" data-save-status class="status">{{ statusLabel }}</span>
 
     <div class="spacer"></div>
 
@@ -282,9 +320,9 @@ function commitName(): void {
       <svg class="glyph" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5" /><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" /></svg>
     </button>
 
-    <div class="divider"></div>
+    <div v-if="!isNarrow" class="divider"></div>
 
-    <div class="menu-wrap">
+    <div v-if="!isNarrow" class="menu-wrap">
       <button
         data-share-menu
         class="text-button"
@@ -334,6 +372,7 @@ function commitName(): void {
       the control itself.
     -->
     <button
+      v-if="!isNarrow"
       data-help
       class="icon-button"
       title="What everything on this board does"
@@ -421,6 +460,12 @@ function commitName(): void {
   border: 1px solid var(--border);
   border-radius: var(--radius-sheet);
   box-shadow: 0 16px 40px -12px var(--shadow-ink);
+  /*
+   * On a phone this menu also holds the exports and Help, which is more rows
+   * than a portrait screen is tall once each one is a 44px touch target.
+   */
+  max-height: min(70vh, 32rem);
+  overflow-y: auto;
 }
 /* Anchored to the right edge, because Share sits near it. */
 .menu--right { left: auto; right: 0; }

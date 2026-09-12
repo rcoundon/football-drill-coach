@@ -303,6 +303,14 @@ const emit = defineEmits<{ close: []; startTour: [] }>()
           </tbody>
         </table>
       </section>
+
+      <!--
+        Who made it. Help is the one place a coach opens on purpose, so the
+        credit lives here rather than taking a line off the board.
+      -->
+      <footer data-help-credit class="credit">
+        Made by Ross Coundon &middot; Holmer Green Football Club
+      </footer>
     </section>
   </div>
 </template>
@@ -375,6 +383,13 @@ const emit = defineEmits<{ close: []; startTour: [] }>()
   border-left: 2px solid var(--brand); border-radius: 0 0.4rem 0.4rem 0;
   background: var(--surface-2); color: var(--ink-2);
   line-height: 1.5; font-size: 0.9rem;
+}
+
+/* Quiet, and last: nobody comes to Help for this, but it should be findable. */
+.credit {
+  margin: 1.5rem 0 0; padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.8rem; color: var(--ink-3); text-align: center;
 }
 
 kbd {

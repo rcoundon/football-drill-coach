@@ -143,6 +143,15 @@ Afterwards it starts only from a "Take the tour" button at the top of the
 Help panel, beside the Close button. A coach who skipped it, or who wants it
 again, opens Help and presses that.
 
+Which means Help has to be reachable everywhere the app runs. It was not: the
+header is one non-wrapping row that needs about 590px, and on a portrait
+phone everything past the drill name — including Help — overflowed the right
+edge. Under 640px the save status drops and Share and Help fold into the
+drill menu, which is one icon and fits at any width. They are moved rather
+than duplicated and hidden, because this tour's closing step spotlights
+`[data-help]` and a second copy behind `display: none` would be the one
+`querySelector` handed it.
+
 The tour refuses to start while presenting, and while the drill is playing or
 being scrubbed — the same `presenting` and `isDerived` conditions the rest of
 the app already reasons about, checked in App and again in the tour's own
