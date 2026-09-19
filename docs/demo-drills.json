@@ -1,0 +1,2600 @@
+{
+  "patterns": [
+    {
+      "id": "demo-rondo-4v2",
+      "name": "4v2 Rondo",
+      "version": 3,
+      "pitch": {
+        "type": "half",
+        "rotated": false
+      },
+      "labelsVisible": true,
+      "counterLabelsVisible": true,
+      "ballsVisible": true,
+      "notes": "Setup: 9 m square, four blues on the corners, two reds inside.\n\nCoaching points:\n- Receive on the back foot, open body to the next pass.\n- Two touches maximum; one if the picture allows.\n- Defenders: press together, ball side and cover.\n\nProgression: one touch only. Swap a defender in on every interception.",
+      "notesVisible": true,
+      "tags": [
+        "rondo",
+        "warm-up",
+        "u12"
+      ],
+      "frames": [
+        {
+          "counters": [
+            {
+              "id": "b1",
+              "color": "blue",
+              "label": "1",
+              "pos": {
+                "x": 41,
+                "y": 23
+              }
+            },
+            {
+              "id": "b2",
+              "color": "blue",
+              "label": "2",
+              "pos": {
+                "x": 59,
+                "y": 23
+              }
+            },
+            {
+              "id": "b3",
+              "color": "blue",
+              "label": "3",
+              "pos": {
+                "x": 59,
+                "y": 41
+              }
+            },
+            {
+              "id": "b4",
+              "color": "blue",
+              "label": "4",
+              "pos": {
+                "x": 41,
+                "y": 41
+              }
+            },
+            {
+              "id": "r1",
+              "color": "red",
+              "label": "",
+              "pos": {
+                "x": 47,
+                "y": 29
+              }
+            },
+            {
+              "id": "r2",
+              "color": "red",
+              "label": "",
+              "pos": {
+                "x": 53,
+                "y": 35
+              }
+            }
+          ],
+          "markers": [
+            {
+              "id": "k1",
+              "pos": {
+                "x": 38.2,
+                "y": 20.2
+              }
+            },
+            {
+              "id": "k2",
+              "pos": {
+                "x": 61.8,
+                "y": 20.2
+              }
+            },
+            {
+              "id": "k3",
+              "pos": {
+                "x": 61.8,
+                "y": 43.8
+              }
+            },
+            {
+              "id": "k4",
+              "pos": {
+                "x": 38.2,
+                "y": 43.8
+              }
+            }
+          ],
+          "labels": [
+            {
+              "id": "l1",
+              "pos": {
+                "x": 50,
+                "y": 16
+              },
+              "text": "2 touch max"
+            }
+          ],
+          "balls": [
+            {
+              "id": "ball",
+              "pos": {
+                "x": 44.4,
+                "y": 26.4
+              },
+              "attachedTo": "b1"
+            }
+          ],
+          "drawings": [
+            {
+              "id": "a1",
+              "kind": "arrow",
+              "color": "#1976d2",
+              "style": "pass",
+              "from": {
+                "x": 44,
+                "y": 23
+              },
+              "to": {
+                "x": 56,
+                "y": 23
+              }
+            }
+          ],
+          "note": "Blue 1 on the ball. Both defenders press the ball side."
+        },
+        {
+          "counters": [
+            {
+              "id": "b1",
+              "color": "blue",
+              "label": "1",
+              "pos": {
+                "x": 41,
+                "y": 23
+              }
+            },
+            {
+              "id": "b2",
+              "color": "blue",
+              "label": "2",
+              "pos": {
+                "x": 59,
+                "y": 23
+              }
+            },
+            {
+              "id": "b3",
+              "color": "blue",
+              "label": "3",
+              "pos": {
+                "x": 59,
+                "y": 41
+              }
+            },
+            {
+              "id": "b4",
+              "color": "blue",
+              "label": "4",
+              "pos": {
+                "x": 41,
+                "y": 41
+              }
+            },
+            {
+              "id": "r1",
+              "color": "red",
+              "label": "",
+              "pos": {
+                "x": 52,
+                "y": 28
+              }
+            },
+            {
+              "id": "r2",
+              "color": "red",
+              "label": "",
+              "pos": {
+                "x": 48,
+                "y": 34
+              }
+            }
+          ],
+          "markers": [
+            {
+              "id": "k1",
+              "pos": {
+                "x": 38.2,
+                "y": 20.2
+              }
+            },
+            {
+              "id": "k2",
+              "pos": {
+                "x": 61.8,
+                "y": 20.2
+              }
+            },
+            {
+              "id": "k3",
+              "pos": {
+                "x": 61.8,
+                "y": 43.8
+              }
+            },
+            {
+              "id": "k4",
+              "pos": {
+                "x": 38.2,
+                "y": 43.8
+              }
+            }
+          ],
+          "labels": [
+            {
+              "id": "l1",
+              "pos": {
+                "x": 50,
+                "y": 16
+              },
+              "text": "2 touch max"
+            }
+          ],
+          "balls": [
+            {
+              "id": "ball",
+              "pos": {
+                "x": 62.4,
+                "y": 26.4
+              },
+              "attachedTo": "b2"
+            }
+          ],
+          "drawings": [
+            {
+              "id": "a2",
+              "kind": "arrow",
+              "color": "#1976d2",
+              "style": "pass",
+              "from": {
+                "x": 59,
+                "y": 26
+              },
+              "to": {
+                "x": 59,
+                "y": 38
+              }
+            }
+          ],
+          "note": "Defender 1 arrives late. Pass on before the second defender closes.",
+          "duration": 900
+        },
+        {
+          "counters": [
+            {
+              "id": "b1",
+              "color": "blue",
+              "label": "1",
+              "pos": {
+                "x": 41,
+                "y": 23
+              }
+            },
+            {
+              "id": "b2",
+              "color": "blue",
+              "label": "2",
+              "pos": {
+                "x": 59,
+                "y": 23
+              }
+            },
+            {
+              "id": "b3",
+              "color": "blue",
+              "label": "3",
+              "pos": {
+                "x": 59,
+                "y": 41
+              }
+            },
+            {
+              "id": "b4",
+              "color": "blue",
+              "label": "4",
+              "pos": {
+                "x": 41,
+                "y": 41
+              }
+            },
+            {
+              "id": "r1",
+              "color": "red",
+              "label": "",
+              "pos": {
+                "x": 53,
+                "y": 33
+              }
+            },
+            {
+              "id": "r2",
+              "color": "red",
+              "label": "",
+              "pos": {
+                "x": 49,
+                "y": 29
+              }
+            }
+          ],
+          "markers": [
+            {
+              "id": "k1",
+              "pos": {
+                "x": 38.2,
+                "y": 20.2
+              }
+            },
+            {
+              "id": "k2",
+              "pos": {
+                "x": 61.8,
+                "y": 20.2
+              }
+            },
+            {
+              "id": "k3",
+              "pos": {
+                "x": 61.8,
+                "y": 43.8
+              }
+            },
+            {
+              "id": "k4",
+              "pos": {
+                "x": 38.2,
+                "y": 43.8
+              }
+            }
+          ],
+          "labels": [
+            {
+              "id": "l1",
+              "pos": {
+                "x": 50,
+                "y": 16
+              },
+              "text": "2 touch max"
+            }
+          ],
+          "balls": [
+            {
+              "id": "ball",
+              "pos": {
+                "x": 62.4,
+                "y": 44.4
+              },
+              "attachedTo": "b3"
+            }
+          ],
+          "drawings": [
+            {
+              "id": "a3",
+              "kind": "arrow",
+              "color": "#1976d2",
+              "style": "pass",
+              "from": {
+                "x": 56,
+                "y": 41
+              },
+              "to": {
+                "x": 44,
+                "y": 41
+              },
+              "bend": 4
+            }
+          ],
+          "note": "Split pass through the middle when the two defenders are flat.",
+          "duration": 900
+        }
+      ],
+      "createdAt": "2026-09-19T12:00:00.000Z",
+      "updatedAt": "2026-09-19T12:00:00.000Z"
+    },
+    {
+      "id": "demo-overlap",
+      "name": "Overlap Down the Wing",
+      "version": 3,
+      "pitch": {
+        "type": "full",
+        "rotated": false
+      },
+      "labelsVisible": true,
+      "counterLabelsVisible": true,
+      "ballsVisible": true,
+      "notes": "Attacking pattern for a 4-3-3 or 4-2-3-1.\n\nTriggers: winger receives facing the touchline; full back has space ahead.\n\nCoaching points:\n- Winger takes one touch inside to drag the defender.\n- Full back's run bends away from the winger so both cannot be marked by one player.\n- 9 waits on the shoulder, arrives late at the near post.",
+      "notesVisible": true,
+      "tags": [
+        "attacking",
+        "pattern",
+        "wide play"
+      ],
+      "frames": [
+        {
+          "counters": [
+            {
+              "id": "rw",
+              "color": "red",
+              "label": "7",
+              "pos": {
+                "x": 62,
+                "y": 12
+              }
+            },
+            {
+              "id": "rb",
+              "color": "red",
+              "label": "2",
+              "pos": {
+                "x": 48,
+                "y": 10
+              }
+            },
+            {
+              "id": "cm",
+              "color": "red",
+              "label": "8",
+              "pos": {
+                "x": 55,
+                "y": 28
+              }
+            },
+            {
+              "id": "st",
+              "color": "red",
+              "label": "9",
+              "pos": {
+                "x": 70,
+                "y": 30
+              }
+            },
+            {
+              "id": "cb1",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 80,
+                "y": 26
+              }
+            },
+            {
+              "id": "cb2",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 80,
+                "y": 38
+              }
+            },
+            {
+              "id": "lb",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 76,
+                "y": 14
+              }
+            }
+          ],
+          "markers": [],
+          "labels": [
+            {
+              "id": "l1",
+              "pos": {
+                "x": 60,
+                "y": 6
+              },
+              "text": "overlap"
+            }
+          ],
+          "balls": [
+            {
+              "id": "ball",
+              "pos": {
+                "x": 58.4,
+                "y": 31.4
+              },
+              "attachedTo": "cm"
+            }
+          ],
+          "drawings": [
+            {
+              "id": "a1",
+              "kind": "arrow",
+              "color": "#d32f2f",
+              "style": "pass",
+              "from": {
+                "x": 58,
+                "y": 28
+              },
+              "to": {
+                "x": 62,
+                "y": 15
+              }
+            }
+          ],
+          "note": "8 plays into the winger's feet."
+        },
+        {
+          "counters": [
+            {
+              "id": "rw",
+              "color": "red",
+              "label": "7",
+              "pos": {
+                "x": 66,
+                "y": 16
+              }
+            },
+            {
+              "id": "rb",
+              "color": "red",
+              "label": "2",
+              "pos": {
+                "x": 66,
+                "y": 6
+              }
+            },
+            {
+              "id": "cm",
+              "color": "red",
+              "label": "8",
+              "pos": {
+                "x": 58,
+                "y": 26
+              }
+            },
+            {
+              "id": "st",
+              "color": "red",
+              "label": "9",
+              "pos": {
+                "x": 74,
+                "y": 30
+              }
+            },
+            {
+              "id": "cb1",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 78,
+                "y": 24
+              }
+            },
+            {
+              "id": "cb2",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 80,
+                "y": 38
+              }
+            },
+            {
+              "id": "lb",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 72,
+                "y": 16
+              }
+            }
+          ],
+          "markers": [],
+          "labels": [
+            {
+              "id": "l1",
+              "pos": {
+                "x": 60,
+                "y": 6
+              },
+              "text": "overlap"
+            }
+          ],
+          "balls": [
+            {
+              "id": "ball",
+              "pos": {
+                "x": 69.4,
+                "y": 19.4
+              },
+              "attachedTo": "rw"
+            }
+          ],
+          "drawings": [
+            {
+              "id": "a2",
+              "kind": "arrow",
+              "color": "#d32f2f",
+              "style": "run",
+              "from": {
+                "x": 50,
+                "y": 10
+              },
+              "to": {
+                "x": 72,
+                "y": 6
+              },
+              "bend": -4
+            }
+          ],
+          "note": "Winger checks inside, full back overlaps on the outside.",
+          "duration": 1200
+        },
+        {
+          "counters": [
+            {
+              "id": "rw",
+              "color": "red",
+              "label": "7",
+              "pos": {
+                "x": 68,
+                "y": 20
+              }
+            },
+            {
+              "id": "rb",
+              "color": "red",
+              "label": "2",
+              "pos": {
+                "x": 84,
+                "y": 8
+              },
+              "bend": -5,
+              "bendAlong": 0.15
+            },
+            {
+              "id": "cm",
+              "color": "red",
+              "label": "8",
+              "pos": {
+                "x": 60,
+                "y": 24
+              }
+            },
+            {
+              "id": "st",
+              "color": "red",
+              "label": "9",
+              "pos": {
+                "x": 80,
+                "y": 30
+              }
+            },
+            {
+              "id": "cb1",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 74,
+                "y": 30
+              }
+            },
+            {
+              "id": "cb2",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 84,
+                "y": 38
+              }
+            },
+            {
+              "id": "lb",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 74,
+                "y": 20
+              }
+            }
+          ],
+          "markers": [],
+          "labels": [
+            {
+              "id": "l1",
+              "pos": {
+                "x": 60,
+                "y": 6
+              },
+              "text": "overlap"
+            }
+          ],
+          "balls": [
+            {
+              "id": "ball",
+              "pos": {
+                "x": 87.4,
+                "y": 11.4
+              },
+              "attachedTo": "rb"
+            }
+          ],
+          "drawings": [
+            {
+              "id": "a3",
+              "kind": "arrow",
+              "color": "#d32f2f",
+              "style": "pass",
+              "from": {
+                "x": 70,
+                "y": 14
+              },
+              "to": {
+                "x": 82,
+                "y": 8
+              }
+            },
+            {
+              "id": "a4",
+              "kind": "arrow",
+              "color": "#d32f2f",
+              "style": "run",
+              "from": {
+                "x": 74,
+                "y": 30
+              },
+              "to": {
+                "x": 84,
+                "y": 30
+              }
+            }
+          ],
+          "note": "Release the overlap. 9 attacks the near post.",
+          "duration": 1100
+        },
+        {
+          "counters": [
+            {
+              "id": "rw",
+              "color": "red",
+              "label": "7",
+              "pos": {
+                "x": 72,
+                "y": 24
+              }
+            },
+            {
+              "id": "rb",
+              "color": "red",
+              "label": "2",
+              "pos": {
+                "x": 88,
+                "y": 10
+              }
+            },
+            {
+              "id": "cm",
+              "color": "red",
+              "label": "8",
+              "pos": {
+                "x": 66,
+                "y": 26
+              }
+            },
+            {
+              "id": "st",
+              "color": "red",
+              "label": "9",
+              "pos": {
+                "x": 88,
+                "y": 30
+              }
+            },
+            {
+              "id": "cb1",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 82,
+                "y": 30
+              }
+            },
+            {
+              "id": "cb2",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 84,
+                "y": 38
+              }
+            },
+            {
+              "id": "lb",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 78,
+                "y": 18
+              }
+            }
+          ],
+          "markers": [],
+          "labels": [
+            {
+              "id": "l1",
+              "pos": {
+                "x": 60,
+                "y": 6
+              },
+              "text": "overlap"
+            }
+          ],
+          "balls": [
+            {
+              "id": "ball",
+              "pos": {
+                "x": 91.4,
+                "y": 13.4
+              },
+              "attachedTo": "rb"
+            }
+          ],
+          "drawings": [
+            {
+              "id": "a5",
+              "kind": "arrow",
+              "color": "#d32f2f",
+              "style": "pass",
+              "from": {
+                "x": 90,
+                "y": 12
+              },
+              "to": {
+                "x": 90,
+                "y": 28
+              },
+              "bend": 5
+            },
+            {
+              "id": "z1",
+              "kind": "line",
+              "color": "#fdd835",
+              "from": {
+                "x": 80,
+                "y": 0
+              },
+              "to": {
+                "x": 80,
+                "y": 64.76
+              }
+            }
+          ],
+          "note": "Cut-back or cross. Everyone in the box arrives late.",
+          "duration": 1000
+        }
+      ],
+      "createdAt": "2026-09-19T12:00:00.000Z",
+      "updatedAt": "2026-09-19T12:00:00.000Z"
+    },
+    {
+      "id": "demo-press-trigger",
+      "name": "Pressing Trigger: Pass to Centre Back",
+      "version": 3,
+      "pitch": {
+        "type": "full",
+        "rotated": false
+      },
+      "labelsVisible": true,
+      "counterLabelsVisible": true,
+      "ballsVisible": true,
+      "notes": "High press from a 4-3-3 against a team playing out from the back.\n\nThe trigger is the goalkeeper's pass to a centre back. Nobody moves before it.\n\nCoaching points:\n- 9 presses on a curve so the switch across the back is closed.\n- Near winger shows the full back outside, towards the touchline.\n- Midfield three step up together; the far side tucks in, not out.\n- If the ball goes long, drop and reset.",
+      "notesVisible": true,
+      "tags": [
+        "pressing",
+        "defending",
+        "u14"
+      ],
+      "frames": [
+        {
+          "counters": [
+            {
+              "id": "gk",
+              "color": "blue",
+              "label": "GK",
+              "pos": {
+                "x": 8,
+                "y": 32
+              }
+            },
+            {
+              "id": "cb1",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 20,
+                "y": 22
+              }
+            },
+            {
+              "id": "cb2",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 20,
+                "y": 42
+              }
+            },
+            {
+              "id": "lb",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 28,
+                "y": 8
+              }
+            },
+            {
+              "id": "rb",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 28,
+                "y": 56
+              }
+            },
+            {
+              "id": "dm",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 30,
+                "y": 36
+              }
+            },
+            {
+              "id": "st",
+              "color": "red",
+              "label": "9",
+              "pos": {
+                "x": 36,
+                "y": 26
+              }
+            },
+            {
+              "id": "lw",
+              "color": "red",
+              "label": "11",
+              "pos": {
+                "x": 40,
+                "y": 14
+              }
+            },
+            {
+              "id": "rw",
+              "color": "red",
+              "label": "7",
+              "pos": {
+                "x": 40,
+                "y": 50
+              }
+            },
+            {
+              "id": "cm1",
+              "color": "red",
+              "label": "8",
+              "pos": {
+                "x": 48,
+                "y": 24
+              }
+            },
+            {
+              "id": "cm2",
+              "color": "red",
+              "label": "10",
+              "pos": {
+                "x": 48,
+                "y": 40
+              }
+            }
+          ],
+          "markers": [],
+          "labels": [
+            {
+              "id": "l1",
+              "pos": {
+                "x": 14,
+                "y": 60
+              },
+              "text": "trigger: pass to CB"
+            }
+          ],
+          "balls": [
+            {
+              "id": "ball",
+              "pos": {
+                "x": 11.4,
+                "y": 35.4
+              },
+              "attachedTo": "gk"
+            }
+          ],
+          "drawings": [
+            {
+              "id": "t1",
+              "kind": "line",
+              "color": "#fdd835",
+              "from": {
+                "x": 33,
+                "y": 0
+              },
+              "to": {
+                "x": 33,
+                "y": 64.76
+              }
+            },
+            {
+              "id": "t2",
+              "kind": "line",
+              "color": "#fdd835",
+              "from": {
+                "x": 67,
+                "y": 0
+              },
+              "to": {
+                "x": 67,
+                "y": 64.76
+              }
+            }
+          ],
+          "note": "Goalkeeper has the ball. Stay compact and wait for the pass."
+        },
+        {
+          "counters": [
+            {
+              "id": "gk",
+              "color": "blue",
+              "label": "GK",
+              "pos": {
+                "x": 8,
+                "y": 32
+              }
+            },
+            {
+              "id": "cb1",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 20,
+                "y": 22
+              }
+            },
+            {
+              "id": "cb2",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 20,
+                "y": 42
+              }
+            },
+            {
+              "id": "lb",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 28,
+                "y": 8
+              }
+            },
+            {
+              "id": "rb",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 28,
+                "y": 56
+              }
+            },
+            {
+              "id": "dm",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 30,
+                "y": 36
+              }
+            },
+            {
+              "id": "st",
+              "color": "red",
+              "label": "9",
+              "pos": {
+                "x": 25,
+                "y": 18
+              },
+              "bend": 4,
+              "bendAlong": 0.1
+            },
+            {
+              "id": "lw",
+              "color": "red",
+              "label": "11",
+              "pos": {
+                "x": 33,
+                "y": 12
+              }
+            },
+            {
+              "id": "rw",
+              "color": "red",
+              "label": "7",
+              "pos": {
+                "x": 38,
+                "y": 46
+              }
+            },
+            {
+              "id": "cm1",
+              "color": "red",
+              "label": "8",
+              "pos": {
+                "x": 38,
+                "y": 28
+              }
+            },
+            {
+              "id": "cm2",
+              "color": "red",
+              "label": "10",
+              "pos": {
+                "x": 44,
+                "y": 40
+              }
+            }
+          ],
+          "markers": [],
+          "labels": [
+            {
+              "id": "l1",
+              "pos": {
+                "x": 14,
+                "y": 60
+              },
+              "text": "trigger: pass to CB"
+            },
+            {
+              "id": "l2",
+              "pos": {
+                "x": 12,
+                "y": 10
+              },
+              "text": "show outside"
+            }
+          ],
+          "balls": [
+            {
+              "id": "ball",
+              "pos": {
+                "x": 23.4,
+                "y": 25.4
+              },
+              "attachedTo": "cb1"
+            }
+          ],
+          "drawings": [
+            {
+              "id": "t1",
+              "kind": "line",
+              "color": "#fdd835",
+              "from": {
+                "x": 33,
+                "y": 0
+              },
+              "to": {
+                "x": 33,
+                "y": 64.76
+              }
+            },
+            {
+              "id": "t2",
+              "kind": "line",
+              "color": "#fdd835",
+              "from": {
+                "x": 67,
+                "y": 0
+              },
+              "to": {
+                "x": 67,
+                "y": 64.76
+              }
+            },
+            {
+              "id": "a1",
+              "kind": "arrow",
+              "color": "#d32f2f",
+              "style": "run",
+              "from": {
+                "x": 36,
+                "y": 26
+              },
+              "to": {
+                "x": 25,
+                "y": 18
+              }
+            },
+            {
+              "id": "a2",
+              "kind": "arrow",
+              "color": "#d32f2f",
+              "style": "run",
+              "from": {
+                "x": 40,
+                "y": 14
+              },
+              "to": {
+                "x": 33,
+                "y": 12
+              }
+            },
+            {
+              "id": "a3",
+              "kind": "arrow",
+              "color": "#d32f2f",
+              "style": "run",
+              "from": {
+                "x": 48,
+                "y": 24
+              },
+              "to": {
+                "x": 38,
+                "y": 28
+              }
+            }
+          ],
+          "note": "Pass to the centre back is the trigger. 9 curves the run to cut off the switch, 11 shows the full back outside.",
+          "duration": 1000
+        },
+        {
+          "counters": [
+            {
+              "id": "gk",
+              "color": "blue",
+              "label": "GK",
+              "pos": {
+                "x": 8,
+                "y": 32
+              }
+            },
+            {
+              "id": "cb1",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 20,
+                "y": 22
+              }
+            },
+            {
+              "id": "cb2",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 20,
+                "y": 42
+              }
+            },
+            {
+              "id": "lb",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 30,
+                "y": 6
+              }
+            },
+            {
+              "id": "rb",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 28,
+                "y": 56
+              }
+            },
+            {
+              "id": "dm",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 30,
+                "y": 36
+              }
+            },
+            {
+              "id": "st",
+              "color": "red",
+              "label": "9",
+              "pos": {
+                "x": 24,
+                "y": 18
+              }
+            },
+            {
+              "id": "lw",
+              "color": "red",
+              "label": "11",
+              "pos": {
+                "x": 37,
+                "y": 13
+              }
+            },
+            {
+              "id": "rw",
+              "color": "red",
+              "label": "7",
+              "pos": {
+                "x": 36,
+                "y": 42
+              }
+            },
+            {
+              "id": "cm1",
+              "color": "red",
+              "label": "8",
+              "pos": {
+                "x": 36,
+                "y": 18
+              }
+            },
+            {
+              "id": "cm2",
+              "color": "red",
+              "label": "10",
+              "pos": {
+                "x": 40,
+                "y": 34
+              }
+            }
+          ],
+          "markers": [],
+          "labels": [
+            {
+              "id": "l1",
+              "pos": {
+                "x": 14,
+                "y": 60
+              },
+              "text": "trigger: pass to CB"
+            },
+            {
+              "id": "l3",
+              "pos": {
+                "x": 52,
+                "y": 5
+              },
+              "text": "ball locked on the line"
+            }
+          ],
+          "balls": [
+            {
+              "id": "ball",
+              "pos": {
+                "x": 33.4,
+                "y": 9.4
+              },
+              "attachedTo": "lb"
+            }
+          ],
+          "drawings": [
+            {
+              "id": "t1",
+              "kind": "line",
+              "color": "#fdd835",
+              "from": {
+                "x": 33,
+                "y": 0
+              },
+              "to": {
+                "x": 33,
+                "y": 64.76
+              }
+            },
+            {
+              "id": "t2",
+              "kind": "line",
+              "color": "#fdd835",
+              "from": {
+                "x": 67,
+                "y": 0
+              },
+              "to": {
+                "x": 67,
+                "y": 64.76
+              }
+            },
+            {
+              "id": "a4",
+              "kind": "arrow",
+              "color": "#1976d2",
+              "style": "pass",
+              "from": {
+                "x": 24,
+                "y": 22
+              },
+              "to": {
+                "x": 30,
+                "y": 8
+              }
+            },
+            {
+              "id": "p1",
+              "kind": "pen",
+              "color": "#d32f2f",
+              "points": [
+                {
+                  "x": 30,
+                  "y": 3
+                },
+                {
+                  "x": 31,
+                  "y": 7
+                },
+                {
+                  "x": 33,
+                  "y": 12
+                },
+                {
+                  "x": 34,
+                  "y": 18
+                },
+                {
+                  "x": 33,
+                  "y": 24
+                }
+              ]
+            }
+          ],
+          "note": "Ball is forced to the full back on the touchline. Win it here or force the long clearance.",
+          "duration": 1000
+        }
+      ],
+      "createdAt": "2026-09-19T12:00:00.000Z",
+      "updatedAt": "2026-09-19T12:00:00.000Z"
+    },
+    {
+      "id": "demo-switch",
+      "name": "Switch of Play",
+      "version": 3,
+      "pitch": {
+        "type": "full",
+        "rotated": false
+      },
+      "labelsVisible": true,
+      "counterLabelsVisible": true,
+      "ballsVisible": true,
+      "notes": "Escape a crowded side in three passes.\n\nCoaching points:\n- First pass backwards is fine: it buys the angle.\n- Centre backs split wide enough that the second pass moves the block.\n- Receiving full back stays high and wide until the ball is in the air.",
+      "notesVisible": true,
+      "tags": [
+        "possession",
+        "pattern",
+        "u12"
+      ],
+      "frames": [
+        {
+          "counters": [
+            {
+              "id": "lb",
+              "color": "red",
+              "label": "3",
+              "pos": {
+                "x": 40,
+                "y": 8
+              }
+            },
+            {
+              "id": "cb1",
+              "color": "red",
+              "label": "5",
+              "pos": {
+                "x": 30,
+                "y": 24
+              }
+            },
+            {
+              "id": "cb2",
+              "color": "red",
+              "label": "4",
+              "pos": {
+                "x": 30,
+                "y": 42
+              }
+            },
+            {
+              "id": "rb",
+              "color": "red",
+              "label": "2",
+              "pos": {
+                "x": 44,
+                "y": 58
+              }
+            },
+            {
+              "id": "dm",
+              "color": "red",
+              "label": "6",
+              "pos": {
+                "x": 42,
+                "y": 32
+              }
+            },
+            {
+              "id": "rw",
+              "color": "red",
+              "label": "7",
+              "pos": {
+                "x": 66,
+                "y": 58
+              }
+            },
+            {
+              "id": "d1",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 46,
+                "y": 14
+              }
+            },
+            {
+              "id": "d2",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 48,
+                "y": 26
+              }
+            },
+            {
+              "id": "d3",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 52,
+                "y": 38
+              }
+            },
+            {
+              "id": "d4",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 60,
+                "y": 52
+              }
+            }
+          ],
+          "markers": [],
+          "labels": [],
+          "balls": [
+            {
+              "id": "ball",
+              "pos": {
+                "x": 43.4,
+                "y": 11.4
+              },
+              "attachedTo": "lb"
+            }
+          ],
+          "drawings": [
+            {
+              "id": "a1",
+              "kind": "arrow",
+              "color": "#d32f2f",
+              "style": "pass",
+              "from": {
+                "x": 40,
+                "y": 10
+              },
+              "to": {
+                "x": 32,
+                "y": 22
+              }
+            }
+          ],
+          "note": "Left side is crowded. Left back plays back to the centre back."
+        },
+        {
+          "counters": [
+            {
+              "id": "lb",
+              "color": "red",
+              "label": "3",
+              "pos": {
+                "x": 40,
+                "y": 8
+              }
+            },
+            {
+              "id": "cb1",
+              "color": "red",
+              "label": "5",
+              "pos": {
+                "x": 30,
+                "y": 24
+              }
+            },
+            {
+              "id": "cb2",
+              "color": "red",
+              "label": "4",
+              "pos": {
+                "x": 36,
+                "y": 44
+              }
+            },
+            {
+              "id": "rb",
+              "color": "red",
+              "label": "2",
+              "pos": {
+                "x": 44,
+                "y": 58
+              }
+            },
+            {
+              "id": "dm",
+              "color": "red",
+              "label": "6",
+              "pos": {
+                "x": 44,
+                "y": 36
+              }
+            },
+            {
+              "id": "rw",
+              "color": "red",
+              "label": "7",
+              "pos": {
+                "x": 66,
+                "y": 58
+              }
+            },
+            {
+              "id": "d1",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 46,
+                "y": 14
+              }
+            },
+            {
+              "id": "d2",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 48,
+                "y": 26
+              }
+            },
+            {
+              "id": "d3",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 52,
+                "y": 38
+              }
+            },
+            {
+              "id": "d4",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 60,
+                "y": 52
+              }
+            }
+          ],
+          "markers": [],
+          "labels": [],
+          "balls": [
+            {
+              "id": "ball",
+              "pos": {
+                "x": 33.4,
+                "y": 27.4
+              },
+              "attachedTo": "cb1"
+            }
+          ],
+          "drawings": [
+            {
+              "id": "a2",
+              "kind": "arrow",
+              "color": "#d32f2f",
+              "style": "pass",
+              "from": {
+                "x": 32,
+                "y": 26
+              },
+              "to": {
+                "x": 36,
+                "y": 42
+              }
+            }
+          ],
+          "note": "Centre back to centre back. Take the ball across the body, face forward.",
+          "duration": 900
+        },
+        {
+          "counters": [
+            {
+              "id": "lb",
+              "color": "red",
+              "label": "3",
+              "pos": {
+                "x": 40,
+                "y": 8
+              }
+            },
+            {
+              "id": "cb1",
+              "color": "red",
+              "label": "5",
+              "pos": {
+                "x": 30,
+                "y": 24
+              }
+            },
+            {
+              "id": "cb2",
+              "color": "red",
+              "label": "4",
+              "pos": {
+                "x": 36,
+                "y": 44
+              }
+            },
+            {
+              "id": "rb",
+              "color": "red",
+              "label": "2",
+              "pos": {
+                "x": 62,
+                "y": 60
+              }
+            },
+            {
+              "id": "dm",
+              "color": "red",
+              "label": "6",
+              "pos": {
+                "x": 44,
+                "y": 36
+              }
+            },
+            {
+              "id": "rw",
+              "color": "red",
+              "label": "7",
+              "pos": {
+                "x": 76,
+                "y": 52
+              }
+            },
+            {
+              "id": "d1",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 46,
+                "y": 14
+              }
+            },
+            {
+              "id": "d2",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 48,
+                "y": 26
+              }
+            },
+            {
+              "id": "d3",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 52,
+                "y": 38
+              }
+            },
+            {
+              "id": "d4",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 58,
+                "y": 50
+              }
+            }
+          ],
+          "markers": [],
+          "labels": [],
+          "balls": [
+            {
+              "id": "ball",
+              "pos": {
+                "x": 65.4,
+                "y": 63.4
+              },
+              "attachedTo": "rb"
+            }
+          ],
+          "drawings": [
+            {
+              "id": "a3",
+              "kind": "arrow",
+              "color": "#d32f2f",
+              "style": "pass",
+              "from": {
+                "x": 38,
+                "y": 44
+              },
+              "to": {
+                "x": 62,
+                "y": 58
+              },
+              "bend": -8
+            },
+            {
+              "id": "a4",
+              "kind": "arrow",
+              "color": "#d32f2f",
+              "style": "run",
+              "from": {
+                "x": 66,
+                "y": 58
+              },
+              "to": {
+                "x": 76,
+                "y": 52
+              }
+            }
+          ],
+          "note": "Long diagonal to the full back, winger runs off the far side. Three passes, whole pitch switched.",
+          "duration": 1300
+        }
+      ],
+      "createdAt": "2026-09-19T12:00:00.000Z",
+      "updatedAt": "2026-09-19T12:00:00.000Z"
+    },
+    {
+      "id": "demo-1v1",
+      "name": "1v1 to Goal",
+      "version": 3,
+      "pitch": {
+        "type": "half",
+        "rotated": false
+      },
+      "labelsVisible": true,
+      "counterLabelsVisible": true,
+      "ballsVisible": true,
+      "notes": "Setup: two cone gates 8 m from the goal. Attacker starts 30 m out; defender starts on the edge of the box.\n\nAttacker: commit the defender, change pace through the gate they leave.\nDefender: side on, slow the attacker, force them wide.\n\nRotate: attacker becomes defender, defender joins the queue.",
+      "notesVisible": true,
+      "tags": [
+        "finishing",
+        "1v1",
+        "u10"
+      ],
+      "frames": [
+        {
+          "counters": [
+            {
+              "id": "att",
+              "color": "red",
+              "label": "",
+              "pos": {
+                "x": 60,
+                "y": 32
+              }
+            },
+            {
+              "id": "def",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 36,
+                "y": 32
+              }
+            },
+            {
+              "id": "gk",
+              "color": "yellow",
+              "label": "GK",
+              "pos": {
+                "x": 29,
+                "y": 32
+              }
+            }
+          ],
+          "markers": [
+            {
+              "id": "g1",
+              "pos": {
+                "x": 44,
+                "y": 20
+              }
+            },
+            {
+              "id": "g2",
+              "pos": {
+                "x": 44,
+                "y": 28
+              }
+            },
+            {
+              "id": "g3",
+              "pos": {
+                "x": 44,
+                "y": 36
+              }
+            },
+            {
+              "id": "g4",
+              "pos": {
+                "x": 44,
+                "y": 44
+              }
+            }
+          ],
+          "labels": [
+            {
+              "id": "l1",
+              "pos": {
+                "x": 60,
+                "y": 39
+              },
+              "text": "start"
+            },
+            {
+              "id": "l2",
+              "pos": {
+                "x": 48,
+                "y": 12
+              },
+              "text": "2 gates: choose one"
+            }
+          ],
+          "balls": [
+            {
+              "id": "ball",
+              "pos": {
+                "x": 63.4,
+                "y": 35.4
+              },
+              "attachedTo": "att"
+            }
+          ],
+          "drawings": [
+            {
+              "id": "a1",
+              "kind": "arrow",
+              "color": "#d32f2f",
+              "style": "run",
+              "from": {
+                "x": 58,
+                "y": 32
+              },
+              "to": {
+                "x": 48,
+                "y": 28
+              }
+            }
+          ],
+          "note": "Attacker dribbles at the defender. Defender jockeys, does not dive in."
+        },
+        {
+          "counters": [
+            {
+              "id": "att",
+              "color": "red",
+              "label": "",
+              "pos": {
+                "x": 46,
+                "y": 26
+              }
+            },
+            {
+              "id": "def",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 40,
+                "y": 30
+              }
+            },
+            {
+              "id": "gk",
+              "color": "yellow",
+              "label": "GK",
+              "pos": {
+                "x": 29,
+                "y": 32
+              }
+            }
+          ],
+          "markers": [
+            {
+              "id": "g1",
+              "pos": {
+                "x": 44,
+                "y": 20
+              }
+            },
+            {
+              "id": "g2",
+              "pos": {
+                "x": 44,
+                "y": 28
+              }
+            },
+            {
+              "id": "g3",
+              "pos": {
+                "x": 44,
+                "y": 36
+              }
+            },
+            {
+              "id": "g4",
+              "pos": {
+                "x": 44,
+                "y": 44
+              }
+            }
+          ],
+          "labels": [
+            {
+              "id": "l1",
+              "pos": {
+                "x": 60,
+                "y": 39
+              },
+              "text": "start"
+            },
+            {
+              "id": "l2",
+              "pos": {
+                "x": 48,
+                "y": 12
+              },
+              "text": "2 gates: choose one"
+            }
+          ],
+          "balls": [
+            {
+              "id": "ball",
+              "pos": {
+                "x": 49.4,
+                "y": 29.4
+              },
+              "attachedTo": "att"
+            }
+          ],
+          "drawings": [
+            {
+              "id": "a2",
+              "kind": "arrow",
+              "color": "#d32f2f",
+              "style": "run",
+              "from": {
+                "x": 45,
+                "y": 26
+              },
+              "to": {
+                "x": 36,
+                "y": 20
+              },
+              "bend": -3
+            }
+          ],
+          "note": "Attack the gate the defender leaves. Change of pace after the feint.",
+          "duration": 1000
+        },
+        {
+          "counters": [
+            {
+              "id": "att",
+              "color": "red",
+              "label": "",
+              "pos": {
+                "x": 36,
+                "y": 20
+              }
+            },
+            {
+              "id": "def",
+              "color": "blue",
+              "label": "",
+              "pos": {
+                "x": 38,
+                "y": 26
+              }
+            },
+            {
+              "id": "gk",
+              "color": "yellow",
+              "label": "GK",
+              "pos": {
+                "x": 29,
+                "y": 32
+              }
+            }
+          ],
+          "markers": [
+            {
+              "id": "g1",
+              "pos": {
+                "x": 44,
+                "y": 20
+              }
+            },
+            {
+              "id": "g2",
+              "pos": {
+                "x": 44,
+                "y": 28
+              }
+            },
+            {
+              "id": "g3",
+              "pos": {
+                "x": 44,
+                "y": 36
+              }
+            },
+            {
+              "id": "g4",
+              "pos": {
+                "x": 44,
+                "y": 44
+              }
+            }
+          ],
+          "labels": [
+            {
+              "id": "l1",
+              "pos": {
+                "x": 60,
+                "y": 39
+              },
+              "text": "start"
+            },
+            {
+              "id": "l2",
+              "pos": {
+                "x": 48,
+                "y": 12
+              },
+              "text": "2 gates: choose one"
+            }
+          ],
+          "balls": [
+            {
+              "id": "ball",
+              "pos": {
+                "x": 39.4,
+                "y": 23.4
+              },
+              "attachedTo": "att"
+            }
+          ],
+          "drawings": [
+            {
+              "id": "a3",
+              "kind": "arrow",
+              "color": "#d32f2f",
+              "style": "pass",
+              "from": {
+                "x": 34,
+                "y": 20
+              },
+              "to": {
+                "x": 26,
+                "y": 30
+              }
+            }
+          ],
+          "note": "Finish low, far post.",
+          "duration": 800
+        }
+      ],
+      "createdAt": "2026-09-19T12:00:00.000Z",
+      "updatedAt": "2026-09-19T12:00:00.000Z"
+    },
+    {
+      "id": "demo-shape-442",
+      "name": "4-4-2 Defensive Shape",
+      "version": 3,
+      "pitch": {
+        "type": "full",
+        "rotated": false
+      },
+      "labelsVisible": true,
+      "counterLabelsVisible": true,
+      "ballsVisible": false,
+      "notes": "Mid block in a 4-4-2 without the ball.\n\nCoaching points:\n- Distance between the lines: 10 m, no more.\n- When the ball goes wide, slide as a unit. The far side tucks in and leaves the far winger.\n- Strikers stay connected to the midfield, not chasing.\n\nBalls are hidden on this drill: it is about shape, not possession.",
+      "notesVisible": true,
+      "tags": [
+        "defending",
+        "shape",
+        "u14"
+      ],
+      "frames": [
+        {
+          "counters": [
+            {
+              "id": "gk",
+              "color": "purple",
+              "label": "GK",
+              "pos": {
+                "x": 10,
+                "y": 32
+              }
+            },
+            {
+              "id": "lb",
+              "color": "purple",
+              "label": "3",
+              "pos": {
+                "x": 26,
+                "y": 12
+              }
+            },
+            {
+              "id": "cb1",
+              "color": "purple",
+              "label": "5",
+              "pos": {
+                "x": 24,
+                "y": 26
+              }
+            },
+            {
+              "id": "cb2",
+              "color": "purple",
+              "label": "4",
+              "pos": {
+                "x": 24,
+                "y": 38
+              }
+            },
+            {
+              "id": "rb",
+              "color": "purple",
+              "label": "2",
+              "pos": {
+                "x": 26,
+                "y": 52
+              }
+            },
+            {
+              "id": "lm",
+              "color": "purple",
+              "label": "11",
+              "pos": {
+                "x": 40,
+                "y": 10
+              }
+            },
+            {
+              "id": "cm1",
+              "color": "purple",
+              "label": "8",
+              "pos": {
+                "x": 38,
+                "y": 26
+              }
+            },
+            {
+              "id": "cm2",
+              "color": "purple",
+              "label": "6",
+              "pos": {
+                "x": 38,
+                "y": 38
+              }
+            },
+            {
+              "id": "rm",
+              "color": "purple",
+              "label": "7",
+              "pos": {
+                "x": 40,
+                "y": 54
+              }
+            },
+            {
+              "id": "st1",
+              "color": "purple",
+              "label": "9",
+              "pos": {
+                "x": 52,
+                "y": 28
+              }
+            },
+            {
+              "id": "st2",
+              "color": "purple",
+              "label": "10",
+              "pos": {
+                "x": 52,
+                "y": 38
+              }
+            }
+          ],
+          "markers": [],
+          "labels": [
+            {
+              "id": "l1",
+              "pos": {
+                "x": 50,
+                "y": 4
+              },
+              "text": "ball central: two flat lines"
+            }
+          ],
+          "balls": [
+            {
+              "id": "ball",
+              "pos": {
+                "x": 50,
+                "y": 32
+              },
+              "attachedTo": null
+            }
+          ],
+          "drawings": [
+            {
+              "id": "u1",
+              "kind": "line",
+              "color": "#8e24aa",
+              "from": {
+                "x": 24,
+                "y": 12
+              },
+              "to": {
+                "x": 26,
+                "y": 52
+              }
+            },
+            {
+              "id": "u2",
+              "kind": "line",
+              "color": "#8e24aa",
+              "from": {
+                "x": 38,
+                "y": 10
+              },
+              "to": {
+                "x": 40,
+                "y": 54
+              }
+            }
+          ],
+          "note": "Ball in the middle. Two lines of four, 10 m apart, strikers screen the centre."
+        },
+        {
+          "counters": [
+            {
+              "id": "gk",
+              "color": "purple",
+              "label": "GK",
+              "pos": {
+                "x": 10,
+                "y": 30
+              }
+            },
+            {
+              "id": "lb",
+              "color": "purple",
+              "label": "3",
+              "pos": {
+                "x": 28,
+                "y": 6
+              }
+            },
+            {
+              "id": "cb1",
+              "color": "purple",
+              "label": "5",
+              "pos": {
+                "x": 24,
+                "y": 18
+              }
+            },
+            {
+              "id": "cb2",
+              "color": "purple",
+              "label": "4",
+              "pos": {
+                "x": 22,
+                "y": 30
+              }
+            },
+            {
+              "id": "rb",
+              "color": "purple",
+              "label": "2",
+              "pos": {
+                "x": 22,
+                "y": 42
+              }
+            },
+            {
+              "id": "lm",
+              "color": "purple",
+              "label": "11",
+              "pos": {
+                "x": 42,
+                "y": 6
+              }
+            },
+            {
+              "id": "cm1",
+              "color": "purple",
+              "label": "8",
+              "pos": {
+                "x": 38,
+                "y": 18
+              }
+            },
+            {
+              "id": "cm2",
+              "color": "purple",
+              "label": "6",
+              "pos": {
+                "x": 36,
+                "y": 30
+              }
+            },
+            {
+              "id": "rm",
+              "color": "purple",
+              "label": "7",
+              "pos": {
+                "x": 34,
+                "y": 42
+              }
+            },
+            {
+              "id": "st1",
+              "color": "purple",
+              "label": "9",
+              "pos": {
+                "x": 52,
+                "y": 14
+              }
+            },
+            {
+              "id": "st2",
+              "color": "purple",
+              "label": "10",
+              "pos": {
+                "x": 48,
+                "y": 26
+              }
+            }
+          ],
+          "markers": [],
+          "labels": [
+            {
+              "id": "l1",
+              "pos": {
+                "x": 50,
+                "y": 4
+              },
+              "text": "ball wide: slide and tilt"
+            }
+          ],
+          "balls": [
+            {
+              "id": "ball",
+              "pos": {
+                "x": 50,
+                "y": 32
+              },
+              "attachedTo": null
+            }
+          ],
+          "drawings": [
+            {
+              "id": "u1",
+              "kind": "line",
+              "color": "#8e24aa",
+              "from": {
+                "x": 28,
+                "y": 6
+              },
+              "to": {
+                "x": 22,
+                "y": 42
+              }
+            },
+            {
+              "id": "u2",
+              "kind": "line",
+              "color": "#8e24aa",
+              "from": {
+                "x": 42,
+                "y": 6
+              },
+              "to": {
+                "x": 34,
+                "y": 42
+              }
+            },
+            {
+              "id": "a1",
+              "kind": "arrow",
+              "color": "#8e24aa",
+              "style": "run",
+              "from": {
+                "x": 26,
+                "y": 52
+              },
+              "to": {
+                "x": 22,
+                "y": 42
+              }
+            }
+          ],
+          "note": "Ball on the near touchline. Whole block slides across, far full back tucks in.",
+          "duration": 1200
+        }
+      ],
+      "createdAt": "2026-09-19T12:00:00.000Z",
+      "updatedAt": "2026-09-19T12:00:00.000Z"
+    }
+  ],
+  "sessions": [
+    {
+      "id": "demo-session-tuesday",
+      "name": "Tuesday: Possession and Pressing",
+      "version": 1,
+      "entries": [
+        {
+          "id": "e1",
+          "patternId": "demo-rondo-4v2",
+          "minutes": 15
+        },
+        {
+          "id": "e2",
+          "patternId": "demo-switch",
+          "minutes": 15
+        },
+        {
+          "id": "e3",
+          "patternId": "demo-press-trigger",
+          "minutes": 20
+        },
+        {
+          "id": "e4",
+          "patternId": "demo-overlap",
+          "minutes": 15
+        },
+        {
+          "id": "e5",
+          "patternId": "demo-rondo-4v2",
+          "minutes": 10
+        }
+      ],
+      "createdAt": "2026-09-19T12:00:00.000Z",
+      "updatedAt": "2026-09-19T12:00:00.000Z"
+    }
+  ]
+}

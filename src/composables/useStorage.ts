@@ -679,6 +679,18 @@ function exportBundleJson(patterns: Pattern[], sessionList: Session[]): string {
 }
 
 /**
+ * One drill as a file, in the same bundle shape as the full backup so the
+ * one Import reads both. A saved drill goes out as filed, tags and all; an
+ * unsaved board goes out under a fresh id and the name on screen, without
+ * being saved first — sending is not a decision to keep.
+ */
+function exportPatternJson(name: string, snap: BoardSnapshot, id: string | null): string {
+  const filed = id ? listPatterns().find((p) => p.id === id) : undefined
+  const pattern = filed ?? toPattern(name, snap, makeId(), nowIso())
+  return exportBundleJson([pattern], [])
+}
+
+/**
  * Validate an exported file whole, then merge both collections.
  *
  * A pattern whose id already exists is added under a NEW id with a suffixed
@@ -815,6 +827,7 @@ const storage = {
   loadDraft,
   importBundle,
   exportBundleJson,
+  exportPatternJson,
   lastError,
   lastWriteSucceeded,
 }

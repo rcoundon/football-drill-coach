@@ -457,6 +457,26 @@ describe('renaming a counter label', () => {
 
     expect(wrapper.find('#counter-label').exists()).toBe(false)
   })
+
+  /**
+   * Erase is a one-shot: a coach rubs out the wrong thing and wants to carry
+   * on placing and moving. Leaving Erase armed meant the next press on the
+   * pitch took out something they meant to keep.
+   */
+  it('returns to Move once something is erased', async () => {
+    useBoard().addCounter('red')
+    wrapper = mountApp()
+    fire({ key: 'e' })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-tool="erase"]').classes()).toContain('is-active')
+
+    await pressCounter(wrapper)
+    await wrapper.vm.$nextTick()
+
+    expect(useBoard().state.counters).toHaveLength(0)
+    expect(wrapper.find('[data-tool="select"]').classes()).toContain('is-active')
+    expect(wrapper.find('[data-tool="erase"]').classes()).not.toContain('is-active')
+  })
 })
 
 function sampleSnapshot(): BoardSnapshot {
@@ -1042,6 +1062,74 @@ describe('exporting the JSON bundle', () => {
     expect(downloads).toHaveLength(1)
     expect(JSON.parse(downloads[0]).sessions).toHaveLength(1)
     expect(wrapper.find('.notice').exists()).toBe(false)
+  })
+})
+
+/**
+ * A whole backup is the wrong thing to send a coach who asked for one drill:
+ * it carries every drill in the library, and Import lands all of them. One
+ * drill goes out in the same file shape, so the same Import reads it.
+ */
+describe('sending one drill', () => {
+  function stubDownloads() {
+    const downloads: { text: string; filename: string }[] = []
+    vi.spyOn(useExport(), 'downloadText').mockImplementation((text, filename) => {
+      downloads.push({ text, filename })
+    })
+    return downloads
+  }
+
+  it('writes only the open drill, in the bundle shape Import reads', async () => {
+    const storage = useStorage()
+    storage.savePattern('Other drill', sampleSnapshot())
+    const saved = storage.savePattern('Press trigger', sampleSnapshot())
+    storage.setTags(saved.id, ['pressing'])
+    const downloads = stubDownloads()
+    wrapper = mountApp()
+    await wrapper.find('[data-open]').trigger('click')
+    await nextTick()
+    await wrapper.findAll('[data-load]')[1].trigger('click')
+    await nextTick()
+    expect(drillName(wrapper)).toContain('Press trigger')
+
+    await wrapper.find('[data-export-drill]').trigger('click')
+    await nextTick()
+
+    expect(downloads).toHaveLength(1)
+    expect(downloads[0].filename).toBe('press-trigger.json')
+    const bundle = JSON.parse(downloads[0].text)
+    expect(bundle.sessions).toEqual([])
+    expect(bundle.patterns).toHaveLength(1)
+    expect(bundle.patterns[0].name).toBe('Press trigger')
+    expect(bundle.patterns[0].tags).toEqual(['pressing'])
+    expect(() => storage.importBundle(downloads[0].text)).not.toThrow()
+  })
+
+  /** Nothing to save first: the board on screen is the drill. */
+  it('sends an unsaved board under its working name', async () => {
+    useBoard().addCounter('red')
+    const downloads = stubDownloads()
+    wrapper = mountApp()
+
+    await wrapper.find('[data-export-drill]').trigger('click')
+    await nextTick()
+
+    expect(downloads).toHaveLength(1)
+    expect(downloads[0].filename).toBe('untitled-drill.json')
+    const bundle = JSON.parse(downloads[0].text)
+    expect(bundle.patterns[0].frames[0].counters).toHaveLength(1)
+    expect(useStorage().listPatterns()).toHaveLength(0)
+  })
+
+  it('refuses an empty board', async () => {
+    const downloads = stubDownloads()
+    wrapper = mountApp()
+
+    await wrapper.find('[data-export-drill]').trigger('click')
+    await nextTick()
+
+    expect(downloads).toHaveLength(0)
+    expect(wrapper.find('.notice').text()).toContain('nothing on the board')
   })
 })
 

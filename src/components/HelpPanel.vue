@@ -65,7 +65,7 @@ const emit = defineEmits<{ close: []; startTour: [] }>()
         <p class="lead">
           <strong>Draw</strong> is a freehand pen. <strong>Run</strong> is a solid arrow for a
           player, <strong>Pass</strong> a dashed one for the ball. <strong>Line</strong> marks
-          out a zone or a third. <strong>Erase</strong> removes whatever you press.
+          out a zone or a third. <strong>Erase</strong> removes whatever you press, then hands you back to Move.
         </p>
         <ul class="points">
           <li>
@@ -243,6 +243,11 @@ const emit = defineEmits<{ close: []; startTour: [] }>()
             underneath if the notes panel is open. GIF exports the whole drill as a looping
             animation that plays inline in a message; it appears once there's more than one
             phase, since one phase is what PNG is for.
+          </li>
+          <li>
+            <strong>Send this drill</strong>, under Share, writes the open drill alone to a
+            file. Message it to another coach and they choose <strong>Import</strong> — that
+            one drill arrives, and nothing else of yours goes with it.
           </li>
           <li>
             <strong>Back up everything</strong>, under Share, writes every saved drill and

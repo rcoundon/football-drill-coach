@@ -57,6 +57,12 @@ const emit = defineEmits<{
    * itself — its colour, its label — so a count is no longer enough.
    */
   selectionChanged: [held: SelectionRef[]]
+  /**
+   * Something was rubbed out. Erase is a one-shot: the coach removes the
+   * wrong thing and carries on, so the toolbar drops back to Move rather
+   * than leaving Erase armed for the next press.
+   */
+  erased: []
 }>()
 
 const board = useBoard()
@@ -286,6 +292,7 @@ function onCounterGrab(id: string, event: PointerEvent) {
   if (props.tool === 'erase') {
     event.stopPropagation()
     board.deleteCounter(id)
+    emit('erased')
     return
   }
   if (props.tool !== 'select') return
@@ -357,6 +364,7 @@ function onLabelGrab(id: string, event: PointerEvent) {
   if (props.tool === 'erase') {
     event.stopPropagation()
     board.deleteLabel(id)
+    emit('erased')
     return
   }
   /*
@@ -409,6 +417,7 @@ function onMarkerGrab(id: string, event: PointerEvent) {
   if (props.tool === 'erase') {
     event.stopPropagation()
     board.deleteMarker(id)
+    emit('erased')
     return
   }
   /*
@@ -438,6 +447,7 @@ function onBallGrab(id: string, event: PointerEvent) {
   if (props.tool === 'erase') {
     event.stopPropagation()
     board.removeBall(id)
+    emit('erased')
     return
   }
   if (props.tool !== 'select') return
@@ -476,6 +486,7 @@ function onDrawingHit(id: string, event: PointerEvent) {
   if (board.isDerived.value) return
   if (props.tool === 'erase') {
     board.deleteDrawing(id)
+    emit('erased')
     return
   }
   if (props.tool !== 'select') return
