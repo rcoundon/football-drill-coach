@@ -36,6 +36,49 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+/**
+ * A library that has never been written gets one drill to start from, so the
+ * first thing a coach sees is a worked example rather than an empty list.
+ * Only ever the never-written library: a coach who deleted their last drill
+ * has an empty one on purpose, and must not find the starter back.
+ */
+describe('seedStarterLibrary', () => {
+  it('files the starter drill into a library that was never written', () => {
+    expect(useStorage().seedStarterLibrary()).toBe(true)
+    const patterns = useStorage().listPatterns()
+    expect(patterns).toHaveLength(1)
+    expect(patterns[0].name).toBe('Endzone')
+    expect(patterns[0].frames.length).toBeGreaterThan(1)
+  })
+
+  it('is a real pattern by the same rules as an imported one', () => {
+    useStorage().seedStarterLibrary()
+    const raw = JSON.parse(localStorage.getItem(PATTERNS_KEY)!)
+    expect(() => parsePattern(raw[0])).not.toThrow()
+  })
+
+  it('leaves a library the coach emptied alone', () => {
+    const storage = useStorage()
+    const saved = storage.savePattern('Mine', snap())
+    storage.deletePattern(saved.id)
+    expect(storage.seedStarterLibrary()).toBe(false)
+    expect(storage.listPatterns()).toHaveLength(0)
+  })
+
+  it('leaves a library with drills in it alone', () => {
+    const storage = useStorage()
+    storage.savePattern('Mine', snap())
+    expect(storage.seedStarterLibrary()).toBe(false)
+    expect(storage.listPatterns().map((p) => p.name)).toEqual(['Mine'])
+  })
+
+  it('leaves an unreadable library untouched', () => {
+    localStorage.setItem(PATTERNS_KEY, '{not json')
+    expect(useStorage().seedStarterLibrary()).toBe(false)
+    expect(localStorage.getItem(PATTERNS_KEY)).toBe('{not json')
+  })
+})
+
 describe('savePattern and listPatterns', () => {
   it('round-trips a pattern', () => {
     const store = useStorage()

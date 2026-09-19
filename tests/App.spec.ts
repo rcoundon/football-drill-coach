@@ -79,6 +79,10 @@ beforeEach(() => {
   // Every test below is about something other than the tour, and a first
   // visit now opens one. The tour's own tests clear this again.
   localStorage.setItem(TUTORIAL_KEY, JSON.stringify({ seen: true }))
+  // Likewise a library that has been written, so the starter drill is not
+  // seeded into it: every count below assumes the library starts empty. The
+  // first-open tests clear this again.
+  localStorage.setItem(PATTERNS_KEY, '[]')
   useStorage().lastError.value = null
   // No longer the same ref as the line above — each store owns its own pair
   // now, so both need resetting between tests.
@@ -95,6 +99,28 @@ afterEach(() => {
 function fire(init: KeyboardEventInit, target: EventTarget = window): boolean {
   return target.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }))
 }
+
+describe('the first open', () => {
+  beforeEach(() => {
+    localStorage.removeItem(PATTERNS_KEY)
+  })
+
+  it('has the starter drill waiting in the library', async () => {
+    wrapper = mountApp()
+    await nextTick()
+    await wrapper.find('[data-open]').trigger('click')
+    await nextTick()
+    expect(wrapper.text()).toContain('Endzone')
+  })
+
+  /** Seeding is not something the coach did; the board must stay empty. */
+  it('does not put the starter drill on the board', async () => {
+    wrapper = mountApp()
+    await nextTick()
+    expect(useBoard().state.counters).toHaveLength(0)
+    expect(drillName(wrapper)).not.toContain('Endzone')
+  })
+})
 
 describe('resetting the board', () => {
   it('forgets the open pattern, so a later Save cannot overwrite it', async () => {

@@ -10,6 +10,7 @@ import {
   writeRaw,
 } from './collection'
 import { parseSession, SESSIONS_KEY, useSessions } from './useSessions'
+import starterEndzone from '../starter/endzone.json'
 
 const sessions = useSessions()
 
@@ -335,6 +336,23 @@ function readLibrary() {
  */
 function writeLibrary(patterns: Pattern[], damaged: unknown[]): boolean {
   return writeCollection(errors, PATTERNS_KEY, patterns, damaged)
+}
+
+/**
+ * Give a library that has never been written one drill to start from, so
+ * the first Open shows a worked example rather than an empty list.
+ *
+ * Keyed on the key being absent, not on the list being empty: a coach who
+ * deleted their last drill has an empty library on purpose, and finding the
+ * starter back would read as the app refusing to let go of it. Nothing is
+ * written over a library that exists in any state, readable or not.
+ *
+ * True when the starter was filed.
+ */
+function seedStarterLibrary(): boolean {
+  if (localStorage.getItem(PATTERNS_KEY) !== null) return false
+  const starter = parsePattern(starterEndzone)
+  return writeLibrary([starter], [])
 }
 
 function listPatterns(): Pattern[] {
@@ -817,6 +835,7 @@ function importBundle(json: string): { patterns: Pattern[]; sessions: Session[] 
 
 const storage = {
   listPatterns,
+  seedStarterLibrary,
   savePattern,
   deletePattern,
   renamePattern,
