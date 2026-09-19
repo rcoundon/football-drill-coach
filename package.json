@@ -13,18 +13,19 @@
   "dependencies": {
     "jspdf": "4.2.1",
     "modern-gif": "2.1.0",
-    "vue": "3.5.41"
+    "vue": "3.5.43"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "6.0.8",
-    "@vue/test-utils": "2.4.11",
-    "jsdom": "30.0.1",
+    "@vitejs/plugin-vue": "6.0.9",
+    "@vue/test-utils": "2.5.1",
+    "jsdom": "30.1.0",
     "typescript": "6.0.3",
-    "vite": "8.2.2",
-    "vitest": "4.1.11",
+    "vite": "8.3.0",
+    "vitest": "5.0.1",
     "vue-tsc": "3.3.11"
   },
   "allowScripts": {
-    "fsevents@2.3.3": true
+    "fsevents@2.3.3": true,
+    "core-js@3.50.0": true
   }
 }

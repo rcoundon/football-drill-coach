@@ -5,12 +5,6 @@ beforeEach(() => {
   document.body.innerHTML = ''
   // The object URL is revoked on a timer, so every test drives that clock.
   vi.useFakeTimers()
-  if (!URL.createObjectURL) {
-    Object.defineProperty(URL, 'createObjectURL', { value: vi.fn(() => 'blob:fake'), configurable: true })
-  }
-  if (!URL.revokeObjectURL) {
-    Object.defineProperty(URL, 'revokeObjectURL', { value: vi.fn(), configurable: true })
-  }
 })
 
 afterEach(() => {
