@@ -179,9 +179,22 @@ describe('the Share menu', () => {
     board.addFrame()
     const wrapper = mountHeader()
     await wrapper.find('[data-share-menu]').trigger('click')
-    for (const hook of ['data-export-png', 'data-export-gif', 'data-export-json']) {
+    for (const hook of ['data-export-png', 'data-export-gif', 'data-export-drill', 'data-export-json']) {
       expect(wrapper.find(`[${hook}]`).isVisible()).toBe(true)
     }
+  })
+
+  /*
+   * One drill to one coach is the common case; the backup is the whole
+   * library. Named for the job, like the backup, and placed before it so
+   * the smaller send is the first file-shaped choice.
+   */
+  it('offers to send the one open drill, and asks the app to do it', async () => {
+    const wrapper = mountHeader()
+    await wrapper.find('[data-share-menu]').trigger('click')
+    expect(wrapper.get('[data-export-drill]').text()).toBe('Send this drill')
+    await wrapper.find('[data-export-drill]').trigger('click')
+    expect(wrapper.emitted('exportDrill')).toHaveLength(1)
   })
 
   /*
@@ -384,7 +397,7 @@ describe('on a screen too narrow for the whole row', () => {
     board.addFrame()
     const wrapper = mountHeader()
     await wrapper.find('[data-drill-menu]').trigger('click')
-    for (const hook of ['data-export-png', 'data-export-gif', 'data-export-json', 'data-help']) {
+    for (const hook of ['data-export-png', 'data-export-gif', 'data-export-drill', 'data-export-json', 'data-help']) {
       expect(wrapper.find(`[${hook}]`).isVisible(), hook).toBe(true)
     }
   })
@@ -407,6 +420,7 @@ describe('on a screen too narrow for the whole row', () => {
     const wrapper = mountHeader()
     expect(wrapper.findAll('[data-help]')).toHaveLength(1)
     expect(wrapper.findAll('[data-export-json]')).toHaveLength(1)
+    expect(wrapper.findAll('[data-export-drill]')).toHaveLength(1)
   })
 
   it('leaves the wide layout exactly as it was', () => {

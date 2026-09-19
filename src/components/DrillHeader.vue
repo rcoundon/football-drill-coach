@@ -34,6 +34,7 @@ const emit = defineEmits<{
   openSessions: []
   exportPng: []
   exportGif: []
+  exportDrill: []
   exportJson: []
   importJson: []
   help: []
@@ -245,6 +246,13 @@ function commitName(): void {
             @click="choose(() => emit('exportGif'))"
           >Export GIF</button>
           <button
+            data-export-drill
+            class="menu-item"
+            role="menuitem"
+            title="Save just this drill to a file to send to another coach — they import it, and nothing else of yours goes with it"
+            @click="choose(() => emit('exportDrill'))"
+          >Send this drill</button>
+          <button
             data-export-json
             class="menu-item"
             role="menuitem"
@@ -356,6 +364,13 @@ function commitName(): void {
           suggests it. Only says: a tablet never shows a tooltip, so Help and
           the tour's closing card carry the same sentence.
         -->
+        <button
+          data-export-drill
+          class="menu-item"
+          role="menuitem"
+          title="Save just this drill to a file to send to another coach — they import it, and nothing else of yours goes with it"
+          @click="choose(() => emit('exportDrill'))"
+        >Send this drill</button>
         <button
           data-export-json
           class="menu-item"

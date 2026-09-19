@@ -750,6 +750,26 @@ function exportJson() {
   )
 }
 
+/**
+ * One drill to one coach. The backup carries the whole library, and Import
+ * lands all of it on the other side — the wrong parcel for "here is that
+ * rondo". The file is the same shape, so the same Import reads it.
+ */
+function exportDrill() {
+  const empty = board.state.frames.every(
+    (f) => f.counters.length + f.markers.length + f.labels.length + f.drawings.length === 0,
+  )
+  if (empty) {
+    notice.value = 'There is nothing on the board to send.'
+    return
+  }
+  const name = currentName.value.trim() || 'Untitled drill'
+  exporter.downloadText(
+    storage.exportPatternJson(name, board.snapshot(), currentPatternId.value),
+    `${exporter.slugify(name)}.json`,
+  )
+}
+
 async function importJson() {
   try {
     const text = await exporter.pickJsonFile()
@@ -1144,6 +1164,7 @@ watch(
       @openSessions="sessionsOpen = true"
       @exportPng="exportPng"
       @exportGif="exportGif"
+      @exportDrill="exportDrill"
       @exportJson="exportJson"
       @importJson="importJson"
       @help="helpOpen = true"
