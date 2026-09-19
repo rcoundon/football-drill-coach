@@ -1070,6 +1070,8 @@ function onKeydown(event: KeyboardEvent) {
 
 onMounted(() => {
   document.addEventListener('fullscreenchange', onFullscreenChange)
+  // Before anything reads the library, so the first Open already has it.
+  storage.seedStarterLibrary()
   // restoreSnapshot, not loadSnapshot: putting the draft back is not
   // something the coach did, so it must not become the one undo entry a
   // freshly opened app offers.

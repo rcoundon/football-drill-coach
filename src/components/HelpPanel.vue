@@ -236,7 +236,8 @@ const emit = defineEmits<{ close: []; startTour: [] }>()
             asks for a name if it has never been saved. Save as… forks it under a new name;
             Duplicate does the same without asking. Open lists every saved drill for loading,
             renaming or deleting. Delete drill removes it from the library and asks first —
-            what's on the board stays.
+            what's on the board stays. The library starts with one drill, <em>Endzone</em>,
+            to play back and pull apart — it's yours to change or delete like any other.
           </li>
           <li>
             <strong>Share.</strong> PNG exports the phase you're looking at, drill notes
