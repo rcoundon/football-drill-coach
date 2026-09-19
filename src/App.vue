@@ -1173,6 +1173,7 @@ watch(
             @edit-label="promptEditLabel"
             @selection-size="selectionSize = $event"
             @selection-changed="onSelectionChanged"
+            @erased="tool = 'select'"
           />
           <PitchEmptyState v-if="showEmptyState && !presenting" />
 

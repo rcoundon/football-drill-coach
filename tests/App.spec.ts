@@ -457,6 +457,26 @@ describe('renaming a counter label', () => {
 
     expect(wrapper.find('#counter-label').exists()).toBe(false)
   })
+
+  /**
+   * Erase is a one-shot: a coach rubs out the wrong thing and wants to carry
+   * on placing and moving. Leaving Erase armed meant the next press on the
+   * pitch took out something they meant to keep.
+   */
+  it('returns to Move once something is erased', async () => {
+    useBoard().addCounter('red')
+    wrapper = mountApp()
+    fire({ key: 'e' })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-tool="erase"]').classes()).toContain('is-active')
+
+    await pressCounter(wrapper)
+    await wrapper.vm.$nextTick()
+
+    expect(useBoard().state.counters).toHaveLength(0)
+    expect(wrapper.find('[data-tool="select"]').classes()).toContain('is-active')
+    expect(wrapper.find('[data-tool="erase"]').classes()).not.toContain('is-active')
+  })
 })
 
 function sampleSnapshot(): BoardSnapshot {

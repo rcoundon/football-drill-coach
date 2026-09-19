@@ -65,7 +65,7 @@ const emit = defineEmits<{ close: []; startTour: [] }>()
         <p class="lead">
           <strong>Draw</strong> is a freehand pen. <strong>Run</strong> is a solid arrow for a
           player, <strong>Pass</strong> a dashed one for the ball. <strong>Line</strong> marks
-          out a zone or a third. <strong>Erase</strong> removes whatever you press.
+          out a zone or a third. <strong>Erase</strong> removes whatever you press, then hands you back to Move.
         </p>
         <ul class="points">
           <li>
