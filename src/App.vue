@@ -124,9 +124,9 @@ const showEmptyState = computed(() => !everPlaced.value)
 /**
  * Whether the drill is being shown rather than built.
  *
- * Everything that edits leaves the screen and the pitch stops taking
- * pointer events at all: a coach holding a tablet out to a group should not
- * be able to drag a player off it with their thumb.
+ * Everything that edits leaves the screen. The pieces on the pitch can still
+ * be dragged — a coach talking a drill through moves players to make a point
+ * — but nothing can be drawn, placed, erased or renamed.
  */
 const presenting = ref(false)
 
@@ -1186,11 +1186,12 @@ watch(
       />
 
       <div class="stage">
-        <div class="board-wrap" :class="{ 'is-presenting': presenting }">
+        <div class="board-wrap">
           <PitchBoard
             ref="boardRef"
             :tool="tool"
             :draw-color="drawColor"
+            :presenting="presenting"
             @rename="openRenamePrompt"
             @add-label="promptNewLabel"
             @edit-label="promptEditLabel"
@@ -1520,12 +1521,6 @@ body { font-family: var(--font-ui); background: var(--bg-app); }
  * one thing that gave way until there was none of it left.
  */
 .board-wrap { position: relative; display: flex; min-height: 8rem; min-width: 0; }
-/*
- * The board takes no pointer events while it is being shown. A coach
- * holding a tablet out to a group should not be able to drag a player off
- * it with their thumb, and nothing on screen would say that they had.
- */
-.board-wrap.is-presenting > :first-child { pointer-events: none; }
 
 .expand {
   position: absolute; top: 0.5rem; right: 0.5rem; z-index: 20;

@@ -41,7 +41,17 @@ import EndHandle from './EndHandle.vue'
 import MovementTrail from './MovementTrail.vue'
 import { SWATCHES } from './controls'
 
-const props = defineProps<{ tool: ToolMode; drawColor: string }>()
+const props = defineProps<{
+  tool: ToolMode
+  drawColor: string
+  /**
+   * The pitch is full screen. A coach talking a drill through still wants to
+   * push players about, so pieces can be dragged — but only dragged. Nothing
+   * is drawn, placed, erased, gathered or renamed, because none of the
+   * controls that would say so are on screen.
+   */
+  presenting?: boolean
+}>()
 const emit = defineEmits<{
   rename: [id: string]
   addLabel: [at: Vec]
@@ -118,6 +128,12 @@ function dropFromPalette(what: PlacementKind, clientX: number, clientY: number):
 
 onMounted(() => setPlacementDropTarget(dropFromPalette))
 onBeforeUnmount(() => setPlacementDropTarget(null))
+
+/**
+ * The tool a press on a piece answers to. Presenting has no tools on screen,
+ * so whatever was armed when the pitch expanded is set aside for Move.
+ */
+const grabTool = computed<ToolMode>(() => (props.presenting ? 'select' : props.tool))
 
 type DragTarget =
   | { kind: 'counter'; id: string }
@@ -289,13 +305,13 @@ function onCounterGrab(id: string, event: PointerEvent) {
   if (board.isDerived.value) return
   const counter = board.counterById(id)
   if (!counter) return
-  if (props.tool === 'erase') {
+  if (grabTool.value === 'erase') {
     event.stopPropagation()
     board.deleteCounter(id)
     emit('erased')
     return
   }
-  if (props.tool !== 'select') return
+  if (grabTool.value !== 'select') return
   if (dragIsLive()) return // another pointer is mid-drag; ignore this one
   event.stopPropagation()
 
@@ -317,6 +333,7 @@ function onCounterGrab(id: string, event: PointerEvent) {
   const now = Date.now()
   const at = toPitch(event)
   const isSecondPress =
+    !props.presenting &&
     lastCounterPress !== null &&
     lastCounterPress.id === id &&
     now - lastCounterPress.at <= DOUBLE_PRESS_MS &&
@@ -361,7 +378,7 @@ function onLabelGrab(id: string, event: PointerEvent) {
   if (board.isDerived.value) return
   const label = board.labelById(id)
   if (!label) return
-  if (props.tool === 'erase') {
+  if (grabTool.value === 'erase') {
     event.stopPropagation()
     board.deleteLabel(id)
     emit('erased')
@@ -373,19 +390,20 @@ function onLabelGrab(id: string, event: PointerEvent) {
    * label they just made; making them switch to Move for that makes the
    * label feel stuck to the pitch.
    */
-  if ((props.tool !== 'select' && props.tool !== 'text') || dragIsLive()) return
+  if ((grabTool.value !== 'select' && grabTool.value !== 'text') || dragIsLive()) return
 
   // Stop the board treating this as a tap on empty grass and queueing a
   // second label on top of the one being dragged.
   event.stopPropagation()
 
-  if (props.tool === 'select' && grabsGroup('label', id, event)) return
+  if (grabTool.value === 'select' && grabsGroup('label', id, event)) return
 
   // Same double-press detection as a counter, and for the same reason:
   // pointer capture stops dblclick ever reaching this element.
   const now = Date.now()
   const at = toPitch(event)
   const isSecondPress =
+    !props.presenting &&
     lastLabelPress !== null &&
     lastLabelPress.id === id &&
     now - lastLabelPress.at <= DOUBLE_PRESS_MS &&
@@ -414,7 +432,7 @@ function onMarkerGrab(id: string, event: PointerEvent) {
   if (board.isDerived.value) return
   const marker = board.markerById(id)
   if (!marker) return
-  if (props.tool === 'erase') {
+  if (grabTool.value === 'erase') {
     event.stopPropagation()
     board.deleteMarker(id)
     emit('erased')
@@ -425,9 +443,9 @@ function onMarkerGrab(id: string, event: PointerEvent) {
    * that tool selected, so the next thing a coach does is usually nudge the
    * cone they just put down; without this it dropped a second cone on top.
    */
-  if ((props.tool !== 'select' && props.tool !== 'cone') || dragIsLive()) return
+  if ((grabTool.value !== 'select' && grabTool.value !== 'cone') || dragIsLive()) return
   event.stopPropagation()
-  if (props.tool === 'select' && grabsGroup('marker', id, event)) return
+  if (grabTool.value === 'select' && grabsGroup('marker', id, event)) return
   capture(event)
   board.commit() // one entry for the whole drag
   const at = toPitch(event)
@@ -444,13 +462,13 @@ function onMarkerGrab(id: string, event: PointerEvent) {
 
 function onBallGrab(id: string, event: PointerEvent) {
   if (board.isDerived.value) return
-  if (props.tool === 'erase') {
+  if (grabTool.value === 'erase') {
     event.stopPropagation()
     board.removeBall(id)
     emit('erased')
     return
   }
-  if (props.tool !== 'select') return
+  if (grabTool.value !== 'select') return
   if (dragIsLive()) return
   event.stopPropagation()
 
@@ -483,7 +501,8 @@ function onBallGrab(id: string, event: PointerEvent) {
  * go of what was just chosen.
  */
 function onDrawingHit(id: string, event: PointerEvent) {
-  if (board.isDerived.value) return
+  // Drawings stay put while presenting: only pieces are pushed about.
+  if (board.isDerived.value || props.presenting) return
   if (props.tool === 'erase') {
     board.deleteDrawing(id)
     emit('erased')
@@ -952,7 +971,8 @@ function bendRunTo(id: string, at: Vec): void {
 }
 
 function onPointerDown(event: PointerEvent) {
-  if (board.isDerived.value) return
+  // Bare grass does nothing while presenting — no stroke, no cone, no box.
+  if (board.isDerived.value || props.presenting) return
   if (dragIsLive()) return
   const at = toPitch(event)
   // A stroke is drawn straight from the pointer, so there is nothing to

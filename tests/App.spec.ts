@@ -2127,6 +2127,24 @@ describe('presenting the drill', () => {
     expect(wrapper.find('[data-tool="select"]').classes()).toContain('is-active')
   })
 
+  it('still lets a player be dragged, whatever tool was armed', async () => {
+    const board = useBoard()
+    const c = board.addCounter('red')
+    wrapper = mountApp()
+    fire({ key: 'd' })
+    await nextTick()
+    await wrapper.find('[data-present-toggle]').trigger('click')
+
+    const hit = wrapper.find('[data-counter]').element.lastElementChild as Element
+    const svg = wrapper.find('.stage svg').element
+    await firePointer(hit, 'pointerdown', clientFor(c.pos.x, c.pos.y))
+    await firePointer(svg, 'pointermove', clientFor(20, 10))
+    await firePointer(svg, 'pointerup', clientFor(20, 10))
+
+    expect(board.counterById(c.id)!.pos.x).toBeCloseTo(20, 4)
+    expect(board.state.drawings).toHaveLength(0)
+  })
+
   it('puts down whatever was held before it started', async () => {
     const board = useBoard()
     const id = board.startArrow({ x: 20, y: 30 }, '#ffffff', 'pass')

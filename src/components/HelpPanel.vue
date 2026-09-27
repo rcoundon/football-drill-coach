@@ -160,9 +160,9 @@ const emit = defineEmits<{ close: []; startTour: [] }>()
         </p>
         <ul class="points">
           <li>
-            Everything that edits leaves — no rail, no header, no phases, no notes — and the
-            pitch stops answering the pointer, so a tablet held out to a group cannot lose a
-            player to somebody's thumb.
+            Everything that edits leaves — no rail, no header, no phases, no notes. You can
+            still drag players, cones, labels and balls to make a point; nothing can be drawn,
+            added or rubbed out, and undo puts a moved piece back.
           </li>
           <li>
             What's left floats along the bottom: the way back, <kbd>&#8249;</kbd> and
