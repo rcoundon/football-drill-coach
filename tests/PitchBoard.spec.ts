@@ -49,8 +49,11 @@ async function firePointer(
 
 const RECT = { left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON: () => ({}) }
 
-function mountBoard(tool: ToolMode = 'select') {
-  const wrapper = mount(PitchBoard, { props: { tool, drawColor: '#ffffff' }, attachTo: document.body })
+function mountBoard(tool: ToolMode = 'select', presenting = false) {
+  const wrapper = mount(PitchBoard, {
+    props: { tool, drawColor: '#ffffff', presenting },
+    attachTo: document.body,
+  })
   const svg = wrapper.find('svg').element as unknown as SVGSVGElement
   // jsdom gives every element a zero-sized rect; supply a realistic one.
   svg.getBoundingClientRect = () => RECT as DOMRect
@@ -255,6 +258,110 @@ describe('drawing', () => {
     await firePointer(wrapper.find('svg'), 'pointerup', clientFor(20, 10))
 
     expect(board.counterById(c.id)!.pos.x).toBeCloseTo(PITCH_W / 2, 4)
+  })
+})
+
+/**
+ * Full screen is for showing a drill, but a coach talking it through still
+ * wants to push players about. Pieces move whatever tool was armed when the
+ * pitch was expanded; nothing else on the board answers the pointer.
+ */
+describe('while presenting', () => {
+  async function drag(wrapper: ReturnType<typeof mountBoard>, selector: string, from: Vec, to: Vec) {
+    await firePointer(wrapper.find(selector), 'pointerdown', clientFor(from.x, from.y))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(to.x, to.y))
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(to.x, to.y))
+  }
+
+  it('moves a player even when a drawing tool was armed', async () => {
+    const board = useBoard()
+    const c = board.addCounter('red')
+    const wrapper = mountBoard('pen', true)
+    await wrapper.vm.$nextTick()
+
+    await drag(wrapper, '[data-counter]', c.pos, { x: 20, y: 10 })
+
+    expect(board.counterById(c.id)!.pos.x).toBeCloseTo(20, 4)
+    expect(board.state.drawings).toHaveLength(0)
+  })
+
+  it('moves a cone, a label and the ball rather than erasing them', async () => {
+    const board = useBoard()
+    const cone = board.addMarker({ x: 20, y: 20 })
+    const label = board.addLabel({ x: 80, y: 20 }, 'Go')!
+    const wrapper = mountBoard('erase', true)
+    await wrapper.vm.$nextTick()
+
+    await drag(wrapper, '[data-marker]', { x: 20, y: 20 }, { x: 25, y: 25 })
+    await drag(wrapper, '[data-label]', { x: 80, y: 20 }, { x: 85, y: 25 })
+    await drag(wrapper, '[data-ball]', { x: 50, y: 32 }, { x: 40, y: 50 })
+
+    expect(board.markerById(cone.id)!.pos).toEqual({ x: 25, y: 25 })
+    expect(board.labelById(label.id)!.pos).toEqual({ x: 85, y: 25 })
+    expect(board.state.balls[0].pos.x).toBeCloseTo(40, 4)
+    expect(wrapper.emitted('erased')).toBeUndefined()
+  })
+
+  it('makes each drag one undo step', async () => {
+    const board = useBoard()
+    const c = board.addCounter('red')
+    const wrapper = mountBoard('select', true)
+    await wrapper.vm.$nextTick()
+
+    await drag(wrapper, '[data-counter]', c.pos, { x: 20, y: 10 })
+    board.undo()
+
+    expect(board.counterById(c.id)!.pos.x).toBeCloseTo(PITCH_W / 2, 4)
+  })
+
+  it('draws nothing and places nothing on bare grass', async () => {
+    const board = useBoard()
+    for (const tool of ['pen', 'arrow-pass', 'line', 'cone', 'text'] as const) {
+      const wrapper = mountBoard(tool, true)
+      await wrapper.vm.$nextTick()
+      await firePointer(wrapper.find('svg'), 'pointerdown', clientFor(10, 10))
+      await firePointer(wrapper.find('svg'), 'pointermove', clientFor(60, 30))
+      await firePointer(wrapper.find('svg'), 'pointerup', clientFor(60, 30))
+      expect(wrapper.emitted('addLabel')).toBeUndefined()
+      wrapper.unmount()
+    }
+    expect(board.state.drawings).toHaveLength(0)
+    expect(board.state.markers).toHaveLength(0)
+  })
+
+  it('gathers no box, holds nothing and renames nothing', async () => {
+    const board = useBoard()
+    board.addCounter('red')
+    const wrapper = mountBoard('select', true)
+    await wrapper.vm.$nextTick()
+
+    await firePointer(wrapper.find('svg'), 'pointerdown', clientFor(40, 20))
+    await firePointer(wrapper.find('svg'), 'pointermove', clientFor(60, 40))
+    expect(wrapper.find('[data-marquee]').exists()).toBe(false)
+    await firePointer(wrapper.find('svg'), 'pointerup', clientFor(60, 40))
+
+    for (let i = 0; i < 2; i++) {
+      await firePointer(wrapper.find('[data-counter]'), 'pointerdown', clientFor(50, 32))
+      await firePointer(wrapper.find('svg'), 'pointerup', clientFor(50, 32))
+    }
+
+    expect(wrapper.find('[data-selected-token]').exists()).toBe(false)
+    expect(wrapper.emitted('rename')).toBeUndefined()
+  })
+
+  it('leaves drawings alone', async () => {
+    const board = useBoard()
+    const id = board.startArrow({ x: 20, y: 30 }, '#ffffff', 'pass')
+    board.updateSegment(id, { x: 60, y: 30 })
+    board.finishDrawing(id)
+    const wrapper = mountBoard('select', true)
+    await wrapper.vm.$nextTick()
+
+    await drag(wrapper, '[data-drawing]', { x: 40, y: 30 }, { x: 40, y: 50 })
+
+    const arrow = board.drawingById(id)!
+    expect(arrow.kind === 'arrow' && arrow.from).toEqual({ x: 20, y: 30 })
+    expect(wrapper.find('[data-bend-handle]').exists()).toBe(false)
   })
 })
 
