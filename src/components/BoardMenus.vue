@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { viewBoxOf } from '../geometry'
+import { PITCH_H, PITCH_W, viewBoxOf } from '../geometry'
 import { useBoard } from '../composables/useBoard'
 import { PITCHES } from './controls'
 import PitchMarkings from './PitchMarkings.vue'
@@ -114,7 +114,7 @@ function setRotated(rotated: boolean): void {
       <div v-show="open === 'pitch'" data-pitch-panel class="panel" :style="panelStyle" role="menu">
         <span class="eyebrow">Pitch</span>
         <!--
-          Pictures of the three pitches rather than the words Blank, Full and
+          Pictures of the pitches rather than the words Blank, Full and
           Half. What a coach is choosing between is what the board will look
           like, so that is what the choice shows.
         -->
@@ -129,16 +129,18 @@ function setRotated(rotated: boolean): void {
             :aria-checked="board.state.pitch.type === p.id"
             :aria-label="p.label"
             :title="p.label"
-            @click="board.setPitchType(p.id)"
+            @click="board.setPitchType(p.id, p.portrait)"
           >
             <!--
               Drawn from the same box the board would use, so the thumbnail
               previews what pressing it gives you rather than showing a half
               pitch adrift in a full-sized one.
             -->
-            <svg class="thumb-art" :viewBox="viewBoxOf({ type: p.id, rotated: false })" aria-hidden="true">
-              <rect x="0" y="0" width="100" height="64.76" fill="#2e7d32" />
-              <PitchMarkings :type="p.id" />
+            <svg class="thumb-art" :viewBox="viewBoxOf({ type: p.id, rotated: !!p.portrait })" aria-hidden="true">
+              <g :transform="p.portrait ? `translate(${PITCH_H} 0) rotate(90)` : undefined">
+                <rect x="0" y="0" :width="PITCH_W" :height="PITCH_H" fill="#2e7d32" />
+                <PitchMarkings :type="p.id" />
+              </g>
             </svg>
             <span class="thumb-label">{{ p.label }}</span>
           </button>

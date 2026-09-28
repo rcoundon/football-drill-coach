@@ -6,6 +6,7 @@ import {
   viewBoxOf,
   boundsOf,
   toView,
+  viewBoundsOf,
   fromView,
   clientToPitch,
   clampToPitch,
@@ -328,6 +329,21 @@ describe('the pitch a board is drawn from', () => {
   /** Centred in the full pitch's coordinates, where the markings are drawn. */
   it('is the middle half for a half pitch', () => {
     expect(boundsOf('half')).toEqual({ x: 25, y: 0, width: 50, height: PITCH_H })
+  })
+
+  /** The goal-end half covers the same ground; only its markings are mirrored. */
+  it('gives the goal-end half the same ground as the half pitch', () => {
+    expect(boundsOf('half-right')).toEqual(boundsOf('half'))
+    expect(clampToPitch({ x: 90, y: 30 }, 'half-right')).toEqual({ x: 75, y: 30 })
+  })
+
+  /**
+   * The goal-end half draws its goal line at x = 75. Turned to portrait,
+   * that has to be the bottom edge of the board.
+   */
+  it('puts the goal line of the goal-end half at the bottom once turned to portrait', () => {
+    const view = viewBoundsOf({ type: 'half-right', rotated: true })
+    expect(toView({ x: 75, y: PITCH_H / 2 }, true).y).toBeCloseTo(view.y + view.height)
   })
 
   it('gives a half pitch a canvas of its own size', () => {

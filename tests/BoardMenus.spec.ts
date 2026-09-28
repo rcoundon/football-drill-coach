@@ -71,6 +71,28 @@ describe('the pitch menu', () => {
   })
 
   /**
+   * The goal is only at the bottom of the half pitch once the board is stood
+   * up, so the preset turns the board too — as one step, so one undo takes
+   * the coach back to where they were.
+   */
+  it('offers a half pitch with the goal at the bottom, turned to portrait', async () => {
+    const wrapper = mountMenus()
+    await wrapper.find('[data-pitch="half-right"]').trigger('click')
+    expect(board.state.pitch).toEqual({ type: 'half-right', rotated: true })
+    expect(wrapper.find('[data-orientation="portrait"]').attributes('aria-checked')).toBe('true')
+
+    board.undo()
+    expect(board.state.pitch).toEqual({ type: 'blank', rotated: false })
+  })
+
+  it('leaves the orientation alone for the other pitches', async () => {
+    board.setRotated(true)
+    const wrapper = mountMenus()
+    await wrapper.find('[data-pitch="full"]').trigger('click')
+    expect(board.state.pitch).toEqual({ type: 'full', rotated: true })
+  })
+
+  /**
    * `Rotate` said what pressing it would do but never which way round the
    * board currently was, so a coach had to press it to find out.
    */

@@ -451,9 +451,14 @@ function newId(): string {
   return `o${time}${seq}${random}`
 }
 
-function setPitchType(type: PitchType): void {
+/**
+ * Choose the pitch, and optionally which way round it stands, as one undo
+ * step: a preset that turns the board should come back in a single undo.
+ */
+function setPitchType(type: PitchType, rotated?: boolean): void {
   commit()
   state.pitch.type = type
+  if (rotated !== undefined) state.pitch.rotated = rotated
 }
 
 function setRotated(rotated: boolean): void {
