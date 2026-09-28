@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import PitchMarkings from '../src/components/PitchMarkings.vue'
 import { PITCH_W, PITCH_H, m } from '../src/geometry'
+import type { PitchType } from '../src/types'
 
-function render(type: 'blank' | 'full' | 'half') {
+function render(type: PitchType) {
   return mount(PitchMarkings, { props: { type } })
 }
 
@@ -55,6 +56,23 @@ describe('half pitch', () => {
   it('is inset so that it stays within the same coordinate space', () => {
     const group = render('half').find('[data-pitch-group]')
     expect(group.attributes('transform')).toContain('translate(25')
+  })
+})
+
+describe('goal-end half pitch', () => {
+  it('draws one goal end, like the half pitch', () => {
+    const wrapper = render('half-right')
+    expect(wrapper.findAll('[data-marking="penalty-area"]')).toHaveLength(1)
+    expect(wrapper.findAll('[data-marking="goal"]')).toHaveLength(1)
+  })
+
+  /**
+   * The half pitch's drawing mirrored about its own middle: the same ground,
+   * x 25..75, with the goal line at 75 rather than 25.
+   */
+  it('mirrors the half pitch so its goal is at the right-hand end', () => {
+    const group = render('half-right').find('[data-pitch-group]')
+    expect(group.attributes('transform')).toBe('translate(75 0) scale(-1 1)')
   })
 })
 

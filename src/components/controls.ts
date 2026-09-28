@@ -61,10 +61,16 @@ export const TOOLS: { id: ToolMode; label: string }[] = [
   { id: 'erase', label: 'Erase' },
 ]
 
-export const PITCHES: { id: PitchType; label: string }[] = [
+/**
+ * The pitch presets. `portrait` turns the board as well, for a preset that
+ * only makes sense one way round: the goal is only at the bottom of a half
+ * pitch once the board is standing up.
+ */
+export const PITCHES: { id: PitchType; label: string; portrait?: boolean }[] = [
   { id: 'blank', label: 'Blank' },
   { id: 'full', label: 'Full' },
   { id: 'half', label: 'Half' },
+  { id: 'half-right', label: 'Goal end', portrait: true },
 ]
 
 export const DRAW_COLORS = ['#ffffff', '#ffeb3b', '#212121', '#e53935']

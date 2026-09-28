@@ -37,6 +37,11 @@ export function m(metres: number): number {
 /** The rectangle a pitch actually occupies, in pitch coordinates. */
 export type PitchBounds = { x: number; y: number; width: number; height: number }
 
+/** Either half pitch: the two cover the same ground, with the goal at opposite ends. */
+export function isHalfPitch(type: PitchType): boolean {
+  return type === 'half' || type === 'half-right'
+}
+
 /**
  * What the chosen pitch covers.
  *
@@ -48,7 +53,7 @@ export type PitchBounds = { x: number; y: number; width: number; height: number 
  * canvas, with a third of the board empty at each end.
  */
 export function boundsOf(type: PitchType): PitchBounds {
-  if (type !== 'half') return { x: 0, y: 0, width: PITCH_W, height: PITCH_H }
+  if (!isHalfPitch(type)) return { x: 0, y: 0, width: PITCH_W, height: PITCH_H }
   const width = PITCH_W / 2
   return { x: (PITCH_W - width) / 2, y: 0, width, height: PITCH_H }
 }

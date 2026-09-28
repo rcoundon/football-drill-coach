@@ -1,4 +1,9 @@
-export type PitchType = 'blank' | 'full' | 'half'
+/**
+ * `half` has its goal at the left-hand end of the pitch; `half-right` is the
+ * same half with the goal at the right-hand end, which is what puts the goal
+ * at the bottom of the screen once the board is turned to portrait.
+ */
+export type PitchType = 'blank' | 'full' | 'half' | 'half-right'
 
 export type CounterColor = 'red' | 'blue' | 'yellow' | 'purple' | 'black'
 

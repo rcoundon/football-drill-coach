@@ -1,17 +1,25 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { PitchType } from '../types'
-import { PITCH_H, PITCH_W, m } from '../geometry'
+import { PITCH_H, PITCH_W, isHalfPitch, m } from '../geometry'
 
 const props = defineProps<{ type: PitchType }>()
 
-const isHalf = computed(() => props.type === 'half')
+const isHalf = computed(() => isHalfPitch(props.type))
 const showMarkings = computed(() => props.type !== 'blank')
 
 const width = computed(() => (isHalf.value ? PITCH_W / 2 : PITCH_W))
 
-/** The left half is exactly 50 units wide; centring it needs an inset of half the remaining space. */
-const groupTransform = computed(() => (isHalf.value ? `translate(${(PITCH_W - width.value) / 2} 0)` : ''))
+/**
+ * The left half is exactly 50 units wide; centring it needs an inset of half
+ * the remaining space. The right-hand half is the same drawing mirrored, so
+ * it lands on the same ground with its goal at the other end.
+ */
+const groupTransform = computed(() => {
+  const inset = (PITCH_W - width.value) / 2
+  if (props.type === 'half-right') return `translate(${inset + width.value} 0) scale(-1 1)`
+  return isHalf.value ? `translate(${inset} 0)` : ''
+})
 
 const penaltyDepth = m(16.5)
 const penaltyWidth = m(40.32)
