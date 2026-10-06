@@ -40,13 +40,13 @@ describe('the tool rail', () => {
     expect(board.state.counters[0].color).toBe('blue')
   })
 
-  it('switches to Move, so the new player can be dragged straight away', async () => {
+  it('switches to Select, so the new player can be dragged straight away', async () => {
     const wrapper = mountRail('arrow-pass')
     await pressAndRelease(wrapper, '[data-add-counter="blue"]')
     expect(wrapper.emitted('update:tool')!.at(-1)).toEqual(['select'])
   })
 
-  it('does not bother emitting when Move is already selected', async () => {
+  it('does not bother emitting when Select is already selected', async () => {
     const wrapper = mountRail('select')
     await pressAndRelease(wrapper, '[data-add-counter="blue"]')
     expect(wrapper.emitted('update:tool')).toBeUndefined()
@@ -116,7 +116,7 @@ describe('the Add group', () => {
     expect(board.state.balls).toHaveLength(before + 1)
   })
 
-  it('puts a cone in the middle, then hands the board back to Move', async () => {
+  it('puts a cone in the middle, then hands the board back to Select', async () => {
     const board = useBoard()
     const wrapper = mountRail('cone')
     await pressAndRelease(wrapper, '[data-add-cone]')

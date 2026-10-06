@@ -51,7 +51,7 @@ export const LABEL_INK: Record<CounterColor, string> = {
 }
 
 export const TOOLS: { id: ToolMode; label: string }[] = [
-  { id: 'select', label: 'Move' },
+  { id: 'select', label: 'Select' },
   { id: 'pen', label: 'Draw' },
   { id: 'arrow-run', label: 'Run' },
   { id: 'arrow-pass', label: 'Pass' },

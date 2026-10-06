@@ -117,6 +117,30 @@ export function clientToPitch(
 }
 
 /**
+ * The inverse of clientToPitch: where on the screen a pitch point is drawn,
+ * and how many pixels one pitch unit covers there. For laying HTML over the
+ * board exactly where something on it sits.
+ */
+export function pitchToClient(
+  rect: Rect,
+  p: Vec,
+  pitch: PitchShape,
+): { x: number; y: number; scale: number } {
+  const view = viewBoundsOf(pitch)
+
+  const scale = Math.min(rect.width / view.width, rect.height / view.height)
+  const offsetX = (rect.width - view.width * scale) / 2
+  const offsetY = (rect.height - view.height * scale) / 2
+
+  const v = toView(p, pitch.rotated)
+  return {
+    x: rect.left + offsetX + (v.x - view.x) * scale,
+    y: rect.top + offsetY + (v.y - view.y) * scale,
+    scale,
+  }
+}
+
+/**
  * Hold a point inside the pitch being drawn.
  *
  * Defaults to the full pitch, so the many callers that have no opinion —

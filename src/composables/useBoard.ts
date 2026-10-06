@@ -56,8 +56,11 @@ const BALL_SPACING = 4
 /** Room for a setup, coaching points and progressions, without unbounded paste. */
 export const MAX_NOTES_LENGTH = 4000
 
-/** Long enough for a coaching cue, short enough to stay readable on the pitch. */
-export const MAX_LABEL_LENGTH = 40
+/**
+ * Room for a few lines explaining what is happening, short enough that the
+ * block still sits beside the players rather than over them.
+ */
+export const MAX_LABEL_LENGTH = 200
 
 export const MIN_PEN_STEP = 0.6
 
@@ -808,9 +811,19 @@ function labelById(id: string): Label | undefined {
   return state.labels.find((l) => l.id === id)
 }
 
-/** Trimmed and capped; an empty label is not worth putting on the pitch. */
+/**
+ * Trimmed and capped; an empty label is not worth putting on the pitch. The
+ * coach's line breaks are kept, but not the spaces left at the end of each
+ * line, which would only widen the plate behind it.
+ */
 function cleanLabelText(text: string): string {
-  return text.trim().slice(0, MAX_LABEL_LENGTH)
+  return text
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .join('\n')
+    .trim()
+    .slice(0, MAX_LABEL_LENGTH)
 }
 
 function addLabel(at: Vec, text: string): Label | null {
@@ -819,28 +832,30 @@ function addLabel(at: Vec, text: string): Label | null {
   if (clean === '') return null
   commit()
   const label: Label = { id: newId(), pos: clampToPitch(at, state.pitch.type), text: clean }
-  for (const frame of allFrames()) frame.labels.push(clone(label))
-  // Read back out of state rather than returning the local `label` that was
-  // cloned in: the clone pushed into every frame's array is a copy, so the
-  // local is an orphan that would never again reflect a later move.
+  // This phase only, like a drawing: a label explains a moment, and the
+  // next moment may need saying differently or not at all. A phase added
+  // after this one starts with a copy, under the same id, so a label kept
+  // across phases glides between them rather than blinking.
+  state.labels.push(label)
+  // Read back out of state rather than returning the local `label`: the
+  // reactive copy is what a later move will change.
   return labelById(label.id)!
 }
 
-/** Clearing the text removes the label: an empty one has nothing to say. */
+/**
+ * Clearing the text removes the label: an empty one has nothing to say.
+ * This phase only — the same label on another phase keeps its own words.
+ */
 function setLabelText(id: string, text: string): void {
   if (locked()) return
   const label = labelById(id)
   if (!label) return
   const clean = cleanLabelText(text)
+  // Saved as it was: nothing changed, so nothing to undo.
+  if (clean !== '' && clean === label.text) return
   commit()
-  for (const frame of allFrames()) {
-    if (clean === '') {
-      frame.labels = rawFilter(frame.labels, (l) => l.id !== id)
-      continue
-    }
-    const target = frame.labels.find((l) => l.id === id)
-    if (target) target.text = clean
-  }
+  if (clean === '') state.labels = rawFilter(state.labels, (l) => l.id !== id)
+  else label.text = clean
 }
 
 /** Called on every pointer-move of a drag, so it deliberately does not commit. */
@@ -851,13 +866,12 @@ function moveLabel(id: string, pos: Vec): void {
   label.pos = clampToPitch(pos, state.pitch.type)
 }
 
+/** Off this phase only; any other phase showing it keeps its copy. */
 function deleteLabel(id: string): void {
   if (locked()) return
   if (!labelById(id)) return
   commit()
-  for (const frame of allFrames()) {
-    frame.labels = rawFilter(frame.labels, (l) => l.id !== id)
-  }
+  state.labels = rawFilter(state.labels, (l) => l.id !== id)
 }
 
 function toggleLabelsVisible(): void {
@@ -1394,8 +1408,8 @@ function pointsOfRefIn(frame: Frame, ref: SelectionRef): Vec[] | null {
  * Take a whole group off the board in one undo entry, rather than one per
  * member — a coach who boxed a shape and pressed Delete meant one action.
  *
- * The cast comes off every frame; a drawing belongs to the moment it
- * describes, so it comes off only this one.
+ * The cast comes off every frame; a drawing or a label belongs to the
+ * moment it describes, so it comes off only this one.
  *
  * A ball being carried by a deleted player is set down where it was riding,
  * matching what deleting a single player already does: the drill still has a
@@ -1423,13 +1437,13 @@ function deleteGroup(refs: SelectionRef[]): void {
     }
     frame.counters = rawFilter(frame.counters, (c) => !ids.counter.has(c.id))
     frame.markers = rawFilter(frame.markers, (m) => !ids.marker.has(m.id))
-    frame.labels = rawFilter(frame.labels, (l) => !ids.label.has(l.id))
     // A ball is cast, like a player: removed from the whole drill, not one phase.
     frame.balls = rawFilter(frame.balls, (b) => !ids.ball.has(b.id))
   }
 
-  // Drawings belong to the moment, so only this one loses them.
+  // Drawings and labels belong to the moment, so only this one loses them.
   state.drawings = rawFilter(state.drawings, (d) => !ids.drawing.has(d.id))
+  state.labels = rawFilter(state.labels, (l) => !ids.label.has(l.id))
 }
 
 /**
@@ -1494,6 +1508,8 @@ function duplicateGroup(refs: SelectionRef[], offset: Vec): SelectionRef[] {
         copy.id = copyId
         frame.markers.push(copy)
       } else if (ref.kind === 'label') {
+        // A label belongs to its moment, like a drawing below.
+        if (!isCurrent) return
         const original = frame.labels.find((l) => l.id === ref.id)
         if (!original) return
         const copy = clone(toRaw(original))

@@ -25,6 +25,12 @@ describe('addLabel', () => {
     expect(label.text).toHaveLength(MAX_LABEL_LENGTH)
   })
 
+  it('keeps line breaks but drops the spaces trailing each line', () => {
+    const board = useBoard()
+    const label = board.addLabel({ x: 10, y: 10 }, '  Overlap  \r\nthen cross \n')!
+    expect(label.text).toBe('Overlap\nthen cross')
+  })
+
   it('refuses text that is empty once trimmed, and adds no undo entry', () => {
     const board = useBoard()
     expect(board.addLabel({ x: 10, y: 10 }, '   ')).toBeNull()
@@ -58,6 +64,14 @@ describe('editing and moving a label', () => {
     expect(board.labelById(label.id)!.text).toBe('Before')
   })
 
+  it('adds no undo entry when the text is saved unchanged', () => {
+    const board = useBoard()
+    const label = board.addLabel({ x: 10, y: 10 }, 'Same')!
+    board.setLabelText(label.id, 'Same  ')
+    board.undo()
+    expect(board.state.labels).toHaveLength(0)
+  })
+
   it('deletes the label when its text is cleared', () => {
     const board = useBoard()
     const label = board.addLabel({ x: 10, y: 10 }, 'Gone soon')!
@@ -89,6 +103,57 @@ describe('editing and moving a label', () => {
     expect(board.state.labels).toHaveLength(0)
     board.undo()
     expect(board.state.labels).toHaveLength(1)
+  })
+})
+
+describe('a label belongs to its phase', () => {
+  /** A label on phase 1, then phase 2 added as a copy of it. */
+  function onTwoPhases() {
+    const board = useBoard()
+    const label = board.addLabel({ x: 10, y: 10 }, 'Press')!
+    board.addFrame()
+    return { board, id: label.id }
+  }
+
+  it('goes on this phase only', () => {
+    const board = useBoard()
+    board.addFrame()
+    board.addLabel({ x: 10, y: 10 }, 'Later')
+    expect(board.state.frames[0].labels).toHaveLength(0)
+    expect(board.state.frames[1].labels).toHaveLength(1)
+  })
+
+  it('is carried into a new phase under the same id, so playback can glide it', () => {
+    const { board, id } = onTwoPhases()
+    expect(board.state.frames[1].labels.map((l) => l.id)).toEqual([id])
+  })
+
+  it('changes its words on this phase only', () => {
+    const { board, id } = onTwoPhases()
+    board.setLabelText(id, 'Now cover')
+    expect(board.state.frames[1].labels[0].text).toBe('Now cover')
+    expect(board.state.frames[0].labels[0].text).toBe('Press')
+  })
+
+  it('comes off this phase only, whether deleted, cleared or removed in a group', () => {
+    for (const remove of [
+      (board: ReturnType<typeof useBoard>, id: string) => board.deleteLabel(id),
+      (board: ReturnType<typeof useBoard>, id: string) => board.setLabelText(id, ''),
+      (board: ReturnType<typeof useBoard>, id: string) => board.deleteGroup([{ kind: 'label', id }]),
+    ]) {
+      __resetBoardForTests()
+      const { board, id } = onTwoPhases()
+      remove(board, id)
+      expect(board.state.frames[1].labels).toHaveLength(0)
+      expect(board.state.frames[0].labels).toHaveLength(1)
+    }
+  })
+
+  it('is copied onto this phase only', () => {
+    const { board, id } = onTwoPhases()
+    const [copy] = board.duplicateGroup([{ kind: 'label', id }], { x: 5, y: 5 })
+    expect(board.state.frames[1].labels.map((l) => l.id)).toContain(copy.id)
+    expect(board.state.frames[0].labels.map((l) => l.id)).not.toContain(copy.id)
   })
 })
 

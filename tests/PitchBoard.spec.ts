@@ -939,6 +939,17 @@ describe('pitch labels', () => {
     expect(wrapper.find('[data-label-text]').text()).toBe('Press trigger')
   })
 
+  it('draws a long label as several lines on a plate tall enough for them', async () => {
+    const board = useBoard()
+    board.addLabel({ x: 50, y: 30 }, 'Winger holds width\nuntil the full back overlaps on the outside')
+    const wrapper = mountBoard()
+    await wrapper.vm.$nextTick()
+    const lines = wrapper.findAll('[data-label-line]').map((line) => line.text())
+    expect(lines).toEqual(['Winger holds width', 'until the full back', 'overlaps on the outside'])
+    const plate = wrapper.find('[data-label] rect')
+    expect(Number(plate.attributes('height'))).toBeGreaterThan(3 * 2.6)
+  })
+
   it('asks for the text when the pitch is tapped with the text tool', async () => {
     const wrapper = mountBoard('text')
     await wrapper.vm.$nextTick()
@@ -988,7 +999,7 @@ describe('adjusting a label with the text tool still active', () => {
   /**
    * Placing a label leaves the text tool selected, so the very next thing a
    * coach does is usually nudge the label they just made. Requiring a switch
-   * to Move for that makes the label feel stuck.
+   * to Select for that makes the label feel stuck.
    */
   it('drags the label rather than ignoring the press', async () => {
     const board = useBoard()
@@ -1016,7 +1027,7 @@ describe('adjusting a label with the text tool still active', () => {
     expect(wrapper.emitted('addLabel')).toBeFalsy()
   })
 
-  it('opens the editor on a double press, as Move does', async () => {
+  it('opens the editor on a double press, as Select does', async () => {
     const board = useBoard()
     const label = board.addLabel({ x: 50, y: 32 }, 'Edit me')!
     const wrapper = mountBoard('text')
@@ -1725,7 +1736,7 @@ describe('bending the arrow just drawn', () => {
     await wrapper.setProps({ tool: 'select' })
     await wrapper.vm.$nextTick()
 
-    // Move shows handles for a drawing the coach chooses, not for whatever
+    // Select shows handles for a drawing the coach chooses, not for whatever
     // they happened to draw last under another tool.
     expect(wrapper.find('[data-bend]').exists()).toBe(false)
     expect(wrapper.find('[data-end]').exists()).toBe(false)

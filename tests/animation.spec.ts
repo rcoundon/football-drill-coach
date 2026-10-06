@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Ball, Counter, Frame, Marker, Vec } from '../src/types'
+import type { Ball, Counter, Frame, Label, Marker, Vec } from '../src/types'
 import { BALL_OFFSET, curveHandle } from '../src/geometry'
 import {
   DEFAULT_FRAME_MS,
@@ -22,6 +22,10 @@ function counter(id: string, x: number, y: number): Counter {
 
 function marker(id: string, x: number, y: number): Marker {
   return { id, pos: { x, y } }
+}
+
+function label(id: string, x: number, y: number): Label {
+  return { id, pos: { x, y }, text: id }
 }
 
 function ball(x: number, y: number, attachedTo: string | null = null, id = 'b1'): Ball {
@@ -150,6 +154,27 @@ describe('interpolateFrames', () => {
     const a = frame({ counters: [counter('c1', 12, 34)] })
     const view = interpolateFrames(a, frame(), 0.5)
     expect(view.counters[0].pos).toEqual({ x: 12, y: 34 })
+  })
+
+  it('glides a label on both phases, at full strength', () => {
+    const a = frame({ labels: [label('l1', 0, 0)] })
+    const b = frame({ labels: [label('l1', 20, 0)] })
+    const [view] = interpolateFrames(a, b, 0.5).labels
+    expect(view.pos).toEqual({ x: 10, y: 0 })
+    expect(view.opacity).toBeUndefined()
+  })
+
+  it('fades out a label the next phase drops, and fades in one it adds', () => {
+    const a = frame({ labels: [label('gone', 10, 10)] })
+    const b = frame({ labels: [label('new', 40, 40)] })
+    const view = interpolateFrames(a, b, 0.25)
+    const e = easeInOut(0.25)
+    const gone = view.labels.find((l) => l.id === 'gone')!
+    const arriving = view.labels.find((l) => l.id === 'new')!
+    expect(gone.opacity).toBeCloseTo(1 - e)
+    expect(gone.pos).toEqual({ x: 10, y: 10 })
+    expect(arriving.opacity).toBeCloseTo(e)
+    expect(arriving.pos).toEqual({ x: 40, y: 40 })
   })
 
   it('eases cones and labels the same way', () => {

@@ -51,6 +51,8 @@ const props = defineProps<{
    * controls that would say so are on screen.
    */
   presenting?: boolean
+  /** The label being retyped on the pitch, which the board leaves off meanwhile. */
+  editingLabelId?: string | null
 }>()
 const emit = defineEmits<{
   rename: [id: string]
@@ -69,7 +71,7 @@ const emit = defineEmits<{
   selectionChanged: [held: SelectionRef[]]
   /**
    * Something was rubbed out. Erase is a one-shot: the coach removes the
-   * wrong thing and carries on, so the toolbar drops back to Move rather
+   * wrong thing and carries on, so the toolbar drops back to Select rather
    * than leaving Erase armed for the next press.
    */
   erased: []
@@ -131,7 +133,7 @@ onBeforeUnmount(() => setPlacementDropTarget(null))
 
 /**
  * The tool a press on a piece answers to. Presenting has no tools on screen,
- * so whatever was armed when the pitch expanded is set aside for Move.
+ * so whatever was armed when the pitch expanded is set aside for Select.
  */
 const grabTool = computed<ToolMode>(() => (props.presenting ? 'select' : props.tool))
 
@@ -387,7 +389,7 @@ function onLabelGrab(id: string, event: PointerEvent) {
   /*
    * The text tool adjusts labels as well as placing them. Placing one leaves
    * that tool selected, so the next thing a coach does is usually nudge the
-   * label they just made; making them switch to Move for that makes the
+   * label they just made; making them switch to Select for that makes the
    * label feel stuck to the pitch.
    */
   if ((grabTool.value !== 'select' && grabTool.value !== 'text') || dragIsLive()) return
@@ -493,7 +495,7 @@ function onBallGrab(id: string, event: PointerEvent) {
 }
 
 /**
- * A press on a drawing. Under Erase it rubs it out; under Move it chooses
+ * A press on a drawing. Under Erase it rubs it out; under Select it chooses
  * that drawing and begins a drag of the whole thing.
  *
  * The press is swallowed so it cannot also reach the board underneath, where
@@ -696,7 +698,7 @@ function gatherInto(box: { x: number; y: number; width: number; height: number }
 }
 
 /**
- * What the coach has hold of under Move: nothing, one thing, or a group
+ * What the coach has hold of under Select: nothing, one thing, or a group
  * gathered with a box.
  *
  * Never board state. Picking things up changes nothing about the drill, so
@@ -706,7 +708,7 @@ const selection = ref<SelectionRef[]>([])
 
 /**
  * The segment drawn most recently under a drawing tool, so it can be adjusted
- * without a trip through Move first. Separate from the selection because it
+ * without a trip through Select first. Separate from the selection because it
  * is a different idea in a different mode — the coach has not chosen it, they
  * have only just finished drawing it.
  */
@@ -762,7 +764,7 @@ watch(
 /**
  * The one drawing the handles belong to, if there is one.
  *
- * Under Move that means a selection of exactly one drawing: a group has no
+ * Under Select that means a selection of exactly one drawing: a group has no
  * single bend to offer, and five arrows cannot share an end. Under a drawing
  * tool it is the segment just drawn.
  */
@@ -828,7 +830,7 @@ const endHandles = computed<SegmentDrawing[]>(() => {
   return [drawing]
 })
 
-/** Every drawing to draw a halo behind. Only under Move, where picking up happens. */
+/** Every drawing to draw a halo behind. Only under Select, where picking up happens. */
 const selectedDrawingIds = computed(() =>
   props.tool === 'select'
     ? selection.value.filter((ref) => ref.kind === 'drawing').map((ref) => ref.id)
@@ -1152,6 +1154,7 @@ function onPointerUp(event: PointerEvent) {
     :counter-labels-visible="board.state.counterLabelsVisible"
     :balls-visible="board.state.ballsVisible"
     :selected-drawing-ids="selectedDrawingIds"
+    :hidden-label-id="editingLabelId"
     @grab-counter="onCounterGrab"
     @grab-marker="onMarkerGrab"
     @grab-label="onLabelGrab"

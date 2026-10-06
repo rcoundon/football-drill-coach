@@ -489,7 +489,7 @@ describe('renaming a counter label', () => {
    * on placing and moving. Leaving Erase armed meant the next press on the
    * pitch took out something they meant to keep.
    */
-  it('returns to Move once something is erased', async () => {
+  it('returns to Select once something is erased', async () => {
     useBoard().addCounter('red')
     wrapper = mountApp()
     fire({ key: 'e' })
@@ -2187,41 +2187,168 @@ describe('the ball shortcut', () => {
 })
 
 describe('adding a label', () => {
-  it('asks for the text, then puts it on the pitch', async () => {
+  async function openNew(at = { x: 30, y: 20 }) {
+    const app = wrapper!
+    await app.findComponent({ name: 'PitchBoard' }).vm.$emit('addLabel', at)
+    await app.vm.$nextTick()
+    await nextTick()
+    return app.find('[data-label-input]')
+  }
+
+  it('is typed on the pitch, focused, with no dialog in the way', async () => {
     const board = useBoard()
     wrapper = mount(App, { attachTo: document.body })
     await wrapper.vm.$nextTick()
 
-    await wrapper.findComponent({ name: 'PitchBoard' }).vm.$emit('addLabel', { x: 30, y: 20 })
-    await wrapper.vm.$nextTick()
-    await nextTick()
-
-    const input = wrapper.find('[data-label-input]')
+    const input = await openNew()
     expect(input.exists()).toBe(true)
     expect(document.activeElement).toBe(input.element)
+    expect(wrapper.find('.board-wrap [data-label-input]').exists()).toBe(true)
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
 
     await input.setValue('Press trigger')
-    await wrapper.find('[data-label-save]').trigger('click')
+    await input.trigger('keydown', { key: 'Enter' })
     await wrapper.vm.$nextTick()
 
     expect(board.state.labels).toHaveLength(1)
     expect(board.state.labels[0].text).toBe('Press trigger')
+    expect(wrapper.find('[data-label-input]').exists()).toBe(false)
   })
 
-  it('adds nothing when the prompt is cancelled', async () => {
+  it('saves on Enter, and takes a new line on Shift+Enter', async () => {
     const board = useBoard()
     wrapper = mount(App, { attachTo: document.body })
     await wrapper.vm.$nextTick()
 
-    await wrapper.findComponent({ name: 'PitchBoard' }).vm.$emit('addLabel', { x: 30, y: 20 })
+    const input = await openNew()
+    await input.setValue('Overload')
+    await input.trigger('keydown', { key: 'Enter', shiftKey: true })
+    expect(board.state.labels).toHaveLength(0)
+
+    await input.setValue('Overload\nthen switch')
+    // Enter that finishes an input method's word is not Enter to save.
+    await input.trigger('keydown', { key: 'Enter', isComposing: true })
+    expect(board.state.labels).toHaveLength(0)
+
+    await input.trigger('keydown', { key: 'Enter' })
     await wrapper.vm.$nextTick()
-    await wrapper.find('[data-label-cancel]').trigger('click')
+    expect(board.state.labels[0].text).toBe('Overload\nthen switch')
+  })
+
+  it('saves when the coach clicks away from it', async () => {
+    const board = useBoard()
+    wrapper = mount(App, { attachTo: document.body })
     await wrapper.vm.$nextTick()
 
+    const input = await openNew()
+    await input.setValue('Press trigger')
+    await input.trigger('blur')
+    await wrapper.vm.$nextTick()
+
+    expect(board.state.labels.map((l) => l.text)).toEqual(['Press trigger'])
+  })
+
+  it('is finished by a press on the board, which a phone may not count as leaving the field', async () => {
+    const board = useBoard()
+    wrapper = mountApp()
+    await wrapper.vm.$nextTick()
+
+    const input = await openNew()
+    await input.setValue('Press trigger')
+    await firePointer(wrapper.find('.stage svg').element, 'pointerdown', clientFor(70, 40))
+    await wrapper.vm.$nextTick()
+
+    expect(board.state.labels.map((l) => l.text)).toEqual(['Press trigger'])
+    expect(wrapper.find('[data-label-input]').exists()).toBe(false)
+  })
+
+  it('finishes the one being typed when the pitch asks for another', async () => {
+    const board = useBoard()
+    wrapper = mount(App, { attachTo: document.body })
+    await wrapper.vm.$nextTick()
+
+    const first = await openNew({ x: 30, y: 20 })
+    await first.setValue('First')
+    const second = await openNew({ x: 60, y: 40 })
+    await second.setValue('Second')
+    await second.trigger('keydown', { key: 'Enter' })
+    await wrapper.vm.$nextTick()
+
+    expect(board.state.labels.map((l) => l.text)).toEqual(['First', 'Second'])
+  })
+
+  it('adds nothing when Escape is pressed', async () => {
+    const board = useBoard()
+    wrapper = mount(App, { attachTo: document.body })
+    await wrapper.vm.$nextTick()
+
+    const input = await openNew()
+    await input.setValue('Never mind')
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[data-label-input]').exists()).toBe(false)
     expect(board.state.labels).toHaveLength(0)
   })
 
-  it('edits an existing label, pre-filled with its text', async () => {
+  it('drops what was typed on Cancel, for a screen with no Escape key', async () => {
+    const board = useBoard()
+    wrapper = mount(App, { attachTo: document.body })
+    await wrapper.vm.$nextTick()
+
+    const input = await openNew()
+    await input.setValue('Never mind')
+    const cancel = wrapper.find('[data-label-cancel]')
+    const press = new PointerEvent('pointerdown', { bubbles: true, cancelable: true })
+    cancel.element.dispatchEvent(press)
+    await wrapper.vm.$nextTick()
+    // The field losing focus afterwards must not place it after all.
+    await input.trigger('blur')
+
+    expect(press.defaultPrevented).toBe(true)
+    expect(wrapper.find('[data-label-input]').exists()).toBe(false)
+    expect(board.state.labels).toHaveLength(0)
+  })
+
+  it('opens an edit on the release of the press that asked, and not on another', async () => {
+    const board = useBoard()
+    const label = board.addLabel({ x: 30, y: 20 }, 'Before')!
+    wrapper = mount(App, { attachTo: document.body })
+    await wrapper.vm.$nextTick()
+    const pitch = wrapper.findComponent({ name: 'PitchBoard' })
+    const editor = () => wrapper!.find('[data-label-input]').exists()
+
+    window.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 1 }))
+    await pitch.vm.$emit('editLabel', label.id)
+    await nextTick()
+    expect(editor()).toBe(false)
+
+    window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 2 }))
+    await nextTick()
+    expect(editor()).toBe(false)
+
+    window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1 }))
+    await nextTick()
+    expect(editor()).toBe(true)
+  })
+
+  it('opens nothing when the press that asked is cancelled', async () => {
+    const board = useBoard()
+    const label = board.addLabel({ x: 30, y: 20 }, 'Before')!
+    wrapper = mount(App, { attachTo: document.body })
+    await wrapper.vm.$nextTick()
+
+    window.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 1 }))
+    await wrapper.findComponent({ name: 'PitchBoard' }).vm.$emit('editLabel', label.id)
+    window.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 1 }))
+    window.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 1 }))
+    window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1 }))
+    await nextTick()
+
+    expect(wrapper.find('[data-label-input]').exists()).toBe(false)
+  })
+
+  it('edits an existing label in place, pre-filled, with the old one hidden meanwhile', async () => {
     const board = useBoard()
     const label = board.addLabel({ x: 30, y: 20 }, 'Before')!
     wrapper = mount(App, { attachTo: document.body })
@@ -2232,12 +2359,15 @@ describe('adding a label', () => {
     await nextTick()
 
     const input = wrapper.find('[data-label-input]')
-    expect((input.element as HTMLInputElement).value).toBe('Before')
+    expect((input.element as HTMLTextAreaElement).value).toBe('Before')
+    expect(wrapper.find('[data-label]').exists()).toBe(false)
+
     await input.setValue('After')
-    await wrapper.find('[data-label-save]').trigger('click')
+    await input.trigger('keydown', { key: 'Enter' })
     await wrapper.vm.$nextTick()
 
     expect(board.labelById(label.id)!.text).toBe('After')
+    expect(wrapper.find('[data-label]').exists()).toBe(true)
   })
 })
 
@@ -2580,7 +2710,7 @@ describe('space plays and pauses', () => {
  * same guard sits in front of every other shortcut too: Escape, Delete,
  * Backspace and the tool letters do nothing on a focused button natively,
  * so exempting BUTTON there was never protecting anything — it was only
- * silencing them. A coach who clicks Move, boxes a group, and presses
+ * silencing them. A coach who clicks Select, boxes a group, and presses
  * Delete does this constantly, since the button they just clicked keeps
  * focus. These three pin that the fix belongs on Space alone.
  */

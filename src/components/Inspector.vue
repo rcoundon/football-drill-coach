@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import type { CounterColor, SelectionRef } from '../types'
 import { COUNTER_COLORS } from '../geometry'
 import { runInto } from '../animation'
-import { MAX_NOTES_LENGTH, useBoard } from '../composables/useBoard'
+import { MAX_LABEL_LENGTH, MAX_NOTES_LENGTH, useBoard } from '../composables/useBoard'
 import { useViewport } from '../composables/useViewport'
 import { SWATCHES } from './controls'
 
@@ -88,11 +88,23 @@ function setPhaseNote(event: Event): void {
 }
 
 function setLabel(event: Event): void {
-  const text = (event.target as HTMLInputElement).value
+  const text = (event.target as HTMLInputElement | HTMLTextAreaElement).value
   const ref = only.value
   if (!ref) return
   if (ref.kind === 'counter') board.setCounterLabel(ref.id, text)
   else if (ref.kind === 'label') board.setLabelText(ref.id, text)
+}
+
+/**
+ * Enter finishes the label, as it does in the prompt the pitch opens;
+ * Shift+Enter is for a new line. Letting go of the field is what fires
+ * `change`, so this saves once rather than beside it. Ignored while an input
+ * method is composing, where Enter picks the word being built.
+ */
+function finishLabel(event: KeyboardEvent): void {
+  if (event.isComposing) return
+  event.preventDefault()
+  ;(event.target as HTMLTextAreaElement).blur()
 }
 
 function recolour(color: CounterColor): void {
@@ -187,7 +199,8 @@ function straightenRun(): void {
       Nothing held: the drill, and the phase the coach is standing on. Two
       fields rather than one because a coaching point that applies to the
       third phase alone was previously either lost or filed under the whole
-      drill.
+      drill. They split the panel evenly: a phase can need as much
+      explaining as the drill it sits in.
     -->
     <template v-if="held === 0">
       <label class="field">
@@ -203,11 +216,11 @@ function straightenRun(): void {
         ></textarea>
       </label>
 
-      <label class="field field--short">
+      <label class="field">
         <span class="field-label">Phase {{ phaseNumber }} note</span>
         <textarea
           data-phase-note
-          class="notes-field notes-field--short"
+          class="notes-field"
           :maxlength="MAX_NOTES_LENGTH"
           :placeholder="`What happens in phase ${phaseNumber}`"
           :value="phaseNote"
@@ -253,14 +266,33 @@ function straightenRun(): void {
         </div>
       </div>
 
-      <label v-if="counter || label" class="field">
+      <!--
+        A text label can run to several lines, so it gets room to show them;
+        a player's label is a shirt number or two letters.
+      -->
+      <label v-if="label" class="field field--fit">
+        <span class="field-label">Text</span>
+        <textarea
+          data-selection-label
+          class="input label-field"
+          rows="4"
+          :maxlength="MAX_LABEL_LENGTH"
+          placeholder="What it says"
+          :value="label.text"
+          :disabled="board.isDerived.value"
+          @change="setLabel"
+          @keydown.enter.exact="finishLabel"
+        ></textarea>
+      </label>
+
+      <label v-else-if="counter" class="field">
         <span class="field-label">Label</span>
         <input
           data-selection-label
           class="input"
-          :maxlength="counter ? 4 : undefined"
-          :placeholder="counter ? '9, GK, CB' : 'What it says'"
-          :value="counter ? counter.label : label?.text"
+          maxlength="4"
+          placeholder="9, GK, CB"
+          :value="counter.label"
           :disabled="board.isDerived.value"
           @change="setLabel"
         />
@@ -376,7 +408,8 @@ function straightenRun(): void {
 .icon-button:hover { background: #ffffff14; }
 
 .field { display: flex; flex-direction: column; gap: 0.25rem; min-height: 0; flex: 1; }
-.field--short { flex: none; }
+.field--fit { flex: none; }
+.label-field { resize: vertical; font: inherit; line-height: 1.4; }
 .field-label { font-size: 0.7rem; opacity: 0.7; }
 
 .notes-field {
@@ -384,7 +417,6 @@ function straightenRun(): void {
   border-radius: 0.4rem; border: 1px solid var(--border); background: var(--field-bg);
   color: var(--ink-1); font: inherit; font-size: 0.85rem; line-height: 1.45;
 }
-.notes-field--short { min-height: 3.5rem; max-height: 6rem; flex: none; }
 .notes-field:disabled { opacity: 0.5; }
 
 .swatches { display: flex; gap: 0.35rem; flex-wrap: wrap; }

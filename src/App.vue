@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import type { Pattern, Session, SelectionRef, ToolMode, Vec } from './types'
 import { gifSchedule } from './animation'
-import { PITCH_H, PITCH_W } from './geometry'
+import { PITCH_H, PITCH_W, pitchToClient } from './geometry'
 import ActionToast from './components/ActionToast.vue'
 import DrillHeader from './components/DrillHeader.vue'
 import ToolRail from './components/ToolRail.vue'
@@ -15,10 +15,11 @@ import SessionLibrary from './components/SessionLibrary.vue'
 import SessionPlan from './components/SessionPlan.vue'
 import HelpPanel from './components/HelpPanel.vue'
 import Inspector from './components/Inspector.vue'
+import LabelEditor from './components/LabelEditor.vue'
 import TagInput from './components/TagInput.vue'
 import PhaseTimeline from './components/PhaseTimeline.vue'
 import TutorialOverlay from './components/TutorialOverlay.vue'
-import { MAX_LABEL_LENGTH, useBoard } from './composables/useBoard'
+import { useBoard } from './composables/useBoard'
 import { useStorage } from './composables/useStorage'
 import { useSessions } from './composables/useSessions'
 import { buildSessionPdf } from './sessionPdf'
@@ -584,15 +585,27 @@ watch(helpOpen, (open) => {
 
 /**
  * The board reports where a label should go, or which one to edit; the text
- * itself is typed here, in the same small dialog the other prompts use.
+ * is typed on the pitch itself, at that spot, by LabelEditor.
+ *
+ * Each opening gets its own number. The editor saves when it loses focus,
+ * and that can arrive after the next one has opened — a tap elsewhere with
+ * the Text tool closes one and opens another — so a late save names the
+ * editor it came from and is dropped if that one is gone.
  */
 const labelDraft = ref('')
-const labelTarget = ref<{ kind: 'new'; at: Vec } | { kind: 'edit'; id: string } | null>(null)
-const labelInput = ref<HTMLInputElement | null>(null)
+type LabelTarget = ({ kind: 'new'; at: Vec } | { kind: 'edit'; id: string }) & { session: number }
+const labelTarget = ref<LabelTarget | null>(null)
+let labelSessions = 0
+
+function openLabelEditor(target: { kind: 'new'; at: Vec } | { kind: 'edit'; id: string }, text: string) {
+  // One open at a time: the one already open is finished, not thrown away.
+  confirmLabel()
+  labelDraft.value = text
+  labelTarget.value = { ...target, session: ++labelSessions }
+}
 
 function promptNewLabel(at: Vec) {
-  labelDraft.value = ''
-  labelTarget.value = { kind: 'new', at }
+  openLabelEditor({ kind: 'new', at }, '')
 }
 
 /** A label pressed for in the rail rather than dragged: it lands mid-pitch. */
@@ -600,21 +613,102 @@ function promptCentreLabel() {
   promptNewLabel({ x: PITCH_W / 2, y: PITCH_H / 2 })
 }
 
-function promptEditLabel(id: string) {
-  labelDraft.value = board.labelById(id)?.text ?? ''
-  labelTarget.value = { kind: 'edit', id }
+/**
+ * Pointers held down anywhere in the window, so an editor can wait for the
+ * release, and which one pressed last, so it waits for that one's.
+ */
+let pointersDown = 0
+let lastPointerId: number | null = null
+function onWindowPointerDown(event: PointerEvent) {
+  pointersDown++
+  lastPointerId = event.pointerId
+}
+function onWindowPointerUp() {
+  pointersDown = Math.max(0, pointersDown - 1)
 }
 
-function confirmLabel() {
+/** Stops waiting for a release to open an editor, if one is being waited for. */
+let stopWaitingForRelease = () => {}
+
+/**
+ * The board asks on the second press of a double press, while the pointer
+ * is still down. Opened then, the editor would be focused and at once lose
+ * focus to the browser finishing that press — which saves and closes it —
+ * so it opens on the release instead.
+ *
+ * That pointer's release only: another finger lifting is not this press
+ * ending, and a press the system cancels — taken over for a gesture — opens
+ * nothing, rather than leaving the next unrelated release to open it.
+ */
+function promptEditLabel(id: string) {
+  stopWaitingForRelease()
+  const open = () => openLabelEditor({ kind: 'edit', id }, board.labelById(id)?.text ?? '')
+  const pointerId = lastPointerId
+  if (pointersDown === 0 || pointerId === null) return open()
+
+  const onUp = (event: PointerEvent) => {
+    if (event.pointerId !== pointerId) return
+    stopWaitingForRelease()
+    open()
+  }
+  const onCancel = (event: PointerEvent) => {
+    if (event.pointerId === pointerId) stopWaitingForRelease()
+  }
+  window.addEventListener('pointerup', onUp)
+  window.addEventListener('pointercancel', onCancel)
+  stopWaitingForRelease = () => {
+    window.removeEventListener('pointerup', onUp)
+    window.removeEventListener('pointercancel', onCancel)
+    stopWaitingForRelease = () => {}
+  }
+}
+
+/** Place what was typed. Empty places nothing, and empties an existing label off the pitch. */
+function confirmLabel(session?: number) {
   const target = labelTarget.value
   if (!target) return
+  if (session !== undefined && session !== target.session) return
+  labelTarget.value = null
   if (target.kind === 'new') board.addLabel(target.at, labelDraft.value)
   else board.setLabelText(target.id, labelDraft.value)
-  labelTarget.value = null
 }
 
-watch(labelTarget, (target) => focusWhenOpen(target !== null, () => labelInput.value), {
-  flush: 'post',
+/**
+ * A press anywhere on the board finishes the label being typed. Losing focus
+ * does the same on a desktop, but a tap on a phone does not always take focus
+ * from a field, and the board would otherwise go on under an open editor.
+ *
+ * Added with addEventListener rather than `@pointerdown.capture`: Vue stamps
+ * an event with the time its first Vue listener saw it and skips any
+ * listener attached after that, so a Vue capture listener up here would
+ * swallow presses on a piece rendered in the same millisecond.
+ */
+function finishLabelOnPress(event: PointerEvent) {
+  if (!labelTarget.value) return
+  if ((event.target as HTMLElement | null)?.closest?.('[data-label-editor]')) return
+  confirmLabel()
+}
+
+const boardWrap = ref<HTMLElement | null>(null)
+
+/** Bumped when the window changes size, so an open editor follows the pitch. */
+const layoutTick = ref(0)
+function onWindowResize() {
+  layoutTick.value++
+}
+
+/** Where on the board the editor sits, and how big a pitch unit is there. */
+const labelEditorPlace = computed(() => {
+  void layoutTick.value
+  const target = labelTarget.value
+  const svg = boardRef.value?.svgEl
+  const wrap = boardWrap.value
+  if (!target || !svg || !wrap) return null
+  const at = target.kind === 'new' ? target.at : board.labelById(target.id)?.pos
+  if (!at) return null
+  const outer = wrap.getBoundingClientRect()
+  const p = pitchToClient(svg.getBoundingClientRect(), at, board.state.pitch)
+  return { x: p.x - outer.left, y: p.y - outer.top, scale: p.scale }
 })
 
 const renameCounterId = ref<string | null>(null)
@@ -1111,6 +1205,11 @@ onMounted(() => {
     startTour()
   }
   window.addEventListener('keydown', onKeydown)
+  window.addEventListener('resize', onWindowResize)
+  window.addEventListener('pointerdown', onWindowPointerDown, true)
+  window.addEventListener('pointerup', onWindowPointerUp, true)
+  window.addEventListener('pointercancel', onWindowPointerUp, true)
+  boardWrap.value?.addEventListener('pointerdown', finishLabelOnPress, true)
 })
 
 // Autosave the working board, debounced, so a refresh does not lose work.
@@ -1119,6 +1218,12 @@ let saveTimer: ReturnType<typeof setTimeout> | undefined
 onBeforeUnmount(() => {
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('resize', onWindowResize)
+  window.removeEventListener('pointerdown', onWindowPointerDown, true)
+  window.removeEventListener('pointerup', onWindowPointerUp, true)
+  window.removeEventListener('pointercancel', onWindowPointerUp, true)
+  boardWrap.value?.removeEventListener('pointerdown', finishLabelOnPress, true)
+  stopWaitingForRelease()
   // Both debounces, or a board torn down mid-keystroke writes after it is gone.
   clearTimeout(autosaveTimer)
   clearTimeout(saveTimer)
@@ -1186,12 +1291,13 @@ watch(
       />
 
       <div class="stage">
-        <div class="board-wrap">
+        <div ref="boardWrap" class="board-wrap">
           <PitchBoard
             ref="boardRef"
             :tool="tool"
             :draw-color="drawColor"
             :presenting="presenting"
+            :editing-label-id="labelTarget?.kind === 'edit' ? labelTarget.id : null"
             @rename="openRenamePrompt"
             @add-label="promptNewLabel"
             @edit-label="promptEditLabel"
@@ -1200,6 +1306,18 @@ watch(
             @erased="tool = 'select'"
           />
           <PitchEmptyState v-if="showEmptyState && !presenting" />
+
+          <LabelEditor
+            v-if="labelTarget && labelEditorPlace"
+            :key="labelTarget.session"
+            v-model="labelDraft"
+            :x="labelEditorPlace.x"
+            :y="labelEditorPlace.y"
+            :scale="labelEditorPlace.scale"
+            :board="boardRef?.svgEl ?? null"
+            @done="confirmLabel(labelTarget.session)"
+            @cancel="labelTarget = null"
+          />
 
           <!--
             On the pitch, because it is the pitch it expands. Small and
@@ -1279,25 +1397,6 @@ watch(
     <HelpPanel :open="helpOpen" @close="helpOpen = false" @startTour="startTour" />
 
     <TutorialOverlay :blocked="tourBlockedByDialog" @end="endTour" @openHelp="onTourHelp" />
-
-    <div v-if="labelTarget" class="overlay" @click.self="labelTarget = null">
-      <div class="prompt" role="dialog" aria-label="Label text">
-        <label for="label-text">Label</label>
-        <input
-          id="label-text"
-          ref="labelInput"
-          v-model="labelDraft"
-          data-label-input
-          class="input"
-          :maxlength="MAX_LABEL_LENGTH"
-          @keyup.enter="confirmLabel"
-        />
-        <div class="prompt-actions">
-          <button data-label-save class="chip" @click="confirmLabel">Save</button>
-          <button data-label-cancel class="chip" @click="labelTarget = null">Cancel</button>
-        </div>
-      </div>
-    </div>
 
     <div v-if="savePromptOpen" class="overlay" @click.self="savePromptOpen = false">
       <div class="prompt" role="dialog" :aria-label="savePromptTitle">

@@ -9,6 +9,7 @@ import {
   viewBoundsOf,
   fromView,
   clientToPitch,
+  pitchToClient,
   clampToPitch,
   distance,
   curveControlPoint,
@@ -375,5 +376,25 @@ describe('the pitch a board is drawn from', () => {
     expect(clampToPitch({ x: 10, y: 30 }, 'half')).toEqual({ x: 25, y: 30 })
     expect(clampToPitch({ x: 90, y: 30 }, 'half')).toEqual({ x: 75, y: 30 })
     expect(clampToPitch({ x: 10, y: 30 }, 'full')).toEqual({ x: 10, y: 30 })
+  })
+})
+
+describe('pitchToClient', () => {
+  const rect = { left: 10, top: 20, width: 400, height: 600 }
+
+  it('undoes clientToPitch, rotated or not', () => {
+    for (const rotated of [false, true]) {
+      const pitch = { type: 'full' as const, rotated }
+      const p = { x: 30, y: 12 }
+      const screen = pitchToClient(rect, p, pitch)
+      const back = clientToPitch(rect, screen.x, screen.y, pitch)
+      expect(back.x).toBeCloseTo(p.x)
+      expect(back.y).toBeCloseTo(p.y)
+    }
+  })
+
+  it('reports pixels per pitch unit', () => {
+    // 400px across the 100-unit pitch; the height has room to spare.
+    expect(pitchToClient(rect, { x: 0, y: 0 }, { type: 'full', rotated: false }).scale).toBe(4)
   })
 })

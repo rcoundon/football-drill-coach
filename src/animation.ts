@@ -17,11 +17,17 @@ export const MIN_FRAME_MS = 100
 /** Longer than this is a pause, and a pause wants its own frame. */
 export const MAX_FRAME_MS = 10_000
 
+/**
+ * A label as drawn. `opacity` is set only mid-move, on a label that is on
+ * one side of the move and not the other.
+ */
+export type LabelView = Label & { opacity?: number }
+
 /** What the board renders: a frame, or a blend of two. */
 export type FrameView = {
   counters: Counter[]
   markers: Marker[]
-  labels: Label[]
+  labels: LabelView[]
   balls: Ball[]
   drawings: Drawing[]
 }
@@ -160,6 +166,27 @@ function tweenAll<T extends { id: string; pos: Vec }>(from: T[], to: T[], e: num
 }
 
 /**
+ * Labels belong to their phase, so unlike the cast they come and go. One on
+ * both sides of the move glides like a cone; one only on the phase being
+ * left fades out where it stands, and one only on the phase arrived at
+ * fades in where it will stand.
+ */
+function tweenLabels(from: Label[], to: Label[], e: number): LabelView[] {
+  const staying = tweenAll(
+    from.filter((label) => to.some((other) => other.id === label.id)),
+    to,
+    e,
+  )
+  const leaving = from
+    .filter((label) => !to.some((other) => other.id === label.id))
+    .map((label) => ({ ...label, opacity: 1 - e }))
+  const arriving = to
+    .filter((label) => !from.some((other) => other.id === label.id))
+    .map((label) => ({ ...label, opacity: e }))
+  return [...staying, ...leaving, ...arriving]
+}
+
+/**
  * Move each player towards where the next phase puts them, along the curve
  * that phase asks for.
  *
@@ -272,7 +299,7 @@ export function interpolateFrames(a: Frame, b: Frame, t: number): FrameView {
   return {
     counters,
     markers: tweenAll(a.markers, b.markers, e),
-    labels: tweenAll(a.labels, b.labels, e),
+    labels: tweenLabels(a.labels, b.labels, e),
     balls,
     drawings: a.drawings,
   }
