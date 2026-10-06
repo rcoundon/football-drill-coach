@@ -129,11 +129,12 @@ the moment it describes, so the arrow showing a pass is on screen while the
 pass happens and gone once you rub it out on the next frame.
 
 Your squad is the same in every moment. Adding, removing or renaming a
-player, cone or label reaches every frame; only positions and drawings differ
-between them. Nobody appears halfway through a drill. **Copy** reaches every
-frame too: duplicating a player copies their run rather than just where they
-stand right now, so the copy repeats the same movement, offset, through the
-whole drill.
+player, cone or ball reaches every frame; only positions, drawings and text
+labels differ between them. Nobody appears halfway through a drill. **Copy**
+reaches every frame too: duplicating a player copies their run rather than just
+where they stand right now, so the copy repeats the same movement, offset,
+through the whole drill. Labels are the exception: adding, editing, removing or
+copying one changes only the phase you are on.
 
 **GIF** saves the whole thing as an animation that loops — it plays inline in a
 message or a document, which is where a session plan goes. It appears once

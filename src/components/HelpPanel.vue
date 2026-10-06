@@ -125,8 +125,10 @@ const emit = defineEmits<{ close: []; startTour: [] }>()
           </li>
           <li>
             Moving anything changes only the phase you're on. Your squad is drill-wide, though:
-            adding, removing or renaming a player, cone, label or ball reaches every phase, so
-            nobody appears halfway through. Copying a player copies their whole run.
+            adding, removing or renaming a player, cone or ball reaches every phase, so
+            nobody appears halfway through. Copying a player copies their whole run. Text
+            labels are the exception: adding, editing, removing or copying one changes only
+            the phase you're on.
           </li>
           <li>
             <strong>Timing.</strong> Each card after the first carries how long the move into it
