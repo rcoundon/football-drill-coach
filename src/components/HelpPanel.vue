@@ -41,7 +41,9 @@ const emit = defineEmits<{ close: []; startTour: [] }>()
           </li>
           <li>
             Cones and text labels drop where you tap, drag with Select, and come off with Erase.
-            Double-press a label to change what it says; Shift+Enter starts a new line.
+            You type a label straight onto the pitch where it goes: Enter or a press elsewhere
+            places it, Escape drops it, Shift+Enter starts a new line. Double-press a label
+            to retype it in place.
             A label belongs to the phase you put it on, like a drawing: a new phase starts
             with a copy you can reword or remove, and in playback labels fade in and out.
           </li>

@@ -51,6 +51,8 @@ const props = defineProps<{
    * controls that would say so are on screen.
    */
   presenting?: boolean
+  /** The label being retyped on the pitch, which the board leaves off meanwhile. */
+  editingLabelId?: string | null
 }>()
 const emit = defineEmits<{
   rename: [id: string]
@@ -1152,6 +1154,7 @@ function onPointerUp(event: PointerEvent) {
     :counter-labels-visible="board.state.counterLabelsVisible"
     :balls-visible="board.state.ballsVisible"
     :selected-drawing-ids="selectedDrawingIds"
+    :hidden-label-id="editingLabelId"
     @grab-counter="onCounterGrab"
     @grab-marker="onMarkerGrab"
     @grab-label="onLabelGrab"

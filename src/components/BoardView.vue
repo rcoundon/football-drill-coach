@@ -32,6 +32,8 @@ const props = defineProps<{
   ballsVisible: boolean
   /** Drawings to draw a halo behind. Absent for a board nobody is editing. */
   selectedDrawingIds?: string[]
+  /** A label being retyped in place, left off so its old words do not show through. */
+  hiddenLabelId?: string | null
 }>()
 
 /**
@@ -118,7 +120,7 @@ defineExpose({ svgEl })
         @grab="(event: PointerEvent) => emit('grabCounter', counter.id, event)"
       />
       <PitchLabel
-        v-for="label in labelsVisible ? frame.labels : []"
+        v-for="label in labelsVisible ? frame.labels.filter((l) => l.id !== hiddenLabelId) : []"
         :key="label.id"
         :label="label"
         :rotated="pitch.rotated"

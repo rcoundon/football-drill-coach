@@ -2187,25 +2187,32 @@ describe('the ball shortcut', () => {
 })
 
 describe('adding a label', () => {
-  it('asks for the text, then puts it on the pitch', async () => {
+  async function openNew(at = { x: 30, y: 20 }) {
+    const app = wrapper!
+    await app.findComponent({ name: 'PitchBoard' }).vm.$emit('addLabel', at)
+    await app.vm.$nextTick()
+    await nextTick()
+    return app.find('[data-label-input]')
+  }
+
+  it('is typed on the pitch, focused, with no dialog in the way', async () => {
     const board = useBoard()
     wrapper = mount(App, { attachTo: document.body })
     await wrapper.vm.$nextTick()
 
-    await wrapper.findComponent({ name: 'PitchBoard' }).vm.$emit('addLabel', { x: 30, y: 20 })
-    await wrapper.vm.$nextTick()
-    await nextTick()
-
-    const input = wrapper.find('[data-label-input]')
+    const input = await openNew()
     expect(input.exists()).toBe(true)
     expect(document.activeElement).toBe(input.element)
+    expect(wrapper.find('.board-wrap [data-label-input]').exists()).toBe(true)
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
 
     await input.setValue('Press trigger')
-    await wrapper.find('[data-label-save]').trigger('click')
+    await input.trigger('keydown', { key: 'Enter' })
     await wrapper.vm.$nextTick()
 
     expect(board.state.labels).toHaveLength(1)
     expect(board.state.labels[0].text).toBe('Press trigger')
+    expect(wrapper.find('[data-label-input]').exists()).toBe(false)
   })
 
   it('saves on Enter, and takes a new line on Shift+Enter', async () => {
@@ -2213,10 +2220,7 @@ describe('adding a label', () => {
     wrapper = mount(App, { attachTo: document.body })
     await wrapper.vm.$nextTick()
 
-    await wrapper.findComponent({ name: 'PitchBoard' }).vm.$emit('addLabel', { x: 30, y: 20 })
-    await wrapper.vm.$nextTick()
-
-    const input = wrapper.find('[data-label-input]')
+    const input = await openNew()
     await input.setValue('Overload')
     await input.trigger('keydown', { key: 'Enter', shiftKey: true })
     expect(board.state.labels).toHaveLength(0)
@@ -2231,20 +2235,63 @@ describe('adding a label', () => {
     expect(board.state.labels[0].text).toBe('Overload\nthen switch')
   })
 
-  it('adds nothing when the prompt is cancelled', async () => {
+  it('saves when the coach clicks away from it', async () => {
     const board = useBoard()
     wrapper = mount(App, { attachTo: document.body })
     await wrapper.vm.$nextTick()
 
-    await wrapper.findComponent({ name: 'PitchBoard' }).vm.$emit('addLabel', { x: 30, y: 20 })
-    await wrapper.vm.$nextTick()
-    await wrapper.find('[data-label-cancel]').trigger('click')
+    const input = await openNew()
+    await input.setValue('Press trigger')
+    await input.trigger('blur')
     await wrapper.vm.$nextTick()
 
+    expect(board.state.labels.map((l) => l.text)).toEqual(['Press trigger'])
+  })
+
+  it('is finished by a press on the board, which a phone may not count as leaving the field', async () => {
+    const board = useBoard()
+    wrapper = mountApp()
+    await wrapper.vm.$nextTick()
+
+    const input = await openNew()
+    await input.setValue('Press trigger')
+    await firePointer(wrapper.find('.stage svg').element, 'pointerdown', clientFor(70, 40))
+    await wrapper.vm.$nextTick()
+
+    expect(board.state.labels.map((l) => l.text)).toEqual(['Press trigger'])
+    expect(wrapper.find('[data-label-input]').exists()).toBe(false)
+  })
+
+  it('finishes the one being typed when the pitch asks for another', async () => {
+    const board = useBoard()
+    wrapper = mount(App, { attachTo: document.body })
+    await wrapper.vm.$nextTick()
+
+    const first = await openNew({ x: 30, y: 20 })
+    await first.setValue('First')
+    const second = await openNew({ x: 60, y: 40 })
+    await second.setValue('Second')
+    await second.trigger('keydown', { key: 'Enter' })
+    await wrapper.vm.$nextTick()
+
+    expect(board.state.labels.map((l) => l.text)).toEqual(['First', 'Second'])
+  })
+
+  it('adds nothing when Escape is pressed', async () => {
+    const board = useBoard()
+    wrapper = mount(App, { attachTo: document.body })
+    await wrapper.vm.$nextTick()
+
+    const input = await openNew()
+    await input.setValue('Never mind')
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[data-label-input]').exists()).toBe(false)
     expect(board.state.labels).toHaveLength(0)
   })
 
-  it('edits an existing label, pre-filled with its text', async () => {
+  it('edits an existing label in place, pre-filled, with the old one hidden meanwhile', async () => {
     const board = useBoard()
     const label = board.addLabel({ x: 30, y: 20 }, 'Before')!
     wrapper = mount(App, { attachTo: document.body })
@@ -2255,12 +2302,15 @@ describe('adding a label', () => {
     await nextTick()
 
     const input = wrapper.find('[data-label-input]')
-    expect((input.element as HTMLInputElement).value).toBe('Before')
+    expect((input.element as HTMLTextAreaElement).value).toBe('Before')
+    expect(wrapper.find('[data-label]').exists()).toBe(false)
+
     await input.setValue('After')
-    await wrapper.find('[data-label-save]').trigger('click')
+    await input.trigger('keydown', { key: 'Enter' })
     await wrapper.vm.$nextTick()
 
     expect(board.labelById(label.id)!.text).toBe('After')
+    expect(wrapper.find('[data-label]').exists()).toBe(true)
   })
 })
 

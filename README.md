@@ -40,7 +40,7 @@ the text takes the label away again.
 | Pass | `S` | Dashed arrow |
 | Line | `L` | Straight line for marking out zones, channels and thirds |
 | Cone | `C` | Tap the pitch to drop a cone; drag one to move it |
-| Text | `T` | Tap the pitch to drop a label; drag or double-press one to adjust it |
+| Text | `T` | Tap the pitch and type the label where it goes; drag or double-press one to adjust it |
 | Erase | `E` | Remove whatever you press |
 
 Undo is `Ctrl+Z` (`Cmd+Z` on a Mac), redo is `Ctrl+Shift+Z`.
@@ -172,7 +172,9 @@ Cones are equipment rather than players: they carry no number, and a ball
 never belongs to one, so a cone beside a player can't steal possession. Drag
 them with **Select** and remove them with **Erase**.
 
-Text labels can run to a few lines (Shift+Enter for a new one). Unlike cones,
+Text labels are typed straight onto the pitch, at the spot they will sit:
+Enter or a press anywhere else places one, Escape drops it. They can run to a
+few lines (Shift+Enter for a new one). Unlike cones,
 a label belongs to the phase you put it on, the way a drawing does. A new
 phase starts with a copy of the current phase's labels, which you can reword or
 remove there without touching the earlier phase. In playback a label kept

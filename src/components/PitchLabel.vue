@@ -1,19 +1,18 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { LabelView } from '../animation'
-import { labelLines } from './labelLines'
+import {
+  LABEL_FONT_SIZE as FONT_SIZE,
+  LABEL_GLYPH_EM,
+  LABEL_LINE_HEIGHT as LINE_HEIGHT,
+  labelLines,
+} from './labelLines'
 
 const props = defineProps<{ label: LabelView; rotated: boolean }>()
 defineEmits<{ grab: [event: PointerEvent] }>()
 
-/** Pitch units. Readable on a tablet without swamping the players. */
-const FONT_SIZE = 2.6
-
-/** Distance between one line's middle and the next, in pitch units. */
-const LINE_HEIGHT = FONT_SIZE * 1.25
-
 /** Roughly half an average glyph's width at this size, in pitch units. */
-const HALF_GLYPH = FONT_SIZE * 0.28
+const HALF_GLYPH = (FONT_SIZE * LABEL_GLYPH_EM) / 2
 
 const lines = computed(() => labelLines(props.label.text))
 

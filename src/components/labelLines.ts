@@ -1,3 +1,16 @@
+/** A label's text size, in pitch units. Readable on a tablet without swamping the players. */
+export const LABEL_FONT_SIZE = 2.6
+
+/** Distance between one line's middle and the next, in pitch units. */
+export const LABEL_LINE_HEIGHT = LABEL_FONT_SIZE * 1.25
+
+/**
+ * An average glyph's width, as a share of the text size. An estimate, since
+ * SVG text cannot be measured before it is drawn, but the plate behind a
+ * label and the field it is typed into both size from it, so they agree.
+ */
+export const LABEL_GLYPH_EM = 0.56
+
 /**
  * How many characters a pitch label runs to before it wraps. Wide enough
  * for a short cue to stay on one line, narrow enough that a sentence of
