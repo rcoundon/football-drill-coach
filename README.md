@@ -26,7 +26,7 @@ npm run dev
 ## Using it
 
 Click a colour under **Players** to drop a counter, then drag it into position. Dropping
-one switches you to **Move**, since positioning the new player is nearly always the next
+one switches you to **Select**, since positioning the new player is nearly always the next
 thing you do.
 Counters arrive unlabelled: most drills are explained by colour and position. If you want
 numbers or initials, double-press a counter and type them — up to four characters. Clearing
@@ -34,7 +34,7 @@ the text takes the label away again.
 
 | Tool | Key | What it does |
 | --- | --- | --- |
-| Move | `V` | Drag counters and balls, and bend arrows |
+| Select | `V` | Drag counters and balls, and bend arrows |
 | Draw | `P` | Freehand pen |
 | Run | `R` | Solid arrow |
 | Pass | `S` | Dashed arrow |
@@ -64,7 +64,7 @@ keeps its shape and its lean while its ends move, and a line still snaps back
 onto the horizontal or vertical. Lines get rings too, though they have no bend
 dot: a line marks out ground rather than describing a movement.
 
-**Gathering a group.** Under **Move**, drag from bare grass to draw a box:
+**Gathering a group.** Under **Select**, drag from bare grass to draw a box:
 every player, cone, label and drawing inside joins the group and gets a
 highlight. Drag any member and the whole shape slides together, formation
 intact. A plain press on grass, `Escape`, or changing tool puts everything
@@ -90,7 +90,7 @@ player is carrying does not: it goes where its carrier goes, so it comes along
 only if they were in the box too. You cannot lasso a ball out of someone's
 feet.
 
-**Going back to a drawing.** Under **Move**, press any drawing to pick it up.
+**Going back to a drawing.** Under **Select**, press any drawing to pick it up.
 It gets a pale halo and its handles appear — nothing else on the board does,
 so a busy drill stays readable. Handles are for one drawing at a time: a group
 of five arrows has no single bend to offer, so it shows none. Drag its body to slide the whole thing without
@@ -169,7 +169,13 @@ drill, and it applies to the whole drill rather than to one phase.
 
 Cones are equipment rather than players: they carry no number, and a ball
 never belongs to one, so a cone beside a player can't steal possession. Drag
-them with **Move** and remove them with **Erase**.
+them with **Select** and remove them with **Erase**.
+
+Text labels can run to a few lines (Shift+Enter for a new one). Unlike cones,
+a label belongs to the phase you put it on, the way a drawing does. A new
+phase starts with a copy of the current phase's labels, which you can reword or
+remove there without touching the earlier phase. In playback a label kept
+across phases glides with the move, and one that appears or disappears fades.
 
 **Clear players** takes everyone off and leaves your drawings and cones. **Clear drawings**
 does the reverse. **Reset** starts a fresh board for the next drill: it clears players,

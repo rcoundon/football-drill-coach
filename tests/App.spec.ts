@@ -489,7 +489,7 @@ describe('renaming a counter label', () => {
    * on placing and moving. Leaving Erase armed meant the next press on the
    * pitch took out something they meant to keep.
    */
-  it('returns to Move once something is erased', async () => {
+  it('returns to Select once something is erased', async () => {
     useBoard().addCounter('red')
     wrapper = mountApp()
     fire({ key: 'e' })
@@ -2208,6 +2208,25 @@ describe('adding a label', () => {
     expect(board.state.labels[0].text).toBe('Press trigger')
   })
 
+  it('saves on Enter, and takes a new line on Shift+Enter', async () => {
+    const board = useBoard()
+    wrapper = mount(App, { attachTo: document.body })
+    await wrapper.vm.$nextTick()
+
+    await wrapper.findComponent({ name: 'PitchBoard' }).vm.$emit('addLabel', { x: 30, y: 20 })
+    await wrapper.vm.$nextTick()
+
+    const input = wrapper.find('[data-label-input]')
+    await input.setValue('Overload')
+    await input.trigger('keydown', { key: 'Enter', shiftKey: true })
+    expect(board.state.labels).toHaveLength(0)
+
+    await input.setValue('Overload\nthen switch')
+    await input.trigger('keydown', { key: 'Enter' })
+    await wrapper.vm.$nextTick()
+    expect(board.state.labels[0].text).toBe('Overload\nthen switch')
+  })
+
   it('adds nothing when the prompt is cancelled', async () => {
     const board = useBoard()
     wrapper = mount(App, { attachTo: document.body })
@@ -2580,7 +2599,7 @@ describe('space plays and pauses', () => {
  * same guard sits in front of every other shortcut too: Escape, Delete,
  * Backspace and the tool letters do nothing on a focused button natively,
  * so exempting BUTTON there was never protecting anything — it was only
- * silencing them. A coach who clicks Move, boxes a group, and presses
+ * silencing them. A coach who clicks Select, boxes a group, and presses
  * Delete does this constantly, since the button they just clicked keeps
  * focus. These three pin that the fix belongs on Space alone.
  */

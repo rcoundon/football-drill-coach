@@ -64,8 +64,7 @@ function onToolKeydown(index: number, event: KeyboardEvent): void {
  */
 const TOOL_ICONS: Record<ToolMode, { d: string; dashed?: boolean }[]> = {
   select: [
-    { d: 'M12 2v20' }, { d: 'm15 19-3 3-3-3' }, { d: 'm19 9 3 3-3 3' },
-    { d: 'M2 12h20' }, { d: 'm5 9-3 3 3 3' }, { d: 'm9 5 3-3 3 3' },
+    { d: 'M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z' },
   ],
   pen: [
     { d: 'M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z' },
@@ -100,7 +99,7 @@ const TOOL_KEYS: Record<ToolMode, string> = {
 /**
  * A new player arrives where the board decides, which is rarely where the
  * coach wants them, so the next thing they do is drag them. Switching to
- * Move saves a trip to the tool row for a step that follows nearly every
+ * Select saves a trip to the tool row for a step that follows nearly every
  * time — and unlike Cone, a colour swatch is not a tool the coach chose to
  * stay in, so there is nothing to switch back to.
  *
@@ -171,7 +170,7 @@ function placeBall(event: PointerEvent): void {
 }
 
 /**
- * Straight to Move afterwards, like a player: a cone dropped on the pitch is
+ * Straight to Select afterwards, like a player: a cone dropped on the pitch is
  * one the coach is about to nudge into place, and the Cone tool is for
  * laying out a line of them rather than for the one just placed.
  */

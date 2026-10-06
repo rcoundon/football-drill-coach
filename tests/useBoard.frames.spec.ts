@@ -318,14 +318,19 @@ describe('the cast is drill-wide', () => {
     expect(board.state.frames[1].counters[0].label).toBe('7')
   })
 
-  it('cones and labels follow the same rule', () => {
+  it('cones follow the same rule', () => {
     board.addFrame()
     board.addMarker({ x: 10, y: 10 })
-    board.addLabel({ x: 20, y: 20 }, 'press')
     expect(board.state.frames[0].markers).toHaveLength(1)
-    expect(board.state.frames[0].labels).toHaveLength(1)
     board.deleteMarker(board.state.markers[0].id)
     expect(board.state.frames[0].markers).toHaveLength(0)
+  })
+
+  it('a label does not — like a drawing, it belongs to its moment', () => {
+    board.addFrame()
+    board.addLabel({ x: 20, y: 20 }, 'press')
+    expect(board.state.frames[1].labels).toHaveLength(1)
+    expect(board.state.frames[0].labels).toHaveLength(0)
   })
 
   it('a drawing does not — it belongs to the moment it describes', () => {

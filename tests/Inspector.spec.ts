@@ -157,6 +157,16 @@ describe('with a text label held', () => {
     await field.trigger('change')
     expect(board.labelById(label.id)!.text).toBe('Underload')
   })
+
+  it('takes several lines', async () => {
+    const label = board.addLabel({ x: 50, y: 30 }, 'Overload')!
+    const wrapper = mountInspector([{ kind: 'label', id: label.id }])
+    const field = wrapper.find('[data-selection-label]')
+    expect(field.element.tagName).toBe('TEXTAREA')
+    await field.setValue('Overload\nthen switch')
+    await field.trigger('change')
+    expect(board.labelById(label.id)!.text).toBe('Overload\nthen switch')
+  })
 })
 
 describe('while the drill is mid-move', () => {

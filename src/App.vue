@@ -588,7 +588,7 @@ watch(helpOpen, (open) => {
  */
 const labelDraft = ref('')
 const labelTarget = ref<{ kind: 'new'; at: Vec } | { kind: 'edit'; id: string } | null>(null)
-const labelInput = ref<HTMLInputElement | null>(null)
+const labelInput = ref<HTMLTextAreaElement | null>(null)
 
 function promptNewLabel(at: Vec) {
   labelDraft.value = ''
@@ -795,7 +795,7 @@ const renameLabelInput = ref<HTMLInputElement | null>(null)
  * These watchers run with flush: 'post', which fires after the DOM has been
  * patched, so the element is there to focus by the time we look for it.
  */
-function focusWhenOpen(open: boolean, field: () => HTMLInputElement | null) {
+function focusWhenOpen(open: boolean, field: () => HTMLInputElement | HTMLTextAreaElement | null) {
   if (!open) return
   field()?.focus()
   field()?.select()
@@ -1283,15 +1283,23 @@ watch(
     <div v-if="labelTarget" class="overlay" @click.self="labelTarget = null">
       <div class="prompt" role="dialog" aria-label="Label text">
         <label for="label-text">Label</label>
-        <input
+        <!--
+          Several lines' worth, since a label can explain a phase as well as
+          name a cue. Enter still saves, as it does in every other prompt;
+          Shift+Enter starts a new line.
+        -->
+        <textarea
           id="label-text"
           ref="labelInput"
           v-model="labelDraft"
           data-label-input
-          class="input"
+          class="input label-text"
+          rows="4"
           :maxlength="MAX_LABEL_LENGTH"
-          @keyup.enter="confirmLabel"
-        />
+          placeholder="Press trigger — or a few lines on what happens here"
+          @keydown.enter.exact.prevent="confirmLabel"
+        ></textarea>
+        <p class="hint">Shift+Enter for a new line.</p>
         <div class="prompt-actions">
           <button data-label-save class="chip" @click="confirmLabel">Save</button>
           <button data-label-cancel class="chip" @click="labelTarget = null">Cancel</button>
@@ -1566,6 +1574,7 @@ body { font-family: var(--font-ui); background: var(--bg-app); }
   display: grid; gap: 0.5rem; min-width: 18rem; max-width: min(26rem, calc(100vw - 2rem));
 }
 .prompt-actions { display: flex; gap: 0.4rem; }
+.label-text { resize: vertical; font: inherit; line-height: 1.4; }
 .input { padding: 0.4rem; border-radius: 0.3rem; border: 1px solid #ffffff40; background: var(--surface-2); color: inherit; }
 .chip { border: 1px solid #ffffff40; background: var(--surface-3); color: inherit; border-radius: 0.4rem; padding: 0.35rem 0.7rem; cursor: pointer; }
 .chip--danger { background: var(--error-solid); border-color: transparent; color: #ffffff; }

@@ -32,7 +32,7 @@ const emit = defineEmits<{ close: []; startTour: [] }>()
         <ul class="points">
           <li>
             Drag a colour straight onto the spot you want, or press it to drop a player in the
-            middle. Either way you end up holding <strong>Move</strong>. Balls, cones and text
+            middle. Either way you end up holding <strong>Select</strong>. Balls, cones and text
             labels come out the same way.
           </li>
           <li>
@@ -40,8 +40,10 @@ const emit = defineEmits<{ close: []; startTour: [] }>()
             Double-press one to type up to four characters; clear the text to lose the label.
           </li>
           <li>
-            Cones and text labels drop where you tap, drag with Move, and come off with Erase.
-            Double-press a label to change what it says.
+            Cones and text labels drop where you tap, drag with Select, and come off with Erase.
+            Double-press a label to change what it says; Shift+Enter starts a new line.
+            A label belongs to the phase you put it on, like a drawing: a new phase starts
+            with a copy you can reword or remove, and in playback labels fade in and out.
           </li>
           <li>
             Drop a ball on a player to give them possession: they get a white ring, and the
@@ -65,7 +67,7 @@ const emit = defineEmits<{ close: []; startTour: [] }>()
         <p class="lead">
           <strong>Draw</strong> is a freehand pen. <strong>Run</strong> is a solid arrow for a
           player, <strong>Pass</strong> a dashed one for the ball. <strong>Line</strong> marks
-          out a zone or a third. <strong>Erase</strong> removes whatever you press, then hands you back to Move.
+          out a zone or a third. <strong>Erase</strong> removes whatever you press, then hands you back to Select.
         </p>
         <ul class="points">
           <li>
@@ -78,7 +80,7 @@ const emit = defineEmits<{ close: []; startTour: [] }>()
             end alone — a curved arrow keeps its shape, and a straight line still snaps square.
           </li>
           <li>
-            <strong>Change it later.</strong> Press a drawing under Move to pick it back up: it
+            <strong>Change it later.</strong> Press a drawing under Select to pick it back up: it
             gets a pale halo and its handles back. Bare grass, <kbd>Escape</kbd> or a new tool
             puts it down.
           </li>
@@ -88,7 +90,7 @@ const emit = defineEmits<{ close: []; startTour: [] }>()
       <section data-help-section="groups" class="section">
         <h3>Several things at once</h3>
         <p class="lead">
-          Under Move, drag from bare grass to draw a box. Everything inside joins a group and
+          Under Select, drag from bare grass to draw a box. Everything inside joins a group and
           slides together, formation intact.
         </p>
         <ul class="points">
@@ -133,7 +135,7 @@ const emit = defineEmits<{ close: []; startTour: [] }>()
           </li>
           <li>
             <strong>Curving a run.</strong> A player travels in a straight line from where they
-            stood before. To bend that, draw a box round them alone under Move on any phase
+            stood before. To bend that, draw a box round them alone under Select on any phase
             after the first: a dashed trail shows the path they took to get here, with a dot at
             its middle. Drag the dot off the trail to bow the run, or along it to move where the
             bow peaks. Drag it back onto the line, or press <strong>Straighten</strong> in the
@@ -290,7 +292,7 @@ const emit = defineEmits<{ close: []; startTour: [] }>()
             <tr><th>Key</th><th>What it does</th></tr>
           </thead>
           <tbody>
-            <tr><td><kbd>V</kbd></td><td>Move — drag players, cones, labels and balls; bend and reshape drawings</td></tr>
+            <tr><td><kbd>V</kbd></td><td>Select — drag players, cones, labels and balls; bend and reshape drawings</td></tr>
             <tr><td><kbd>D</kbd></td><td>Draw — freehand pen</td></tr>
             <tr><td><kbd>R</kbd></td><td>Run — solid arrow</td></tr>
             <tr><td><kbd>P</kbd></td><td>Pass — dashed arrow</td></tr>

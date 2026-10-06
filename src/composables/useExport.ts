@@ -97,7 +97,7 @@ const NOTES_LINE_HEIGHT = 42
 /**
  * A copy of the board with its editing affordances removed.
  *
- * The bend handles are on screen whenever the Move tool is selected, which
+ * The bend handles are on screen whenever the Select tool is selected, which
  * is most of the time — rasterising the live board would bake a dot onto
  * every arrow in the coach's image. Anything marked `data-transient` is
  * dropped, so an affordance added later is excluded without anyone having to
