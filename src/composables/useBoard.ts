@@ -19,6 +19,7 @@ import {
   boundsOf,
   clampToPitch,
   distance,
+  GOAL_MIN_WIDTH,
   goalPostTo,
   goalPostsAt,
   snapToAxis,
@@ -978,7 +979,12 @@ function moveGoalPost(id: string, post: 'a' | 'b', pos: Vec): void {
   const goal = goalById(id)
   if (!goal) return
   const fixed = post === 'a' ? goal.b : goal.a
-  goal[post] = clampToPitch(goalPostTo(fixed, clampToPitch(pos, state.pitch.type)), state.pitch.type)
+  const next = clampToPitch(goalPostTo(fixed, clampToPitch(pos, state.pitch.type)), state.pitch.type)
+  // Pulling the post back onto the pitch can undo the minimum `goalPostTo`
+  // kept to — a post dragged past the touchline towards the other one ends
+  // up nearer it than a goal can be. The post stays where it was instead.
+  if (distance(fixed, next) < GOAL_MIN_WIDTH) return
+  goal[post] = next
 }
 
 /** Turn the net round to the other side of the posts. */

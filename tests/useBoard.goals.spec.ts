@@ -57,6 +57,23 @@ describe('moveGoalPost', () => {
   })
 })
 
+describe('moveGoalPost at the touchline', () => {
+  it('leaves the post where it was rather than let the pitch edge squeeze the goal', () => {
+    const board = useBoard()
+    const goal = board.addGoal({ x: 50, y: 30 })!
+    // Upright against the top touchline, one post just inside it.
+    const live = board.goalById(goal.id)!
+    live.a = { x: 50, y: 0.5 }
+    live.b = { x: 50, y: 0.5 + GOAL_DEFAULT_WIDTH }
+    const before = { ...board.goalById(goal.id)!.b }
+    // Dragged up past the touchline, towards the other post.
+    board.moveGoalPost(goal.id, 'b', { x: 50, y: -2 })
+    const after = board.goalById(goal.id)!
+    expect(distance(after.a, after.b)).toBeGreaterThanOrEqual(GOAL_MIN_WIDTH - 1e-9)
+    expect(after.b).toEqual(before)
+  })
+})
+
 describe('flipGoal and deleteGoal', () => {
   it('turns the net round, undoably', () => {
     const board = useBoard()
