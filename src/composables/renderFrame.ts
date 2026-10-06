@@ -53,6 +53,7 @@ export async function renderFrameToDataUrl(
     labelsVisible: snapshot.labelsVisible,
     counterLabelsVisible: snapshot.counterLabelsVisible,
     ballsVisible: snapshot.ballsVisible,
+    goals: snapshot.goals ?? [],
   })
 
   try {

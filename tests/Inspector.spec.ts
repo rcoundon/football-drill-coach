@@ -146,6 +146,17 @@ describe('with several things held', () => {
   })
 })
 
+describe('with a goal held', () => {
+  it('shows its width and flips it', async () => {
+    const goal = board.addGoal({ x: 30, y: 30 })!
+    const wrapper = mountInspector([{ kind: 'goal', id: goal.id }])
+    expect(wrapper.find('[data-inspector-title]').text()).toBe('Goal')
+    expect(wrapper.find('[data-goal-width]').text()).toBe('3.0m')
+    await wrapper.find('[data-flip-goal]').trigger('click')
+    expect(board.goalById(goal.id)!.flipped).toBe(true)
+  })
+})
+
 describe('with a text label held', () => {
   it('edits what it says', async () => {
     const label = board.addLabel({ x: 50, y: 30 }, 'Overload')!

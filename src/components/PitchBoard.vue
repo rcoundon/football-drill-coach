@@ -121,6 +121,7 @@ function dropFromPalette(what: PlacementKind, clientX: number, clientY: number):
   if (what.kind === 'player') board.addCounter(what.color, at)
   else if (what.kind === 'ball') board.addBall(at)
   else if (what.kind === 'cone') board.addMarker(at)
+  else if (what.kind === 'goal') board.addGoal(at)
   // A label with no text is nothing to look at, so the app asks for it and
   // places the label itself — the same way a press on the pitch with the
   // Text tool already does.
@@ -147,6 +148,7 @@ type DragTarget =
   | { kind: 'bend'; id: string }
   | { kind: 'counter-bend'; id: string }
   | { kind: 'end'; id: string; end: 'from' | 'to' }
+  | { kind: 'post'; id: string; post: 'a' | 'b' }
   | { kind: 'body'; id: string }
   | { kind: 'group' }
   | { kind: 'marquee'; to: Vec }
@@ -462,6 +464,52 @@ function onMarkerGrab(id: string, event: PointerEvent) {
   }
 }
 
+/**
+ * A press on a goal. Under Erase it comes off; under Select it is picked up,
+ * which puts handles on its posts, and dragged whole.
+ *
+ * Not while presenting: a goal is part of the playing area, not a piece a
+ * coach pushes about to make a point.
+ */
+function onGoalGrab(id: string, event: PointerEvent) {
+  if (board.isDerived.value || props.presenting) return
+  if (!board.goalById(id)) return
+  if (props.tool === 'erase') {
+    event.stopPropagation()
+    board.deleteGoal(id)
+    emit('erased')
+    return
+  }
+  if (props.tool !== 'select' || dragIsLive()) return
+  event.stopPropagation()
+  if (grabsGroup('goal', id, event)) return
+  // Held on its own, then slid exactly as a group of one is — the same
+  // step-by-step delta, and no undo entry until it actually moves.
+  selection.value = [{ kind: 'goal', id }]
+  startGroupDrag(event)
+}
+
+/** A press on a post's handle: widen, narrow or turn the goal about the other post. */
+function onPostGrab(id: string, post: 'a' | 'b', event: PointerEvent) {
+  if (board.isDerived.value || dragIsLive()) return
+  const goal = board.goalById(id)
+  if (!goal) return
+  event.stopPropagation()
+  capture(event)
+  board.commit() // one entry for the whole drag
+  const at = toPitch(event)
+  drag.value = {
+    kind: 'post',
+    id,
+    post,
+    pointerId: event.pointerId,
+    origin: at,
+    grabOffset: { x: goal[post].x - at.x, y: goal[post].y - at.y },
+    moved: false,
+    startedAt: Date.now(),
+  }
+}
+
 function onBallGrab(id: string, event: PointerEvent) {
   if (board.isDerived.value) return
   if (grabTool.value === 'erase') {
@@ -670,6 +718,10 @@ function gatherInto(box: { x: number; y: number; width: number; height: number }
   for (const marker of board.state.markers) {
     if (isInside(box, marker.pos)) found.push({ kind: 'marker', id: marker.id })
   }
+  // A goal joins on either post, the way a drawing joins on any of its points.
+  for (const goal of board.state.goals) {
+    if (isInside(box, goal.a) || isInside(box, goal.b)) found.push({ kind: 'goal', id: goal.id })
+  }
   if (board.state.labelsVisible) {
     for (const label of board.state.labels) {
       if (isInside(box, label.pos)) found.push({ kind: 'label', id: label.id })
@@ -830,6 +882,41 @@ const endHandles = computed<SegmentDrawing[]>(() => {
   return [drawing]
 })
 
+/** Goals to halo, on the same terms as drawings. */
+const selectedGoalIds = computed(() =>
+  props.tool === 'select'
+    ? selection.value.filter((ref) => ref.kind === 'goal').map((ref) => ref.id)
+    : [],
+)
+
+/** The goal whose posts get handles: one held on its own, under Select. */
+const handledGoal = computed(() => {
+  if (props.tool !== 'select' || props.presenting || selection.value.length !== 1) return null
+  const [only] = selection.value
+  return only.kind === 'goal' ? (board.goalById(only.id) ?? null) : null
+})
+
+/** How far outside its post each handle sits, in pitch units. */
+const POST_HANDLE_GAP = 1.8
+
+/**
+ * The post handles, set just outside the posts along the goal line. On the
+ * posts themselves, a mini goal's two handles cover the whole goal, and the
+ * net can no longer be grabbed to move it. The drag carries the offset, so
+ * the post still moves exactly as far as the handle does.
+ */
+const postHandles = computed(() => {
+  const goal = handledGoal.value
+  if (!goal) return []
+  const width = distance(goal.a, goal.b) || 1
+  const ux = (goal.b.x - goal.a.x) / width
+  const uy = (goal.b.y - goal.a.y) / width
+  return [
+    { post: 'a' as const, at: { x: goal.a.x - ux * POST_HANDLE_GAP, y: goal.a.y - uy * POST_HANDLE_GAP } },
+    { post: 'b' as const, at: { x: goal.b.x + ux * POST_HANDLE_GAP, y: goal.b.y + uy * POST_HANDLE_GAP } },
+  ]
+})
+
 /** Every drawing to draw a halo behind. Only under Select, where picking up happens. */
 const selectedDrawingIds = computed(() =>
   props.tool === 'select'
@@ -853,7 +940,8 @@ const RING_RADIUS: Record<'counter' | 'marker' | 'label' | 'ball', number> = {
 const selectedTokens = computed(() => {
   if (props.tool !== 'select') return []
   return selection.value.flatMap((ref) => {
-    if (ref.kind === 'drawing') return []
+    // Drawings and goals are haloed in their own shape, not ringed.
+    if (ref.kind === 'drawing' || ref.kind === 'goal') return []
     /*
      * A ball that is not on screen gets no halo. A selection outlives the
      * Ball toggle and a phase change, so a ball can be selected and then
@@ -1040,6 +1128,7 @@ function onPointerMove(event: PointerEvent) {
   else if (active.kind === 'bend') bendTo(active.id, at)
   else if (active.kind === 'counter-bend') bendRunTo(active.id, at)
   else if (active.kind === 'end') board.moveSegmentEnd(active.id, active.end, carried)
+  else if (active.kind === 'post') board.moveGoalPost(active.id, active.post, carried)
   else if (active.kind === 'body') dragBody(active, at)
   else if (active.kind === 'group') dragGroup(active, at)
   else if (active.kind === 'marquee') active.to = at
@@ -1117,6 +1206,8 @@ function onPointerUp(event: PointerEvent) {
     bendRunTo(active.id, at)
   } else if (active.kind === 'end') {
     board.moveSegmentEnd(active.id, active.end, withGrabOffset(active, at))
+  } else if (active.kind === 'post') {
+    board.moveGoalPost(active.id, active.post, withGrabOffset(active, at))
   } else if (active.kind === 'body') {
     dragBody(active, at)
     bodyDragFrom = null
@@ -1155,8 +1246,11 @@ function onPointerUp(event: PointerEvent) {
     :balls-visible="board.state.ballsVisible"
     :selected-drawing-ids="selectedDrawingIds"
     :hidden-label-id="editingLabelId"
+    :goals="board.state.goals"
+    :selected-goal-ids="selectedGoalIds"
     @grab-counter="onCounterGrab"
     @grab-marker="onMarkerGrab"
+    @grab-goal="onGoalGrab"
     @grab-label="onLabelGrab"
     @grab-ball="onBallGrab"
     @hit-drawing="onDrawingHit"
@@ -1219,6 +1313,16 @@ function onPointerUp(event: PointerEvent) {
         :color="arrow.color"
         @grab="onBendGrab(arrow.id, $event)"
       />
+      <template v-if="handledGoal">
+        <EndHandle
+          v-for="handle in postHandles"
+          :key="`post-${handle.post}`"
+          data-goal-post
+          :at="handle.at"
+          color="#ffffff"
+          @grab="onPostGrab(handledGoal.id, handle.post, $event)"
+        />
+      </template>
       <template v-for="segment in endHandles" :key="`ends-${segment.id}`">
         <EndHandle
           v-for="end in (['from', 'to'] as const)"

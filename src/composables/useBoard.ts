@@ -6,12 +6,23 @@ import type {
   Drawing,
   Frame,
   Label,
+  Goal,
   Marker,
   PitchType,
   SelectionRef,
   Vec,
 } from '../types'
-import { BALL_OFFSET, PITCH_H, PITCH_W, boundsOf, clampToPitch, distance, snapToAxis } from '../geometry'
+import {
+  BALL_OFFSET,
+  PITCH_H,
+  PITCH_W,
+  boundsOf,
+  clampToPitch,
+  distance,
+  goalPostTo,
+  goalPostsAt,
+  snapToAxis,
+} from '../geometry'
 import { MAX_FRAME_MS, MIN_FRAME_MS, interpolateFrames, timelineOf } from '../animation'
 import type { FrameView } from '../animation'
 
@@ -92,6 +103,11 @@ export type BoardSnapshot = {
   ballsVisible: boolean
   notes: string
   notesVisible: boolean
+  /**
+   * Goals on the pitch, the same on every phase. Optional, because a drill
+   * saved before goals existed has none; `apply` supplies the default.
+   */
+  goals?: Goal[]
   pitch: { type: PitchType; rotated: boolean }
 }
 
@@ -104,7 +120,7 @@ export type BoardSnapshot = {
  * arrived. Reading one through Vue's proxy tracks `frames` and
  * `currentFrame`, so switching frame re-renders without anything extra.
  */
-export type BoardState = BoardSnapshot & FrameView
+export type BoardState = BoardSnapshot & FrameView & { goals: Goal[] }
 
 function emptyFrame(): Frame {
   return {
@@ -133,6 +149,7 @@ function emptySnapshot(): BoardSnapshot {
     // only thing on the page a coach is actually looking at. A drill that
     // was saved with it open comes back with it open.
     notesVisible: false,
+    goals: [],
     pitch: { type: 'blank', rotated: false },
   }
 }
@@ -274,6 +291,7 @@ function snapshot(): BoardSnapshot {
     ballsVisible: raw.ballsVisible,
     notes: raw.notes,
     notesVisible: raw.notesVisible,
+    goals: raw.goals,
     pitch: raw.pitch,
   })
 }
@@ -292,6 +310,7 @@ function apply(snap: BoardSnapshot): void {
   state.ballsVisible = copy.ballsVisible ?? true
   state.notes = copy.notes ?? ''
   state.notesVisible = copy.notesVisible ?? true
+  state.goals = copy.goals ?? []
   state.pitch = copy.pitch
   playback.playing = false
   stopClock()
@@ -926,6 +945,58 @@ function deleteMarker(id: string): void {
   }
 }
 
+function goalById(id: string): Goal | undefined {
+  return state.goals.find((g) => g.id === id)
+}
+
+/**
+ * Put a goal down where the coach dropped it: upright, mini-goal width,
+ * facing the nearer end. One goal for the whole drill — it is part of the
+ * playing area, so it is on every phase at once.
+ */
+function addGoal(at: Vec): Goal | null {
+  if (locked()) return null
+  commit()
+  const centre = clampToPitch(at, state.pitch.type)
+  const { a, b } = goalPostsAt(centre)
+  const goal: Goal = {
+    id: newId(),
+    a: clampToPitch(a, state.pitch.type),
+    b: clampToPitch(b, state.pitch.type),
+  }
+  state.goals.push(goal)
+  return goalById(goal.id)!
+}
+
+/**
+ * Drag one post: the goal widens, narrows or turns about the other.
+ * Called on every pointer-move of a drag, so it deliberately does not
+ * commit.
+ */
+function moveGoalPost(id: string, post: 'a' | 'b', pos: Vec): void {
+  if (locked()) return
+  const goal = goalById(id)
+  if (!goal) return
+  const fixed = post === 'a' ? goal.b : goal.a
+  goal[post] = clampToPitch(goalPostTo(fixed, clampToPitch(pos, state.pitch.type)), state.pitch.type)
+}
+
+/** Turn the net round to the other side of the posts. */
+function flipGoal(id: string): void {
+  if (locked()) return
+  const goal = goalById(id)
+  if (!goal) return
+  commit()
+  goal.flipped = !goal.flipped
+}
+
+function deleteGoal(id: string): void {
+  if (locked()) return
+  if (!goalById(id)) return
+  commit()
+  state.goals = rawFilter(state.goals, (g) => g.id !== id)
+}
+
 /** Called on every pointer-move of a drag, so it deliberately does not commit. */
 function moveCounter(id: string, pos: Vec): void {
   if (locked()) return
@@ -1327,6 +1398,10 @@ function translateDrawing(id: string, delta: Vec): void {
  * of adding to what comes back.
  */
 function pointsOfRef(ref: SelectionRef): Vec[] | null {
+  if (ref.kind === 'goal') {
+    const goal = goalById(ref.id)
+    return goal ? [goal.a, goal.b] : null
+  }
   if (ref.kind === 'drawing') {
     const drawing = drawingById(ref.id)
     return drawing ? pointsOf(drawing) : null
@@ -1424,6 +1499,7 @@ function deleteGroup(refs: SelectionRef[]): void {
     label: new Set<string>(),
     drawing: new Set<string>(),
     ball: new Set<string>(),
+    goal: new Set<string>(),
   }
   for (const ref of refs) ids[ref.kind].add(ref.id)
 
@@ -1443,6 +1519,8 @@ function deleteGroup(refs: SelectionRef[]): void {
 
   // Drawings and labels belong to the moment, so only this one loses them.
   state.drawings = rawFilter(state.drawings, (d) => !ids.drawing.has(d.id))
+  // Goals belong to the drill, so it loses them outright.
+  state.goals = rawFilter(state.goals, (g) => !ids.goal.has(g.id))
   state.labels = rawFilter(state.labels, (l) => !ids.label.has(l.id))
 }
 
@@ -1491,6 +1569,8 @@ function duplicateGroup(refs: SelectionRef[], offset: Vec): SelectionRef[] {
 
     copyable.forEach((ref, i) => {
       const copyId = copies[i].id
+      // Goals are not in any frame; they are copied once, below.
+      if (ref.kind === 'goal') return
       if (ref.kind === 'counter') {
         const original = frame.counters.find((c) => c.id === ref.id)
         if (!original) return
@@ -1539,6 +1619,16 @@ function duplicateGroup(refs: SelectionRef[], offset: Vec): SelectionRef[] {
     // Each frame is trimmed against the pitch on its own, so a copy made
     // beside a touchline in one moment is not pushed off in another.
     translatePoints(made.flatMap((ref) => pointsOfRefIn(frame, ref) ?? []), offset)
+  })
+
+  copyable.forEach((ref, i) => {
+    if (ref.kind !== 'goal') return
+    const original = goalById(ref.id)
+    if (!original) return
+    const copy = clone(toRaw(original))
+    copy.id = copies[i].id
+    translatePoints([copy.a, copy.b], offset)
+    state.goals.push(copy)
   })
 
   return copies
@@ -1652,6 +1742,7 @@ const board = {
   deleteCounter,
   counterById,
   markerById,
+  goalById,
   labelById,
   addLabel,
   setLabelText,
@@ -1664,6 +1755,10 @@ const board = {
   addMarker,
   moveMarker,
   deleteMarker,
+  addGoal,
+  moveGoalPost,
+  flipGoal,
+  deleteGoal,
   moveBall,
   toggleBallsVisible,
   dropBall,
