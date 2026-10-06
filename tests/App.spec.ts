@@ -2291,6 +2291,63 @@ describe('adding a label', () => {
     expect(board.state.labels).toHaveLength(0)
   })
 
+  it('drops what was typed on Cancel, for a screen with no Escape key', async () => {
+    const board = useBoard()
+    wrapper = mount(App, { attachTo: document.body })
+    await wrapper.vm.$nextTick()
+
+    const input = await openNew()
+    await input.setValue('Never mind')
+    const cancel = wrapper.find('[data-label-cancel]')
+    const press = new PointerEvent('pointerdown', { bubbles: true, cancelable: true })
+    cancel.element.dispatchEvent(press)
+    await wrapper.vm.$nextTick()
+    // The field losing focus afterwards must not place it after all.
+    await input.trigger('blur')
+
+    expect(press.defaultPrevented).toBe(true)
+    expect(wrapper.find('[data-label-input]').exists()).toBe(false)
+    expect(board.state.labels).toHaveLength(0)
+  })
+
+  it('opens an edit on the release of the press that asked, and not on another', async () => {
+    const board = useBoard()
+    const label = board.addLabel({ x: 30, y: 20 }, 'Before')!
+    wrapper = mount(App, { attachTo: document.body })
+    await wrapper.vm.$nextTick()
+    const pitch = wrapper.findComponent({ name: 'PitchBoard' })
+    const editor = () => wrapper!.find('[data-label-input]').exists()
+
+    window.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 1 }))
+    await pitch.vm.$emit('editLabel', label.id)
+    await nextTick()
+    expect(editor()).toBe(false)
+
+    window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 2 }))
+    await nextTick()
+    expect(editor()).toBe(false)
+
+    window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1 }))
+    await nextTick()
+    expect(editor()).toBe(true)
+  })
+
+  it('opens nothing when the press that asked is cancelled', async () => {
+    const board = useBoard()
+    const label = board.addLabel({ x: 30, y: 20 }, 'Before')!
+    wrapper = mount(App, { attachTo: document.body })
+    await wrapper.vm.$nextTick()
+
+    window.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 1 }))
+    await wrapper.findComponent({ name: 'PitchBoard' }).vm.$emit('editLabel', label.id)
+    window.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 1 }))
+    window.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 1 }))
+    window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1 }))
+    await nextTick()
+
+    expect(wrapper.find('[data-label-input]').exists()).toBe(false)
+  })
+
   it('edits an existing label in place, pre-filled, with the old one hidden meanwhile', async () => {
     const board = useBoard()
     const label = board.addLabel({ x: 30, y: 20 }, 'Before')!

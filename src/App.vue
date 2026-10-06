@@ -613,25 +613,54 @@ function promptCentreLabel() {
   promptNewLabel({ x: PITCH_W / 2, y: PITCH_H / 2 })
 }
 
-/** Pointers held down anywhere in the window, so an editor can wait for the release. */
+/**
+ * Pointers held down anywhere in the window, so an editor can wait for the
+ * release, and which one pressed last, so it waits for that one's.
+ */
 let pointersDown = 0
-function onWindowPointerDown() {
+let lastPointerId: number | null = null
+function onWindowPointerDown(event: PointerEvent) {
   pointersDown++
+  lastPointerId = event.pointerId
 }
 function onWindowPointerUp() {
   pointersDown = Math.max(0, pointersDown - 1)
 }
+
+/** Stops waiting for a release to open an editor, if one is being waited for. */
+let stopWaitingForRelease = () => {}
 
 /**
  * The board asks on the second press of a double press, while the pointer
  * is still down. Opened then, the editor would be focused and at once lose
  * focus to the browser finishing that press — which saves and closes it —
  * so it opens on the release instead.
+ *
+ * That pointer's release only: another finger lifting is not this press
+ * ending, and a press the system cancels — taken over for a gesture — opens
+ * nothing, rather than leaving the next unrelated release to open it.
  */
 function promptEditLabel(id: string) {
+  stopWaitingForRelease()
   const open = () => openLabelEditor({ kind: 'edit', id }, board.labelById(id)?.text ?? '')
-  if (pointersDown > 0) window.addEventListener('pointerup', open, { once: true })
-  else open()
+  const pointerId = lastPointerId
+  if (pointersDown === 0 || pointerId === null) return open()
+
+  const onUp = (event: PointerEvent) => {
+    if (event.pointerId !== pointerId) return
+    stopWaitingForRelease()
+    open()
+  }
+  const onCancel = (event: PointerEvent) => {
+    if (event.pointerId === pointerId) stopWaitingForRelease()
+  }
+  window.addEventListener('pointerup', onUp)
+  window.addEventListener('pointercancel', onCancel)
+  stopWaitingForRelease = () => {
+    window.removeEventListener('pointerup', onUp)
+    window.removeEventListener('pointercancel', onCancel)
+    stopWaitingForRelease = () => {}
+  }
 }
 
 /** Place what was typed. Empty places nothing, and empties an existing label off the pitch. */
@@ -656,7 +685,7 @@ function confirmLabel(session?: number) {
  */
 function finishLabelOnPress(event: PointerEvent) {
   if (!labelTarget.value) return
-  if ((event.target as HTMLElement | null)?.closest?.('[data-label-input]')) return
+  if ((event.target as HTMLElement | null)?.closest?.('[data-label-editor]')) return
   confirmLabel()
 }
 
@@ -1194,6 +1223,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('pointerup', onWindowPointerUp, true)
   window.removeEventListener('pointercancel', onWindowPointerUp, true)
   boardWrap.value?.removeEventListener('pointerdown', finishLabelOnPress, true)
+  stopWaitingForRelease()
   // Both debounces, or a board torn down mid-keystroke writes after it is gone.
   clearTimeout(autosaveTimer)
   clearTimeout(saveTimer)
@@ -1286,6 +1316,7 @@ watch(
             :scale="labelEditorPlace.scale"
             :board="boardRef?.svgEl ?? null"
             @done="confirmLabel(labelTarget.session)"
+            @cancel="labelTarget = null"
           />
 
           <!--

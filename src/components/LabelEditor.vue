@@ -27,6 +27,8 @@ const emit = defineEmits<{
   'update:modelValue': [text: string]
   /** Enter, or the coach letting go of the field. */
   done: []
+  /** The Cancel button: what Escape does, for a screen with no keyboard. */
+  cancel: []
 }>()
 
 const TYPED_PX = 16
@@ -93,6 +95,21 @@ const width = computed(() => {
   return `${Math.ceil(widest) + 1 + TYPED_PX * 0.3}px`
 })
 
+/** The field's height on screen, to set Cancel just beneath it. Matches the CSS below. */
+const LINE_PX = 20
+const PAD_PX = 0.15 * TYPED_PX
+const below = computed(() => ((rows.value * LINE_PX + 2 * PAD_PX) * shrink.value) / 2 + 8)
+
+/**
+ * On the press rather than the click: the press is what takes focus from
+ * the field, and the field losing focus places the label. Preventing it
+ * keeps the field focused until the editor is gone.
+ */
+function onCancel(event: PointerEvent): void {
+  event.preventDefault()
+  emit('cancel')
+}
+
 /** Enter places it; Shift+Enter is a new line; Enter that ends an IME word is neither. */
 function onEnter(event: KeyboardEvent): void {
   if (event.isComposing) return
@@ -108,6 +125,8 @@ onMounted(() => {
 </script>
 
 <template>
+  <!-- One element to recognise the editor by: a press inside it is not a press on the board. -->
+  <div data-label-editor class="layer">
   <textarea
     ref="field"
     data-label-input
@@ -129,9 +148,39 @@ onMounted(() => {
     @keydown.enter.exact="onEnter"
     @blur="emit('done')"
   ></textarea>
+  <button
+    type="button"
+    data-label-cancel
+    class="cancel"
+    aria-label="Cancel this label"
+    title="Cancel (Escape)"
+    :style="{ left: `${x}px`, top: `${y + below}px` }"
+    @pointerdown="onCancel"
+    @keydown.enter.prevent="emit('cancel')"
+    @keydown.space.prevent="emit('cancel')"
+  >Cancel</button>
+  </div>
 </template>
 
 <style scoped>
+.layer { display: contents; }
+
+.cancel {
+  position: absolute;
+  z-index: 26;
+  transform: translateX(-50%);
+  padding: 0.3rem 0.8rem;
+  border: 1px solid #ffffff40;
+  border-radius: var(--radius-control);
+  background: #000000cc;
+  color: #ffffff;
+  font: 600 0.8rem system-ui, sans-serif;
+  cursor: pointer;
+}
+@media (pointer: coarse) {
+  .cancel { min-height: 44px; min-width: 88px; }
+}
+
 /* The label's own look — white on a dark plate — so it reads as the label, not a form. */
 .label-editor {
   position: absolute;
