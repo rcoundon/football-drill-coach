@@ -2222,6 +2222,10 @@ describe('adding a label', () => {
     expect(board.state.labels).toHaveLength(0)
 
     await input.setValue('Overload\nthen switch')
+    // Enter that finishes an input method's word is not Enter to save.
+    await input.trigger('keydown', { key: 'Enter', isComposing: true })
+    expect(board.state.labels).toHaveLength(0)
+
     await input.trigger('keydown', { key: 'Enter' })
     await wrapper.vm.$nextTick()
     expect(board.state.labels[0].text).toBe('Overload\nthen switch')

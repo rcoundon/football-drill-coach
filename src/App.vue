@@ -613,6 +613,16 @@ function confirmLabel() {
   labelTarget.value = null
 }
 
+/**
+ * Enter saves, except while an input method is composing: there Enter picks
+ * the word being built, and taking it would save half of what was typed.
+ */
+function onLabelEnter(event: KeyboardEvent) {
+  if (event.isComposing) return
+  event.preventDefault()
+  confirmLabel()
+}
+
 watch(labelTarget, (target) => focusWhenOpen(target !== null, () => labelInput.value), {
   flush: 'post',
 })
@@ -1297,7 +1307,7 @@ watch(
           rows="4"
           :maxlength="MAX_LABEL_LENGTH"
           placeholder="Press trigger — or a few lines on what happens here"
-          @keydown.enter.exact.prevent="confirmLabel"
+          @keydown.enter.exact="onLabelEnter"
         ></textarea>
         <p class="hint">Shift+Enter for a new line.</p>
         <div class="prompt-actions">
