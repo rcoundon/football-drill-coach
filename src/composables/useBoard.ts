@@ -851,6 +851,8 @@ function setLabelText(id: string, text: string): void {
   const label = labelById(id)
   if (!label) return
   const clean = cleanLabelText(text)
+  // Saved as it was: nothing changed, so nothing to undo.
+  if (clean !== '' && clean === label.text) return
   commit()
   if (clean === '') state.labels = rawFilter(state.labels, (l) => l.id !== id)
   else label.text = clean

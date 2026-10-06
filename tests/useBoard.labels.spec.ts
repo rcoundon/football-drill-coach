@@ -64,6 +64,14 @@ describe('editing and moving a label', () => {
     expect(board.labelById(label.id)!.text).toBe('Before')
   })
 
+  it('adds no undo entry when the text is saved unchanged', () => {
+    const board = useBoard()
+    const label = board.addLabel({ x: 10, y: 10 }, 'Same')!
+    board.setLabelText(label.id, 'Same  ')
+    board.undo()
+    expect(board.state.labels).toHaveLength(0)
+  })
+
   it('deletes the label when its text is cleared', () => {
     const board = useBoard()
     const label = board.addLabel({ x: 10, y: 10 }, 'Gone soon')!

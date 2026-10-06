@@ -158,6 +158,26 @@ describe('with a text label held', () => {
     expect(board.labelById(label.id)!.text).toBe('Underload')
   })
 
+  it('lets go of the field on Enter, which saves it, but not on Shift+Enter or mid-composition', async () => {
+    const label = board.addLabel({ x: 50, y: 30 }, 'Overload')!
+    const wrapper = mount(Inspector, {
+      props: { selection: [{ kind: 'label', id: label.id }], open: true },
+      attachTo: document.body,
+    })
+    const field = wrapper.find('[data-selection-label]')
+    const element = field.element as HTMLTextAreaElement
+    element.focus()
+
+    await field.trigger('keydown', { key: 'Enter', shiftKey: true })
+    expect(document.activeElement).toBe(element)
+    await field.trigger('keydown', { key: 'Enter', isComposing: true })
+    expect(document.activeElement).toBe(element)
+
+    await field.trigger('keydown', { key: 'Enter' })
+    expect(document.activeElement).not.toBe(element)
+    wrapper.unmount()
+  })
+
   it('takes several lines', async () => {
     const label = board.addLabel({ x: 50, y: 30 }, 'Overload')!
     const wrapper = mountInspector([{ kind: 'label', id: label.id }])

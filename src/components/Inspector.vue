@@ -95,6 +95,18 @@ function setLabel(event: Event): void {
   else if (ref.kind === 'label') board.setLabelText(ref.id, text)
 }
 
+/**
+ * Enter finishes the label, as it does in the prompt the pitch opens;
+ * Shift+Enter is for a new line. Letting go of the field is what fires
+ * `change`, so this saves once rather than beside it. Ignored while an input
+ * method is composing, where Enter picks the word being built.
+ */
+function finishLabel(event: KeyboardEvent): void {
+  if (event.isComposing) return
+  event.preventDefault()
+  ;(event.target as HTMLTextAreaElement).blur()
+}
+
 function recolour(color: CounterColor): void {
   const ref = only.value
   if (ref?.kind === 'counter') board.setCounterColor(ref.id, color)
@@ -269,6 +281,7 @@ function straightenRun(): void {
           :value="label.text"
           :disabled="board.isDerived.value"
           @change="setLabel"
+          @keydown.enter.exact="finishLabel"
         ></textarea>
       </label>
 
