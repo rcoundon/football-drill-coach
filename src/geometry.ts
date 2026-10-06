@@ -292,3 +292,56 @@ export function bendFor(from: Vec, to: Vec, at: Vec): { bend: number; along: num
 
   return { bend, along: clampBendAlong(alongDistance / distance(from, to)) }
 }
+
+/** A mini goal: the size a new one starts at. */
+export const GOAL_DEFAULT_WIDTH = m(3)
+/** Narrower than this and it stops reading as a goal at all. */
+export const GOAL_MIN_WIDTH = m(1)
+/** A full-size goal. Nothing on a training pitch is wider. */
+export const GOAL_MAX_WIDTH = m(7.32)
+
+/**
+ * The four corners of a goal's net, in drawing order: post, post, and the
+ * back of the net behind each. The net is a quarter turn clockwise from `a`
+ * to `b` as drawn — so behind a goal whose posts run down the screen it is
+ * on the left — unless flipped, and it gets deeper as the goal gets wider,
+ * between a mini goal's shallow box and a full goal's two metres.
+ */
+export function goalCorners(goal: { a: Vec; b: Vec; flipped?: boolean }): [Vec, Vec, Vec, Vec] {
+  const { a, b } = goal
+  const width = distance(a, b)
+  const depth = Math.min(m(2), Math.max(m(1), width * 0.35))
+  const ux = width === 0 ? 0 : (b.x - a.x) / width
+  const uy = width === 0 ? 1 : (b.y - a.y) / width
+  // A quarter turn clockwise on screen, where y points down.
+  const side = goal.flipped ? -1 : 1
+  const nx = -uy * side * depth
+  const ny = ux * side * depth
+  return [a, b, { x: b.x + nx, y: b.y + ny }, { x: a.x + nx, y: a.y + ny }]
+}
+
+/**
+ * Posts for a goal dropped at `at`: upright, the default width apart, with
+ * the net towards the nearer end of the pitch — the way a goal faces at
+ * either end of a grid.
+ */
+export function goalPostsAt(at: Vec): { a: Vec; b: Vec } {
+  const half = GOAL_DEFAULT_WIDTH / 2
+  const top = { x: at.x, y: at.y - half }
+  const bottom = { x: at.x, y: at.y + half }
+  // Downwards, the net is on the left; upwards, on the right.
+  return at.x <= PITCH_W / 2 ? { a: top, b: bottom } : { a: bottom, b: top }
+}
+
+/**
+ * Where a dragged post ends up: under the pointer, unless that would make
+ * the goal narrower or wider than a goal can be, in which case as near as
+ * it can get along the same line from the other post.
+ */
+export function goalPostTo(fixed: Vec, wanted: Vec): Vec {
+  const width = distance(fixed, wanted)
+  const clamped = Math.min(GOAL_MAX_WIDTH, Math.max(GOAL_MIN_WIDTH, width))
+  if (width === 0) return { x: fixed.x, y: fixed.y + clamped }
+  const k = clamped / width
+  return { x: fixed.x + (wanted.x - fixed.x) * k, y: fixed.y + (wanted.y - fixed.y) * k }
+}

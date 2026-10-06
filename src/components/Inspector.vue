@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { CounterColor, SelectionRef } from '../types'
-import { COUNTER_COLORS } from '../geometry'
+import { COUNTER_COLORS, distance, m } from '../geometry'
 import { runInto } from '../animation'
 import { MAX_LABEL_LENGTH, MAX_NOTES_LENGTH, useBoard } from '../composables/useBoard'
 import { useViewport } from '../composables/useViewport'
@@ -53,6 +53,21 @@ const counter = computed(() => {
   return board.counterById(ref.id) ?? null
 })
 
+const goal = computed(() => {
+  const ref = only.value
+  if (!ref || ref.kind !== 'goal') return null
+  return board.goalById(ref.id) ?? null
+})
+
+/** Post to post, in metres, to the nearest ten centimetres. */
+const goalWidth = computed(() =>
+  goal.value ? `${(distance(goal.value.a, goal.value.b) / m(1)).toFixed(1)}m` : '',
+)
+
+function flipGoal(): void {
+  if (goal.value) board.flipGoal(goal.value.id)
+}
+
 const label = computed(() => {
   const ref = only.value
   if (!ref || ref.kind !== 'label') return null
@@ -72,6 +87,7 @@ const subject = computed(() => {
   if (kind === 'marker') return 'Cone'
   if (kind === 'label') return 'Text label'
   if (kind === 'ball') return 'Ball'
+  if (kind === 'goal') return 'Goal'
   return 'Drawing'
 })
 
@@ -264,6 +280,21 @@ function straightenRun(): void {
             @click="straightenRun"
           >Straighten</button>
         </div>
+      </div>
+
+      <div v-if="goal" data-goal-panel class="field field--fit">
+        <span class="field-label">Width</span>
+        <div class="curve-row">
+          <span data-goal-width class="curve-reading">{{ goalWidth }}</span>
+          <button
+            data-flip-goal
+            class="chip"
+            :disabled="board.isDerived.value"
+            title="Turn the net round to the other side of the posts"
+            @click="flipGoal"
+          >Flip</button>
+        </div>
+        <span class="hint">Drag either post to resize or turn it.</span>
       </div>
 
       <!--

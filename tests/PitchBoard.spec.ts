@@ -38,6 +38,7 @@ async function firePointer(
     target.element.hasAttribute('data-counter') ||
     target.element.hasAttribute('data-ball') ||
     target.element.hasAttribute('data-marker') ||
+    target.element.hasAttribute('data-goal') ||
     target.element.hasAttribute('data-label') ||
     target.element.hasAttribute('data-bend-handle') ||
     target.element.hasAttribute('data-end-handle')
@@ -2827,5 +2828,93 @@ describe('curving a run', () => {
     await wrapper.vm.$nextTick()
     await dragBox(wrapper, { x: 50, y: 20 }, { x: 70, y: 40 })
     expect(wrapper.find('[data-movement-trail]').attributes('d')).toBe('M 20 30 Q 40 46 60 30')
+  })
+})
+
+describe('goals', () => {
+  beforeEach(() => __resetBoardForTests())
+
+  it('picks a goal up under Select, haloes it and puts handles on its posts', async () => {
+    const board = useBoard()
+    board.addGoal({ x: 30, y: 30 })
+    const wrapper = mountBoard('select')
+    await nextTick()
+    await firePointer(wrapper.find('[data-goal]'), 'pointerdown', clientFor(30, 30))
+    await firePointer(wrapper.find('svg') as unknown as DOMWrapper<Element>, 'pointerup', clientFor(30, 30))
+    expect(wrapper.find('[data-goal-halo]').exists()).toBe(true)
+    expect(wrapper.findAll('[data-goal-post]')).toHaveLength(2)
+    wrapper.unmount()
+  })
+
+  it('resizes when a post is dragged', async () => {
+    const board = useBoard()
+    const goal = board.addGoal({ x: 30, y: 30 })!
+    const wrapper = mountBoard('select')
+    await nextTick()
+    await firePointer(wrapper.find('[data-goal]'), 'pointerdown', clientFor(30, 30))
+    await firePointer(wrapper.find('svg') as unknown as DOMWrapper<Element>, 'pointerup', clientFor(30, 30))
+    const [, postB] = wrapper.findAll('[data-goal-post]')
+    const b = board.goalById(goal.id)!.b
+    await firePointer(postB, 'pointerdown', clientFor(b.x, b.y))
+    const svg = wrapper.find('svg') as unknown as DOMWrapper<Element>
+    await firePointer(svg, 'pointermove', clientFor(b.x, b.y + 2))
+    await firePointer(svg, 'pointerup', clientFor(b.x, b.y + 2))
+    expect(board.goalById(goal.id)!.b.y).toBeCloseTo(b.y + 2)
+    board.undo()
+    expect(board.goalById(goal.id)!.b.y).toBeCloseTo(b.y)
+    wrapper.unmount()
+  })
+
+  it('slides whole when its net is dragged', async () => {
+    const board = useBoard()
+    const goal = board.addGoal({ x: 30, y: 30 })!
+    const before = { ...goal.a }
+    const wrapper = mountBoard('select')
+    await nextTick()
+    await firePointer(wrapper.find('[data-goal]'), 'pointerdown', clientFor(30, 30))
+    const svg = wrapper.find('svg') as unknown as DOMWrapper<Element>
+    await firePointer(svg, 'pointermove', clientFor(40, 35))
+    await firePointer(svg, 'pointerup', clientFor(40, 35))
+    expect(board.goalById(goal.id)!.a.x).toBeCloseTo(before.x + 10)
+    expect(board.goalById(goal.id)!.a.y).toBeCloseTo(before.y + 5)
+    wrapper.unmount()
+  })
+
+  it('comes off under Erase', async () => {
+    const board = useBoard()
+    board.addGoal({ x: 30, y: 30 })
+    const wrapper = mountBoard('erase')
+    await nextTick()
+    await firePointer(wrapper.find('[data-goal]'), 'pointerdown', clientFor(30, 30))
+    expect(board.state.goals).toHaveLength(0)
+    expect(wrapper.emitted('erased')).toBeTruthy()
+    wrapper.unmount()
+  })
+
+  it('stays put while presenting', async () => {
+    const board = useBoard()
+    const goal = board.addGoal({ x: 30, y: 30 })!
+    const before = { ...goal.a }
+    const wrapper = mountBoard('select', true)
+    await nextTick()
+    await firePointer(wrapper.find('[data-goal]'), 'pointerdown', clientFor(30, 30))
+    const svg = wrapper.find('svg') as unknown as DOMWrapper<Element>
+    await firePointer(svg, 'pointermove', clientFor(40, 35))
+    await firePointer(svg, 'pointerup', clientFor(40, 35))
+    expect(board.goalById(goal.id)!.a).toEqual(before)
+    wrapper.unmount()
+  })
+
+  it('joins a box drawn round one of its posts', async () => {
+    const board = useBoard()
+    const goal = board.addGoal({ x: 30, y: 30 })!
+    const wrapper = mountBoard('select')
+    await nextTick()
+    const svg = wrapper.find('svg') as unknown as DOMWrapper<Element>
+    await firePointer(svg, 'pointerdown', clientFor(25, 20))
+    await firePointer(svg, 'pointermove', clientFor(35, goal.a.y + 0.5))
+    await firePointer(svg, 'pointerup', clientFor(35, goal.a.y + 0.5))
+    expect(wrapper.find('[data-goal-halo]').exists()).toBe(true)
+    wrapper.unmount()
   })
 })

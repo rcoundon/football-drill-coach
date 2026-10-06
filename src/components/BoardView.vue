@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { PitchType } from '../types'
+import type { Goal, PitchType } from '../types'
 import type { FrameView } from '../animation'
 import { ballPositionIn } from '../animation'
 import { PITCH_H, PITCH_W, viewBoxOf } from '../geometry'
@@ -8,6 +8,7 @@ import PitchMarkings from './PitchMarkings.vue'
 import PlayerCounter from './PlayerCounter.vue'
 import BallToken from './BallToken.vue'
 import ConeMarker from './ConeMarker.vue'
+import GoalMark from './GoalMark.vue'
 import PitchLabel from './PitchLabel.vue'
 import DrawingLayer from './DrawingLayer.vue'
 
@@ -34,6 +35,10 @@ const props = defineProps<{
   selectedDrawingIds?: string[]
   /** A label being retyped in place, left off so its old words do not show through. */
   hiddenLabelId?: string | null
+  /** The drill's goals. Not in the frame: a goal is the same on every phase. */
+  goals?: Goal[]
+  /** Goals to draw a halo round. */
+  selectedGoalIds?: string[]
 }>()
 
 /**
@@ -44,6 +49,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   grabCounter: [id: string, event: PointerEvent]
   grabMarker: [id: string, event: PointerEvent]
+  grabGoal: [id: string, event: PointerEvent]
   grabLabel: [id: string, event: PointerEvent]
   grabBall: [id: string, event: PointerEvent]
   hitDrawing: [id: string, event: PointerEvent]
@@ -103,6 +109,13 @@ defineExpose({ svgEl })
         draws the order.
       -->
       <slot name="under-tokens" />
+      <GoalMark
+        v-for="goal in goals ?? []"
+        :key="goal.id"
+        :goal="goal"
+        :selected="selectedGoalIds?.includes(goal.id)"
+        @grab="(event: PointerEvent) => emit('grabGoal', goal.id, event)"
+      />
       <ConeMarker
         v-for="marker in frame.markers"
         :key="marker.id"

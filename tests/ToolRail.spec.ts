@@ -124,6 +124,14 @@ describe('the Add group', () => {
     expect(wrapper.emitted('update:tool')!.at(-1)).toEqual(['select'])
   })
 
+  it('puts a goal in the middle, then hands the board back to Select', async () => {
+    const board = useBoard()
+    const wrapper = mountRail('cone')
+    await pressAndRelease(wrapper, '[data-add-goal]')
+    expect(board.state.goals).toHaveLength(1)
+    expect(wrapper.emitted('update:tool')!.at(-1)).toEqual(['select'])
+  })
+
   /** A label with no words is nothing to look at, so the app asks first. */
   it('asks the app for the words when a text label is pressed', async () => {
     const wrapper = mountRail()

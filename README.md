@@ -172,6 +172,14 @@ Cones are equipment rather than players: they carry no number, and a ball
 never belongs to one, so a cone beside a player can't steal possession. Drag
 them with **Select** and remove them with **Erase**.
 
+**Goals** come from the Add section beside the cone: drag one on, or press for
+the middle. A new one is a 3m mini goal, upright, with its net towards the nearer
+end. Under **Select**, press a goal to pick it up — drag the net to move it, or
+drag either post to widen, narrow or turn it, anywhere from 1m to a full-size
+7.32m. The side panel shows the width and has **Flip** to put the net on the
+other side. A goal is part of the playing area rather than a moment, so it is
+the same on every phase and stays put in playback.
+
 Text labels are typed straight onto the pitch, at the spot they will sit:
 Enter or a press anywhere else places one, Escape drops it. They can run to a
 few lines (Shift+Enter for a new one). Unlike cones,

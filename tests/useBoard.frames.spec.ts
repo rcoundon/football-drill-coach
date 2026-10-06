@@ -114,6 +114,7 @@ describe('a snapshot is plain data', () => {
         'counterLabelsVisible',
         'currentFrame',
         'frames',
+        'goals',
         'labelsVisible',
         'notes',
         'notesVisible',

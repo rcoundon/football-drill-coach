@@ -183,6 +183,16 @@ function placeCone(event: PointerEvent): void {
   beginPlacement({ kind: 'cone' }, event, dropCentreCone)
 }
 
+/** Straight to Select, where its posts can be dragged to size it. */
+function dropCentreGoal(): void {
+  board.addGoal({ x: PITCH_W / 2, y: PITCH_H / 2 })
+  if (props.tool !== 'select') emit('update:tool', 'select')
+}
+
+function placeGoal(event: PointerEvent): void {
+  beginPlacement({ kind: 'goal' }, event, dropCentreGoal)
+}
+
 function placeText(event: PointerEvent): void {
   beginPlacement({ kind: 'text' }, event, () => emit('addLabel'))
 }
@@ -256,6 +266,17 @@ function placeText(event: PointerEvent): void {
           @click="activate(dropCentreCone)"
         >
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.73 4a2 2 0 0 0-3.46 0L2.6 17a2 2 0 0 0 1.73 3h15.34a2 2 0 0 0 1.73-3z" /></svg>
+        </button>
+        <button
+          data-add-goal
+          class="object"
+          :disabled="board.isDerived.value"
+          title="Drag a goal onto the pitch, or press for the middle"
+          aria-label="Add a goal"
+          @pointerdown="placeGoal($event)"
+          @click="activate(dropCentreGoal)"
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 19V5h18v14" /><path d="M8 5v14M13 5v14M18 5v14M3 10h18M3 15h18" stroke-width="1" opacity="0.6" /></svg>
         </button>
         <button
           data-add-text

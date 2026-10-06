@@ -48,6 +48,13 @@ const emit = defineEmits<{ close: []; startTour: [] }>()
             with a copy you can reword or remove, and in playback labels fade in and out.
           </li>
           <li>
+            <strong>Goals.</strong> Drag a goal on from beside the cone, or press it for the
+            middle. Under Select, press a goal to pick it up: drag its net to move it, or drag
+            either post to make it wider, narrower or turn it. The panel shows its width and
+            flips the net to the other side. A goal is part of the playing area, so it is the
+            same on every phase.
+          </li>
+          <li>
             Drop a ball on a player to give them possession: they get a white ring, and the
             ball travels with them until you drag it back onto open grass. One ball each — a
             ball dropped on someone who already has one stays where you put it.

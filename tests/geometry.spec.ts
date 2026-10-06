@@ -10,6 +10,11 @@ import {
   fromView,
   clientToPitch,
   pitchToClient,
+  goalCorners,
+  goalPostsAt,
+  goalPostTo,
+  GOAL_MIN_WIDTH,
+  GOAL_MAX_WIDTH,
   clampToPitch,
   distance,
   curveControlPoint,
@@ -396,5 +401,30 @@ describe('pitchToClient', () => {
   it('reports pixels per pitch unit', () => {
     // 400px across the 100-unit pitch; the height has room to spare.
     expect(pitchToClient(rect, { x: 0, y: 0 }, { type: 'full', rotated: false }).scale).toBe(4)
+  })
+})
+
+describe('goals', () => {
+  it('puts the net a quarter turn clockwise from a to b, and the other side when flipped', () => {
+    const goal = { a: { x: 10, y: 10 }, b: { x: 10, y: 20 } }
+    const [, , backB, backA] = goalCorners(goal)
+    expect(backA.x).toBeLessThan(10)
+    expect(backB.x).toBeLessThan(10)
+    const [, , flippedBack] = goalCorners({ ...goal, flipped: true })
+    expect(flippedBack.x).toBeGreaterThan(10)
+  })
+
+  it('faces a dropped goal towards the nearer end', () => {
+    const near = goalCorners(goalPostsAt({ x: 10, y: 30 }))
+    const far = goalCorners(goalPostsAt({ x: PITCH_W - 10, y: 30 }))
+    expect(near[3].x).toBeLessThan(10)
+    expect(far[3].x).toBeGreaterThan(PITCH_W - 10)
+  })
+
+  it('keeps a dragged post on its line but within a goal’s widths', () => {
+    const fixed = { x: 0, y: 0 }
+    expect(goalPostTo(fixed, { x: 0.1, y: 0 }).x).toBeCloseTo(GOAL_MIN_WIDTH)
+    expect(goalPostTo(fixed, { x: 100, y: 0 }).x).toBeCloseTo(GOAL_MAX_WIDTH)
+    expect(goalPostTo(fixed, { x: 3, y: 4 })).toEqual({ x: 3, y: 4 })
   })
 })

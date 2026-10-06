@@ -1,4 +1,4 @@
-import type { Ball, Counter, Drawing, Frame, Label, Marker, Pattern, Session } from '../types'
+import type { Ball, Counter, Drawing, Frame, Goal, Label, Marker, Pattern, Session } from '../types'
 import type { BoardSnapshot } from './useBoard'
 import type { Vec } from '../types'
 import {
@@ -204,6 +204,28 @@ function markersOf(value: Record<string, unknown>): unknown[] {
   return Array.isArray(value.markers) ? value.markers : []
 }
 
+function isValidGoal(value: unknown): boolean {
+  return (
+    isObject(value) &&
+    typeof value.id === 'string' &&
+    isVec(value.a) &&
+    isVec(value.b) &&
+    (value.flipped === undefined || typeof value.flipped === 'boolean')
+  )
+}
+
+/**
+ * Goals arrived long after version 1, so most saved drills have none. A
+ * missing list is an empty one; a present one has to be a list of goals.
+ */
+function goalsOf(value: Record<string, unknown>): Goal[] {
+  return Array.isArray(value.goals) ? (value.goals as Goal[]) : []
+}
+
+function areValidGoals(value: unknown): boolean {
+  return value === undefined || (Array.isArray(value) && value.every(isValidGoal))
+}
+
 /** Absent, or a number the renderer can actually put in a path. */
 function isOptionalNumber(value: unknown): boolean {
   return value === undefined || (typeof value === 'number' && Number.isFinite(value))
@@ -256,6 +278,10 @@ export function parsePattern(value: unknown): Pattern {
 
   if (value.notes !== undefined && typeof value.notes !== 'string') {
     throw new Error('That pattern has damaged notes.')
+  }
+
+  if (!areValidGoals(value.goals)) {
+    throw new Error('That pattern has a damaged goal.')
   }
 
   if (value.tags !== undefined) {
@@ -440,6 +466,7 @@ function toPattern(name: string, snap: BoardSnapshot, id: string, createdAt: str
     ballsVisible: copy.ballsVisible ?? true,
     notes: copy.notes ?? '',
     notesVisible: copy.notesVisible ?? true,
+    goals: copy.goals ?? [],
     tags: [],
     createdAt,
     updatedAt: nowIso(),
@@ -566,6 +593,7 @@ function patternToSnapshot(pattern: Pattern): BoardSnapshot {
     ballsVisible: ballsVisibleOf(copy),
     notes: (copy.notes as string | undefined) ?? '',
     notesVisible: (copy.notesVisible as boolean | undefined) ?? true,
+    goals: goalsOf(copy),
     pitch: copy.pitch as BoardSnapshot['pitch'],
   }
 }
@@ -641,6 +669,7 @@ function isValidFrame(value: unknown): boolean {
 function isValidSnapshot(value: unknown): boolean {
   if (!isObject(value)) return false
   if (!isValidPitch(value.pitch)) return false
+  if (!areValidGoals(value.goals)) return false
   if (Array.isArray(value.frames)) {
     return value.frames.length > 0 && value.frames.every(isValidFrame)
   }
@@ -672,6 +701,7 @@ function toSnapshot(value: Record<string, unknown>): BoardSnapshot {
     ballsVisible: ballsVisibleOf(value),
     notes: (value.notes as string | undefined) ?? '',
     notesVisible: (value.notesVisible as boolean | undefined) ?? true,
+    goals: goalsOf(value),
     pitch: value.pitch as BoardSnapshot['pitch'],
   }
 }

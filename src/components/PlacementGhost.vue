@@ -31,6 +31,7 @@ const playerColor = computed(() =>
     <span v-if="playerColor" class="disc" :style="{ background: playerColor }"></span>
     <span v-else-if="dragging.kind === 'ball'" class="ball"></span>
     <span v-else-if="dragging.kind === 'cone'" class="cone"></span>
+    <span v-else-if="dragging.kind === 'goal'" class="goal"></span>
     <span v-else class="text">T</span>
   </div>
 </template>
@@ -57,6 +58,13 @@ const playerColor = computed(() =>
   border-left: 12px solid transparent;
   border-right: 12px solid transparent;
   border-bottom: 22px solid #f97316;
+}
+.goal {
+  display: block; width: 34px; height: 20px;
+  border: 3px solid #ffffff; border-bottom: none;
+  background:
+    repeating-linear-gradient(90deg, #ffffff66 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(0deg, #ffffff66 0 1px, transparent 1px 6px);
 }
 .text {
   display: grid; place-items: center; width: 28px; height: 28px;

@@ -13,6 +13,7 @@ export type PlacementKind =
   | { kind: 'player'; color: CounterColor }
   | { kind: 'ball' }
   | { kind: 'cone' }
+  | { kind: 'goal' }
   | { kind: 'text' }
 
 /** Where the pointer is, in client coordinates, so a ghost can follow it. */

@@ -54,6 +54,26 @@ export type Marker = {
 }
 
 /**
+ * A goal on the ground: two posts, and a net behind them.
+ *
+ * Held as its posts rather than as a centre, width and angle, because the
+ * posts are what a coach drags — one gesture widens, narrows and turns it —
+ * and two points slide with a group exactly as every other shape does.
+ *
+ * The net sits a quarter turn clockwise from the line `a` to `b` as drawn
+ * (y points down), unless `flipped`.
+ *
+ * Part of the playing area rather than of any moment, so it lives on the
+ * drill, not in a frame: it is the same on every phase.
+ */
+export type Goal = {
+  id: string
+  a: Vec
+  b: Vec
+  flipped?: boolean
+}
+
+/**
  * Short text dropped on the pitch — "press trigger", "2 touch max". Held in
  * pitch units like everything else, so it rotates and exports with the board.
  */
@@ -125,7 +145,7 @@ export type SegmentDrawing = ArrowDrawing | LineDrawing
  * group move, and it matches the pitch — you cannot lasso a ball out of
  * someone's feet.
  */
-export type SelectableKind = 'counter' | 'marker' | 'label' | 'drawing' | 'ball'
+export type SelectableKind = 'counter' | 'marker' | 'label' | 'drawing' | 'ball' | 'goal'
 
 /** One member of a selection, named by what it is and which one it is. */
 export type SelectionRef = { kind: SelectableKind; id: string }
@@ -199,6 +219,12 @@ export type Pattern = {
    */
   notes?: string
   notesVisible?: boolean
+  /**
+   * Goals on the pitch. Drill-wide, like the notes: a goal is part of the
+   * playing area, the same on every phase. Absent on a drill saved before
+   * goals existed, which reads as none.
+   */
+  goals?: Goal[]
   /**
    * How the coach files this drill: "rondo", "pressing", "u12". Optional
    * because most drills have none, and absent reads as empty.

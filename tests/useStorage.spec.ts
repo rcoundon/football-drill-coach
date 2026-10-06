@@ -397,6 +397,36 @@ describe('quota exceeded', () => {
   })
 })
 
+describe('goals', () => {
+  const goal = { id: 'g1', a: { x: 10, y: 20 }, b: { x: 10, y: 23 }, flipped: true }
+
+  it('are saved with the drill and come back with it', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Drill', { ...snap(), goals: [goal] })
+    const listed = store.listPatterns().find((p) => p.id === saved.id)!
+    expect(store.patternToSnapshot(listed).goals).toEqual([goal])
+  })
+
+  it('read as none on a drill saved before they existed', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Drill', snap())
+    const { goals: _, ...old } = saved
+    expect(store.patternToSnapshot(old).goals).toEqual([])
+  })
+
+  it('make a pattern with a broken one unreadable', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Drill', snap())
+    expect(() => parsePattern({ ...saved, goals: [{ id: 'g1', a: { x: 1 } }] })).toThrow(/goal/i)
+  })
+
+  it('round-trip through the draft', () => {
+    const store = useStorage()
+    store.saveDraft({ ...snap(), goals: [goal] })
+    expect(store.loadDraft()!.goals).toEqual([goal])
+  })
+})
+
 describe('draft autosave', () => {
   it('round-trips the working board', () => {
     const store = useStorage()
