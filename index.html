@@ -23,8 +23,18 @@
       href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap"
     />
     <title>Tactics Board</title>
+    <!-- For AI agents: how to write drills this app imports. See vite.config.ts. -->
+    <link vite-ignore rel="alternate" type="text/markdown" href="/agents.md" title="Writing drills for this app" />
+    <link vite-ignore rel="help" type="text/plain" href="/llms.txt" />
   </head>
   <body>
+    <!--
+      Outside #app so Vue's mount leaves it alone. Visually hidden but kept in
+      the accessibility tree, which is what many browsing agents read.
+    -->
+    <p class="agent-hint" style="position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap">
+      Writing drills for this board with an AI agent? Instructions are at /agents.md, and a summary at /llms.txt.
+    </p>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -109,7 +109,6 @@ describe('savePattern and listPatterns', () => {
       ],
     }
     const saved = store.savePattern('Drill', withDrawing)
-    expect(saved.drawings).toBeUndefined()
     expect(saved.frames[0].drawings).toHaveLength(1)
   })
 
@@ -358,8 +357,8 @@ describe('parsePattern', () => {
   it('rejects a drawing with malformed shape', () => {
     const store = useStorage()
     const saved = store.savePattern('Drill', snap())
-    const corrupted = { ...saved, drawings: ['oops'] }
-    expect(() => parsePattern(corrupted)).toThrow()
+    const corrupted = { ...saved, frames: [{ ...saved.frames[0], drawings: ['oops'] }] }
+    expect(() => parsePattern(corrupted)).toThrow('That pattern has a damaged drawing.')
   })
 
   it('accepts a pattern this module itself saved', () => {
@@ -466,10 +465,6 @@ describe('draft autosave', () => {
         withFrame({ balls: [{ id: 'b1', pos: { x: 1, y: 1 }, attachedTo: 7 }] }),
       ],
       ['one damaged ball among good ones', withFrame({ balls: [{ id: 'b1', pos: { x: 1, y: 1 }, attachedTo: null }, { id: 'b2' }] })],
-      // The pre-version-3 shape is still read, so a damaged one is still refused.
-      ['a damaged ball in the older single-ball shape', withFrame({ balls: undefined, ball: { attachedTo: null } })],
-      ['neither a list of balls nor an older single one', withFrame({ balls: undefined, ball: undefined })],
-      ['no drawings', withFrame({ drawings: undefined })],
       ['a damaged drawing', withFrame({ drawings: ['oops'] })],
       ['a damaged counter', withFrame({ counters: [42] })],
       ['no pitch type', { ...snap(), pitch: { rotated: false } }],
@@ -779,18 +774,6 @@ describe('ball visibility', () => {
     expect(store.patternToSnapshot(parsePattern(legacy)).ballsVisible).toBe(true)
   })
 
-  it('reads an older drill’s answer off the ball it kept it on', () => {
-    const store = useStorage()
-    const saved = store.savePattern('Older drill', snap())
-    const legacy = structuredClone(saved) as Record<string, unknown>
-    delete legacy.ballsVisible
-    const frames = legacy.frames as Record<string, unknown>[]
-    // The pre-version-3 shape: one ball on the frame, carrying the flag.
-    frames[0].ball = { pos: { x: 50, y: 30 }, attachedTo: null, visible: false }
-    delete frames[0].balls
-
-    expect(store.patternToSnapshot(parsePattern(legacy)).ballsVisible).toBe(false)
-  })
 
   it('treats a draft saved without the flag the same way', () => {
     const store = useStorage()
@@ -847,62 +830,6 @@ describe('pitch labels', () => {
   })
 })
 
-describe('opening a pattern saved before playback existed', () => {
-  it('reads its pattern-level drawings into the first frame', () => {
-    const v1 = {
-      id: 'p1',
-      name: 'Old drill',
-      version: 1,
-      pitch: { type: 'full', rotated: false },
-      drawings: [{ id: 'd1', kind: 'line', color: '#fff', from: { x: 0, y: 0 }, to: { x: 9, y: 9 } }],
-      frames: [
-        {
-          counters: [{ id: 'c1', color: 'red', label: '', pos: { x: 10, y: 10 } }],
-          markers: [],
-          labels: [],
-          balls: [{ id: 'b1', pos: { x: 50, y: 30 }, attachedTo: null }],
-        },
-      ],
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    }
-    localStorage.setItem(PATTERNS_KEY, JSON.stringify([v1]))
-
-    const storage = useStorage()
-    const [pattern] = storage.listPatterns()
-    const snap = storage.patternToSnapshot(pattern)
-
-    expect(snap.frames).toHaveLength(1)
-    expect(snap.frames[0].drawings).toHaveLength(1)
-    expect(snap.frames[0].counters).toHaveLength(1)
-    expect(snap.currentFrame).toBe(0)
-  })
-
-  it('is written back at the current version, with the drawings on the frame', () => {
-    const storage = useStorage()
-    const saved = storage.savePattern('Drill', {
-      frames: [
-        {
-          counters: [],
-          markers: [],
-          labels: [],
-          balls: [{ id: 'b1', pos: { x: 50, y: 30 }, attachedTo: null }],
-          drawings: [{ id: 'd1', kind: 'line', color: '#fff', from: { x: 0, y: 0 }, to: { x: 9, y: 9 } }],
-        },
-      ],
-      currentFrame: 0,
-      labelsVisible: true,
-      ballsVisible: true,
-      notes: '',
-      notesVisible: true,
-      pitch: { type: 'blank', rotated: false },
-    })
-
-    expect(saved.version).toBe(3)
-    expect(saved.drawings).toBeUndefined()
-    expect(saved.frames[0].drawings).toHaveLength(1)
-  })
-})
 
 describe('a multi-frame pattern round-trips', () => {
   it('keeps every frame and its duration', () => {
@@ -931,6 +858,32 @@ describe('a multi-frame pattern round-trips', () => {
     expect(back.frames[2].duration).toBe(600)
   })
 
+  it('keeps a phase’s hold, the first phase’s included', () => {
+    const storage = useStorage()
+    const frame = (hold?: number) => ({
+      counters: [],
+      markers: [],
+      labels: [],
+      balls: [{ id: 'b1', pos: { x: 50, y: 30 }, attachedTo: null }],
+      drawings: [],
+      ...(hold === undefined ? {} : { hold }),
+    })
+    const saved = storage.savePattern('Drill', {
+      frames: [frame(700), frame(), frame(300)],
+      currentFrame: 0,
+      labelsVisible: true,
+      ballsVisible: true,
+      notes: '',
+      notesVisible: true,
+      pitch: { type: 'blank', rotated: false },
+    })
+
+    const back = storage.patternToSnapshot(saved)
+    expect(back.frames[0].hold).toBe(700)
+    expect(back.frames[1].hold).toBeUndefined()
+    expect(back.frames[2].hold).toBe(300)
+  })
+
   it('always opens on the first frame, because that is where a drill starts', () => {
     const storage = useStorage()
     const frame = () => ({
@@ -953,193 +906,6 @@ describe('a multi-frame pattern round-trips', () => {
   })
 })
 
-describe('restoring a draft saved before playback existed', () => {
-  it('wraps the flat board into a single frame', () => {
-    localStorage.setItem(
-      DRAFT_KEY,
-      JSON.stringify({
-        counters: [{ id: 'c1', color: 'red', label: '', pos: { x: 10, y: 10 } }],
-        markers: [],
-        labels: [],
-        labelsVisible: true,
-        ballsVisible: true,
-        notes: 'old',
-        notesVisible: true,
-        balls: [{ id: 'b1', pos: { x: 50, y: 30 }, attachedTo: null }],
-        drawings: [{ id: 'd1', kind: 'line', color: '#fff', from: { x: 0, y: 0 }, to: { x: 9, y: 9 } }],
-        pitch: { type: 'blank', rotated: false },
-      }),
-    )
-
-    const draft = useStorage().loadDraft()
-    expect(draft).not.toBeNull()
-    expect(draft!.frames).toHaveLength(1)
-    expect(draft!.frames[0].counters).toHaveLength(1)
-    expect(draft!.frames[0].drawings).toHaveLength(1)
-    expect(draft!.notes).toBe('old')
-    expect(draft!.currentFrame).toBe(0)
-  })
-
-  it('reads a framed draft straight back', () => {
-    const storage = useStorage()
-    storage.saveDraft({
-      frames: [
-        {
-          counters: [],
-          markers: [],
-          labels: [],
-          balls: [{ id: 'b1', pos: { x: 50, y: 30 }, attachedTo: null }],
-          drawings: [],
-        },
-        {
-          counters: [],
-          markers: [],
-          labels: [],
-          balls: [{ id: 'b1', pos: { x: 50, y: 30 }, attachedTo: null }],
-          drawings: [],
-          duration: 250,
-        },
-      ],
-      currentFrame: 1,
-      labelsVisible: true,
-      ballsVisible: true,
-      notes: '',
-      notesVisible: true,
-      pitch: { type: 'blank', rotated: false },
-    })
-    const draft = storage.loadDraft()
-    expect(draft!.frames).toHaveLength(2)
-    expect(draft!.currentFrame).toBe(1)
-  })
-
-  it('still throws away a draft whose frame is damaged, rather than bricking the app', () => {
-    localStorage.setItem(
-      DRAFT_KEY,
-      JSON.stringify({ frames: [{ counters: 'not an array' }], currentFrame: 0 }),
-    )
-    expect(useStorage().loadDraft()).toBeNull()
-  })
-
-  /**
-   * The framed case above is already rejected by the pre-frames validator, so
-   * it cannot tell a real check from a rubber stamp. A flat draft is the
-   * shape this task actually taught the validator to read, so it needs its
-   * own damaged case to prove that path still checks anything at all.
-   */
-  it('still throws away a flat draft with a damaged frame field', () => {
-    localStorage.setItem(
-      DRAFT_KEY,
-      JSON.stringify({
-        counters: 'not an array',
-        markers: [],
-        labels: [],
-        balls: [{ id: 'b1', pos: { x: 50, y: 30 }, attachedTo: null }],
-        drawings: [],
-        pitch: { type: 'blank', rotated: false },
-      }),
-    )
-    expect(useStorage().loadDraft()).toBeNull()
-  })
-
-  /**
-   * This one is rejected by `isValidPitch`, a guard that sits ABOVE the
-   * flat/framed branch and applies to both shapes equally. It pins that
-   * shared guard, not the flat branch itself — see the two cases below for
-   * coverage of `isValidFrame` on the flat shape.
-   */
-  it('still throws away a draft with no pitch, flat or not', () => {
-    localStorage.setItem(
-      DRAFT_KEY,
-      JSON.stringify({
-        counters: [],
-        markers: [],
-        labels: [],
-        balls: [{ id: 'b1', pos: { x: 50, y: 30 }, attachedTo: null }],
-        drawings: [],
-      }),
-    )
-    expect(useStorage().loadDraft()).toBeNull()
-  })
-
-  /**
-   * Ball and drawings are the two fields whose flat-versus-framed position
-   * differs most, so they are the likeliest to be got wrong by a future
-   * edit. Unlike the no-pitch case above, both of these are only caught by
-   * `isValidFrame(value)` inside the flat branch itself: replacing that
-   * branch with `return true` makes each of these load successfully instead
-   * of returning null.
-   */
-  it('still throws away a flat draft with a damaged ball', () => {
-    localStorage.setItem(
-      DRAFT_KEY,
-      JSON.stringify({
-        counters: [],
-        markers: [],
-        labels: [],
-        ball: { attachedTo: null, visible: true },
-        drawings: [],
-        pitch: { type: 'blank', rotated: false },
-      }),
-    )
-    expect(useStorage().loadDraft()).toBeNull()
-  })
-
-  it('still throws away a flat draft whose drawings are not an array', () => {
-    localStorage.setItem(
-      DRAFT_KEY,
-      JSON.stringify({
-        counters: [],
-        markers: [],
-        labels: [],
-        balls: [{ id: 'b1', pos: { x: 50, y: 30 }, attachedTo: null }],
-        drawings: 'nope',
-        pitch: { type: 'blank', rotated: false },
-      }),
-    )
-    expect(useStorage().loadDraft()).toBeNull()
-  })
-
-  /**
-   * `isValidFrame` never checked `duration` at all, so a hand-edited or
-   * corrupted draft with `duration: 0` loaded straight through, past the
-   * comment above it claiming this validator holds to the same standard as
-   * `parsePattern` — which already rejects exactly this for a saved
-   * pattern's frames. A restored `0` reaches `durationOf` and, through it,
-   * divides the timeline by a duration that can never be reached.
-   */
-  it('still throws away a draft whose frame duration is not a positive number', () => {
-    const framed = (duration: unknown) => ({
-      frames: [
-        {
-          counters: [],
-          markers: [],
-          labels: [],
-          balls: [{ id: 'b1', pos: { x: 50, y: 30 }, attachedTo: null }],
-          drawings: [],
-        },
-        {
-          counters: [],
-          markers: [],
-          labels: [],
-          balls: [{ id: 'b1', pos: { x: 50, y: 30 }, attachedTo: null }],
-          drawings: [],
-          duration,
-        },
-      ],
-      currentFrame: 1,
-      labelsVisible: true,
-      ballsVisible: true,
-      notes: '',
-      notesVisible: true,
-      pitch: { type: 'blank', rotated: false },
-    })
-
-    for (const bad of [0, -100, Number.POSITIVE_INFINITY, 'soon']) {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(framed(bad)))
-      expect(useStorage().loadDraft()).toBeNull()
-    }
-  })
-})
 
 describe('drill notes', () => {
   it('round-trips notes and their visibility', () => {
@@ -1182,128 +948,6 @@ describe('drill notes', () => {
   })
 })
 
-/**
- * A drill used to have exactly one ball, held as `frame.ball`, and its
- * visibility rode along on that object. Both change together in version 3:
- * a frame holds a list of balls, and whether they are shown is a drill-wide
- * setting like the labels and the notes.
- */
-describe('opening a drill saved when there was only one ball', () => {
-  const oneBallFrame = (visible = true) => ({
-    counters: [{ id: 'c1', color: 'red', label: '', pos: { x: 10, y: 10 } }],
-    markers: [],
-    labels: [],
-    ball: { pos: { x: 40, y: 20 }, attachedTo: 'c1', visible },
-    drawings: [],
-  })
-
-  const v2 = (visible = true) => ({
-    id: 'p-old',
-    name: 'One ball drill',
-    version: 2,
-    pitch: { type: 'full', rotated: false },
-    frames: [oneBallFrame(visible), oneBallFrame(visible)],
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-  })
-
-  it('makes its one ball the first of a list, keeping where it was and who had it', () => {
-    localStorage.setItem('fct.patterns.v1', JSON.stringify([v2()]))
-    const snap = useStorage().patternToSnapshot(useStorage().listPatterns()[0])
-
-    expect(snap.frames[0].balls).toHaveLength(1)
-    expect(snap.frames[0].balls[0].pos).toEqual({ x: 40, y: 20 })
-    expect(snap.frames[0].balls[0].attachedTo).toBe('c1')
-  })
-
-  it('gives that ball an id, so playback can follow it between phases', () => {
-    localStorage.setItem('fct.patterns.v1', JSON.stringify([v2()]))
-    const snap = useStorage().patternToSnapshot(useStorage().listPatterns()[0])
-
-    const first = snap.frames[0].balls[0].id
-    expect(first).toBeTruthy()
-    // The same ball in both phases, or a tween has nothing to match up.
-    expect(snap.frames[1].balls[0].id).toBe(first)
-  })
-
-  it('lifts its visibility out to the drill, where it belongs', () => {
-    localStorage.setItem('fct.patterns.v1', JSON.stringify([v2(false)]))
-    const snap = useStorage().patternToSnapshot(useStorage().listPatterns()[0])
-
-    expect(snap.ballsVisible).toBe(false)
-    expect(snap.frames[0].balls[0]).not.toHaveProperty('visible')
-  })
-
-  it('is written back as version 3, with the balls on the phase', () => {
-    const storage = useStorage()
-    const saved = storage.savePattern('Rondo', {
-      frames: [
-        {
-          counters: [],
-          markers: [],
-          labels: [],
-          balls: [
-            { id: 'b1', pos: { x: 10, y: 10 }, attachedTo: null },
-            { id: 'b2', pos: { x: 30, y: 30 }, attachedTo: null },
-          ],
-          drawings: [],
-        },
-      ],
-      currentFrame: 0,
-      labelsVisible: true,
-      ballsVisible: true,
-      notes: '',
-      notesVisible: true,
-      pitch: { type: 'blank', rotated: false },
-    })
-
-    expect(saved.version).toBe(3)
-    expect(saved.frames[0].balls).toHaveLength(2)
-    expect(saved.ballsVisible).toBe(true)
-  })
-
-  it('round-trips several balls without losing one or muddling their carriers', () => {
-    const storage = useStorage()
-    const saved = storage.savePattern('Two lanes', {
-      frames: [
-        {
-          counters: [{ id: 'c1', color: 'red', label: '', pos: { x: 5, y: 5 } }],
-          markers: [],
-          labels: [],
-          balls: [
-            { id: 'b1', pos: { x: 10, y: 10 }, attachedTo: 'c1' },
-            { id: 'b2', pos: { x: 30, y: 30 }, attachedTo: null },
-          ],
-          drawings: [],
-        },
-      ],
-      currentFrame: 0,
-      labelsVisible: true,
-      ballsVisible: false,
-      notes: '',
-      notesVisible: true,
-      pitch: { type: 'blank', rotated: false },
-    })
-
-    const back = storage.patternToSnapshot(saved)
-    expect(back.frames[0].balls.map((b) => b.id)).toEqual(['b1', 'b2'])
-    expect(back.frames[0].balls[0].attachedTo).toBe('c1')
-    expect(back.frames[0].balls[1].attachedTo).toBeNull()
-    expect(back.ballsVisible).toBe(false)
-  })
-
-  it('still throws away a draft whose balls are damaged', () => {
-    localStorage.setItem(
-      'fct.draft.v1',
-      JSON.stringify({
-        frames: [{ counters: [], markers: [], labels: [], balls: 'not an array', drawings: [] }],
-        currentFrame: 0,
-        pitch: { type: 'blank', rotated: false },
-      }),
-    )
-    expect(useStorage().loadDraft()).toBeNull()
-  })
-})
 
 /**
  * Every other thing on the board is rejected without an id; balls were not,
@@ -1328,17 +972,6 @@ describe('a ball without an id is damage', () => {
     expect(() => parsePattern(damaged)).toThrow(/ball/i)
   })
 
-  it('but the older single-ball shape is still read, since migration mints its id', () => {
-    const store = useStorage()
-    const saved = store.savePattern('Older drill', snap())
-    const legacy = structuredClone(saved) as Record<string, unknown>
-    const frames = legacy.frames as Record<string, unknown>[]
-    delete frames[0].balls
-    frames[0].ball = { pos: { x: 40, y: 20 }, attachedTo: null }
-
-    expect(() => parsePattern(legacy)).not.toThrow()
-    expect(store.patternToSnapshot(parsePattern(legacy)).frames[0].balls[0].id).toBeTruthy()
-  })
 })
 
 /**
@@ -1498,5 +1131,18 @@ describe('a curved run', () => {
   it('rejects a bend that is not finite', () => {
     const raw = patternWithCounter({ id: 'c1', color: 'red', label: '9', pos: { x: 10, y: 10 }, bend: Number.POSITIVE_INFINITY })
     expect(() => parsePattern(raw)).toThrow()
+  })
+})
+
+describe('saveDraft and the library warning', () => {
+  it('leaves a damaged-library warning on screen', () => {
+    const storage = useStorage()
+    localStorage.setItem(PATTERNS_KEY, JSON.stringify([{ id: 'old', name: 'Old', version: 1 }]))
+    storage.listPatterns()
+    expect(storage.lastError.value).toMatch(/could not be read/)
+
+    storage.saveDraft(snap())
+
+    expect(storage.lastError.value).toMatch(/could not be read/)
   })
 })

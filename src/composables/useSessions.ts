@@ -1,9 +1,12 @@
 import type { Session, SessionEntry } from '../types'
+import { parseWith, SessionSchema } from '../schema'
 import {
   createCollectionErrors,
   damagedMessage,
+  discardUnreadable,
   readCollection,
   recordWrite,
+  unreadableText,
   writeCollection,
 } from './collection'
 
@@ -23,44 +26,9 @@ const SESSION_VERSION = 1
 const UNREADABLE_MESSAGE =
   'Your saved sessions could not be read, so saving now would overwrite them. Export or clear them first, then try again.'
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-/**
- * Minutes are held to what a frame's duration is held to: a finite number
- * above zero. It is the same kind of value with the same failure if it is
- * not one.
- */
-function isValidEntry(value: unknown): value is SessionEntry {
-  return (
-    isObject(value) &&
-    typeof value.id === 'string' &&
-    typeof value.patternId === 'string' &&
-    typeof value.minutes === 'number' &&
-    Number.isFinite(value.minutes) &&
-    value.minutes > 0
-  )
-}
-
+/** Validate an untrusted value as a Session. The shape lives in schema.ts. */
 export function parseSession(value: unknown): Session {
-  if (!isObject(value)) throw new Error('That is not a saved session.')
-  if (value.version !== SESSION_VERSION) {
-    throw new Error('That session was saved by a different version of this app.')
-  }
-  if (typeof value.id !== 'string' || typeof value.name !== 'string') {
-    throw new Error('That session is missing its name or id.')
-  }
-  // `Session` declares both as required strings, and the PDF cover reads
-  // one straight into a date — a record missing either was being cast
-  // through unchecked and printed as an invalid date rather than dropped.
-  if (typeof value.createdAt !== 'string' || typeof value.updatedAt !== 'string') {
-    throw new Error('That session is missing when it was created or last saved.')
-  }
-  if (!Array.isArray(value.entries) || !value.entries.every(isValidEntry)) {
-    throw new Error('That session has a damaged drill.')
-  }
-  return value as unknown as Session
+  return parseWith(SessionSchema, 'session', value)
 }
 
 function read() {
@@ -209,8 +177,20 @@ function totalMinutes(session: Session, known: Set<string>): number {
     .reduce((sum, entry) => sum + entry.minutes, 0)
 }
 
+/** The saved sessions the app could not read, as stored, or null if none. */
+function unreadableSessions(): string | null {
+  return unreadableText(SESSIONS_KEY, parseSession)
+}
+
+/** Drop the saved sessions the app could not read; every readable one stays. */
+function discardUnreadableSessions(): boolean {
+  return discardUnreadable(errors, SESSIONS_KEY, parseSession)
+}
+
 const api = {
   listSessions,
+  unreadableSessions,
+  discardUnreadableSessions,
   createSession,
   saveSession,
   saveSessions,

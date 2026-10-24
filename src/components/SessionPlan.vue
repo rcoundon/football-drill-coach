@@ -14,7 +14,16 @@ const props = withDefaults(defineProps<{ session: Session | null; exporting?: bo
  * and the download, exactly as it does for the PNG and the GIF, and a panel
  * that exported for itself would be a second place those live.
  */
-const emit = defineEmits<{ close: []; exportPdf: [session: Session] }>()
+const emit = defineEmits<{
+  close: []
+  exportPdf: [session: Session]
+  /**
+   * Work through the session on the board, starting at this entry. App
+   * loads the drill, for the same reason it builds the PDF: the open
+   * pattern is App's to decide.
+   */
+  review: [session: Session, entryId: string]
+}>()
 
 const sessions = useSessions()
 const storage = useStorage()
@@ -133,6 +142,9 @@ function add(pattern: Pattern) {
 function currentSession(): Session {
   return { ...(props.session as Session), entries: [...entries.value] }
 }
+
+/** Where Review starts: the first drill still in the library. */
+const firstAvailable = computed(() => entries.value.find((e) => known.value.has(e.patternId)) ?? null)
 </script>
 
 <template>
@@ -148,7 +160,13 @@ function currentSession(): Session {
 
       <ul v-else class="list">
         <li v-for="(entry, index) in entries" :key="entry.id" data-entry class="row">
-          <span v-if="byId.has(entry.patternId)" class="name">{{ byId.get(entry.patternId)!.name }}</span>
+          <button
+            v-if="byId.has(entry.patternId)"
+            data-open-drill
+            class="name name--link"
+            :title="`Open ${byId.get(entry.patternId)!.name} on the board`"
+            @click="emit('review', currentSession(), entry.id)"
+          >{{ byId.get(entry.patternId)!.name }}</button>
           <span v-else data-missing class="name missing">Drill no longer in your library</span>
 
           <input
@@ -174,6 +192,13 @@ function currentSession(): Session {
       </ul>
 
       <div class="row row--actions">
+        <button
+          data-review
+          class="chip chip--primary"
+          :disabled="!firstAvailable"
+          title="Open each drill on the board in turn"
+          @click="firstAvailable && emit('review', currentSession(), firstAvailable.id)"
+        >Review</button>
         <button data-add-drill class="chip" @click="picking = !picking">Add drill</button>
         <button
           data-export-pdf
@@ -214,6 +239,11 @@ function currentSession(): Session {
 .row { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; background: var(--surface-2); padding: 0.45rem 0.6rem; border-radius: 0.4rem; }
 .row--actions { margin-top: 0.75rem; background: none; padding: 0; }
 .name { flex: 1; }
+.name--link {
+  text-align: left; border: none; background: none; color: inherit; font: inherit;
+  padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: #ffffff40;
+}
+.name--link:hover { text-decoration-color: currentColor; }
 .missing { opacity: 0.6; font-style: italic; }
 .minutes { width: 4rem; padding: 0.3rem; border-radius: 0.3rem; border: 1px solid #ffffff40; background: var(--surface-1); color: inherit; }
 .meta { opacity: 0.6; font-size: 0.8rem; }
@@ -221,4 +251,5 @@ function currentSession(): Session {
 .chip { border: 1px solid #ffffff40; background: var(--surface-3); color: inherit; border-radius: 0.4rem; padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.8rem; }
 .chip:disabled { opacity: 0.4; cursor: default; }
 .chip--danger { background: #c62828; }
+.chip--primary { background: var(--brand-gradient); border-color: transparent; color: #ffffff; }
 </style>

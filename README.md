@@ -22,6 +22,14 @@ npm run dev
 | `npm run build` | Type-check and build for production |
 | `npm test` | Run the test suite once |
 | `npm run test:watch` | Run tests in watch mode |
+| `npm run validate -- <file.json>` | Check a drill file before importing or sharing it |
+
+## Writing drills with an AI agent
+
+Drills and sessions import from a single JSON file, so an agent can write them
+directly. [`AGENTS.md`](AGENTS.md) describes the format — coordinates, phases,
+players, balls, sessions — and `npm run validate` checks a file the way the
+import will, plus the mistakes the import lets through.
 
 ## Using it
 

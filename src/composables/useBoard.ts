@@ -24,7 +24,7 @@ import {
   goalPostsAt,
   snapToAxis,
 } from '../geometry'
-import { MAX_FRAME_MS, MIN_FRAME_MS, interpolateFrames, timelineOf } from '../animation'
+import { MAX_FRAME_MS, MAX_HOLD_MS, MIN_FRAME_MS, interpolateFrames, timelineOf } from '../animation'
 import type { FrameView } from '../animation'
 
 export { BALL_OFFSET } from '../geometry'
@@ -648,6 +648,23 @@ function setFrameDuration(index: number, ms: number): void {
   frame.duration = Math.round(Math.max(MIN_FRAME_MS, Math.min(MAX_FRAME_MS, ms)))
   // Retiming a phase moves where every phase after it begins, this one
   // included, so where the playhead is parked has just changed meaning.
+  parkPlayhead()
+}
+
+/**
+ * Pause on a frame before the next move. Zero or less removes the pause
+ * rather than storing it, so a frame that never had one and a frame whose
+ * pause was taken away save the same.
+ */
+function setFrameHold(index: number, ms: number): void {
+  if (locked()) return
+  const frame = state.frames[index]
+  if (!frame) return
+  commit()
+  const hold = Math.round(Math.min(MAX_HOLD_MS, ms))
+  if (hold > 0) frame.hold = hold
+  else delete frame.hold
+  // A hold moves where every later phase begins, exactly as a duration does.
   parkPlayhead()
 }
 
@@ -1733,6 +1750,7 @@ const board = {
   deleteFrame,
   moveFrame,
   setFrameDuration,
+  setFrameHold,
   goToFrame,
   setPitchType,
   setRotated,

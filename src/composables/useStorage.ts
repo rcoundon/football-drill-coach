@@ -1,11 +1,13 @@
-import type { Ball, Counter, Drawing, Frame, Goal, Label, Marker, Pattern, Session } from '../types'
+import type { Pattern, Session } from '../types'
 import type { BoardSnapshot } from './useBoard'
-import type { Vec } from '../types'
+import { parseWith, PatternSchema, SnapshotSchema } from '../schema'
 import {
   createCollectionErrors,
   damagedMessage,
+  discardUnreadable,
   readCollection,
   recordWrite,
+  unreadableText,
   writeCollection,
   writeRaw,
 } from './collection'
@@ -29,32 +31,10 @@ export const DRAFT_KEY = 'fct.draft.v1'
 
 const SCHEMA_VERSION = 3
 
-/** Versions this build can open. Only SCHEMA_VERSION is ever written. */
-const READABLE_VERSIONS = new Set([1, 2, 3])
-
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-/** A position in pitch units: { x: number, y: number }. */
-function isVec(value: unknown): boolean {
-  return isObject(value) && typeof value.x === 'number' && typeof value.y === 'number'
-}
-
-function isValidCounter(value: unknown): boolean {
-  return (
-    isObject(value) &&
-    typeof value.id === 'string' &&
-    typeof value.color === 'string' &&
-    typeof value.label === 'string' &&
-    isVec(value.pos) &&
-    // Curved runs arrived after version 3, so a counter with neither field is
-    // a straight run saved before them. A value that is present must still be
-    // a real number: anything else reaches the tween as a NaN position.
-    isOptionalNumber(value.bend) &&
-    isOptionalNumber(value.bendAlong)
-  )
-}
 
 /**
  * Tags as they are stored: trimmed, lowercased, deduplicated, empties gone.
@@ -97,249 +77,14 @@ export function matchesTags(pattern: Pick<Pattern, 'tags'>, selected: string[]):
 }
 
 /**
- * The ball could not be hidden until after version 1 shipped, and every
- * pattern written before that had one on the pitch. A missing flag
- * therefore means visible, not invalid.
- */
-/**
- * The balls on a frame, however the frame was written.
+ * Validate an untrusted value as a Pattern. Throws with a readable reason.
  *
- * Before version 3 a frame had one ball, `frame.ball`, carrying its own
- * `visible` flag. That ball becomes the first of a list, and the flag is
- * lifted out to the drill by `ballsVisibleOf`. `sharedId` is minted once per
- * drill and handed to every phase, because playback matches a ball in one
- * phase to the same ball in the next — a fresh id per phase would leave it
- * with nothing to match.
+ * The shape itself lives in schema.ts, shared with the draft, the import
+ * and the published JSON Schema; this is the library's name for it. Fields
+ * a drill may leave out come back filled in with their defaults.
  */
-function ballsOf(frame: Record<string, unknown>, sharedId: string): Ball[] {
-  if (Array.isArray(frame.balls)) return frame.balls as Ball[]
-  if (!isObject(frame.ball)) return []
-  const { pos, attachedTo } = frame.ball as { pos: Vec; attachedTo: string | null }
-  return [{ id: sharedId, pos, attachedTo }]
-}
-
-/**
- * Whether the balls are shown, however the drill was written.
- *
- * Before version 3 this rode on the ball itself, which put it on the frame —
- * so hiding the ball on one phase left it showing on the next. It is a
- * drill-wide setting now, and an older drill's answer is taken from its first
- * phase. A missing flag means visible: the ball could not be hidden at all
- * until after version 1 shipped.
- */
-function ballsVisibleOf(value: Record<string, unknown>): boolean {
-  if (typeof value.ballsVisible === 'boolean') return value.ballsVisible
-  const frames = value.frames as Record<string, unknown>[] | undefined
-  const first = Array.isArray(frames) ? frames[0] : value
-  const legacy = isObject(first) ? (first.ball as { visible?: unknown } | undefined) : undefined
-  return !(isObject(legacy) && legacy.visible === false)
-}
-
-/**
- * A ball in a version 3 list. Its id is required, like every other thing on
- * the board — playback matches balls by it, and `removeBall` filters on it,
- * so an id-less ball would take every other id-less ball off with it.
- *
- * `isValidLegacyBall` is the exemption: a drill written before version 3 had
- * no ids to write, and migration mints one on the way in.
- */
-function isValidBall(value: unknown): boolean {
-  return isValidLegacyBall(value) && isObject(value) && typeof value.id === 'string'
-}
-
-/**
- * A version 3 ball list: every entry valid, and no two sharing an id.
- *
- * Duplicate ids are the same class of damage as a missing one. Playback
- * matches balls by id and `removeBall` filters on it, so two balls answering
- * to the same id would tween as one and vanish together when either is erased.
- *
- * The count is deliberately NOT checked against MAX_BALLS. A drill carrying
- * more than the interface would let a coach make still works — the cap only
- * stops them adding another — and refusing to open it would hide their drill
- * to prevent nothing.
- */
-function isValidBallList(value: unknown[]): boolean {
-  if (!value.every(isValidBall)) return false
-  const ids = value.map((ball) => (ball as { id: string }).id)
-  return new Set(ids).size === ids.length
-}
-
-function isValidLegacyBall(value: unknown): boolean {
-  return (
-    isObject(value) &&
-    isVec(value.pos) &&
-    (value.attachedTo === null || typeof value.attachedTo === 'string')
-  )
-}
-
-function isValidLabel(value: unknown): boolean {
-  return (
-    isObject(value) &&
-    typeof value.id === 'string' &&
-    typeof value.text === 'string' &&
-    isVec(value.pos)
-  )
-}
-
-/**
- * Labels arrived after version 1 shipped, so a pattern or draft written
- * before them has no labels array. Read a missing one as empty rather than
- * rejecting the coach's real saved work.
- */
-function labelsOf(value: Record<string, unknown>): unknown[] {
-  return Array.isArray(value.labels) ? value.labels : []
-}
-
-function isValidMarker(value: unknown): boolean {
-  return isObject(value) && typeof value.id === 'string' && isVec(value.pos)
-}
-
-/**
- * Cones arrived after version 1 shipped, so a pattern or draft written
- * before them simply has no markers array. That is the coach's real saved
- * work: treat a missing array as an empty one rather than rejecting it.
- */
-function markersOf(value: Record<string, unknown>): unknown[] {
-  return Array.isArray(value.markers) ? value.markers : []
-}
-
-function isValidGoal(value: unknown): boolean {
-  return (
-    isObject(value) &&
-    typeof value.id === 'string' &&
-    isVec(value.a) &&
-    isVec(value.b) &&
-    (value.flipped === undefined || typeof value.flipped === 'boolean')
-  )
-}
-
-/**
- * Goals arrived long after version 1, so most saved drills have none. A
- * missing list is an empty one; a present one has to be a list of goals.
- */
-function goalsOf(value: Record<string, unknown>): Goal[] {
-  return Array.isArray(value.goals) ? (value.goals as Goal[]) : []
-}
-
-function areValidGoals(value: unknown): boolean {
-  return value === undefined || (Array.isArray(value) && value.every(isValidGoal))
-}
-
-/** Absent, or a number the renderer can actually put in a path. */
-function isOptionalNumber(value: unknown): boolean {
-  return value === undefined || (typeof value === 'number' && Number.isFinite(value))
-}
-
-function isValidDrawing(value: unknown): boolean {
-  if (!isObject(value)) return false
-  if (value.kind === 'pen') return Array.isArray(value.points)
-  if (value.kind === 'arrow' || value.kind === 'line') {
-    if (!isVec(value.from) || !isVec(value.to)) return false
-    // Curves arrived after version 1, so an arrow with neither field is a
-    // straight one saved before them. A value that is present must still be a
-    // real number: anything else reaches the renderer as an unreadable path.
-    return isOptionalNumber(value.bend) && isOptionalNumber(value.bendAlong)
-  }
-  return false
-}
-
-/** Validate an untrusted value as a Pattern. Throws with a readable reason. */
 export function parsePattern(value: unknown): Pattern {
-  if (!isObject(value)) throw new Error('That is not a saved pattern.')
-
-  if (typeof value.version !== 'number' || !READABLE_VERSIONS.has(value.version)) {
-    throw new Error(
-      `That pattern was saved by a different version of this app (version ${String(value.version)}). Update the app to open it.`,
-    )
-  }
-
-  if (typeof value.id !== 'string' || typeof value.name !== 'string') {
-    throw new Error('That pattern is missing its name or id.')
-  }
-
-  if (
-    !isObject(value.pitch) ||
-    typeof value.pitch.type !== 'string' ||
-    typeof value.pitch.rotated !== 'boolean'
-  ) {
-    throw new Error('That pattern is missing its pitch settings.')
-  }
-
-  // A v2 pattern has no pattern-level drawings at all — they moved onto the
-  // frame that owns them. Only a v1 pattern still has this field, so it must
-  // be tolerated as absent rather than required.
-  if (value.drawings !== undefined) {
-    if (!Array.isArray(value.drawings)) throw new Error('That pattern is missing its drawings.')
-    if (!value.drawings.every(isValidDrawing)) {
-      throw new Error('That pattern has a damaged drawing.')
-    }
-  }
-
-  if (value.notes !== undefined && typeof value.notes !== 'string') {
-    throw new Error('That pattern has damaged notes.')
-  }
-
-  if (!areValidGoals(value.goals)) {
-    throw new Error('That pattern has a damaged goal.')
-  }
-
-  if (value.tags !== undefined) {
-    if (!Array.isArray(value.tags) || !value.tags.every((t) => typeof t === 'string')) {
-      throw new Error('That pattern has damaged tags.')
-    }
-  }
-
-  if (!Array.isArray(value.frames) || value.frames.length === 0) {
-    throw new Error('That pattern has no frames.')
-  }
-
-  for (const frame of value.frames) {
-    if (!isObject(frame) || !Array.isArray(frame.counters)) {
-      throw new Error('That pattern has a damaged frame.')
-    }
-    // Either shape is readable: a list from version 3, a single ball before it.
-    if (frame.balls !== undefined && !Array.isArray(frame.balls)) {
-      throw new Error('That pattern has a damaged ball position.')
-    }
-    if (frame.balls === undefined && !isObject(frame.ball)) {
-      throw new Error('That pattern has a damaged frame.')
-    }
-    if (!frame.counters.every(isValidCounter)) {
-      throw new Error('That pattern has a damaged player position.')
-    }
-    // The older single ball is only consulted when there is no list at all.
-    // Keying on the shape being an array instead let a good legacy `ball`
-    // excuse a `balls` field that was outright garbage.
-    const ballsOk =
-      frame.balls === undefined
-        ? isValidLegacyBall(frame.ball)
-        : Array.isArray(frame.balls) && isValidBallList(frame.balls)
-    if (!ballsOk) {
-      throw new Error('That pattern has a damaged ball position.')
-    }
-    if (!markersOf(frame).every(isValidMarker)) {
-      throw new Error('That pattern has a damaged cone position.')
-    }
-    if (!labelsOf(frame).every(isValidLabel)) {
-      throw new Error('That pattern has a damaged label.')
-    }
-    if (frame.drawings !== undefined) {
-      if (!Array.isArray(frame.drawings) || !frame.drawings.every(isValidDrawing)) {
-        throw new Error('That pattern has a damaged drawing.')
-      }
-    }
-    if (frame.duration !== undefined) {
-      if (typeof frame.duration !== 'number' || !Number.isFinite(frame.duration) || frame.duration <= 0) {
-        throw new Error('That pattern has a damaged frame duration.')
-      }
-    }
-    if (frame.note !== undefined && typeof frame.note !== 'string') {
-      throw new Error('That pattern has a damaged phase note.')
-    }
-  }
-
-  return value as unknown as Pattern
+  return parseWith(PatternSchema, 'pattern', value)
 }
 
 const UNREADABLE_LIBRARY_MESSAGE =
@@ -399,58 +144,8 @@ function nowIso(): string {
   return new Date().toISOString()
 }
 
-/**
- * An id for a ball recovered from a drill saved before balls had them.
- *
- * Mirrors `newId` in useBoard rather than importing it, for the same reason
- * `emptyFrameData` mirrors `emptyFrame`: the two modules stay apart.
- */
-function makeBallId(): string {
-  return `b${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
-}
-
 function makeId(): string {
   return `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
-}
-
-/**
- * Fill in what a frame saved by an older build does not have.
- *
- * A v1 pattern kept its drawings at the pattern level, where they hung over
- * the whole drill. They belong to the first frame now — the only frame a v1
- * pattern has.
- */
-function frameWithDefaults(
-  frame: Record<string, unknown>,
-  legacyDrawings: Drawing[],
-  ballId: string,
-): Frame {
-  return {
-    counters: (frame.counters ?? []) as Counter[],
-    markers: markersOf(frame) as Marker[],
-    labels: labelsOf(frame) as Label[],
-    balls: ballsOf(frame, ballId),
-    drawings: (frame.drawings ?? legacyDrawings) as Drawing[],
-    ...(typeof frame.duration === 'number' ? { duration: frame.duration } : {}),
-    ...(typeof frame.note === 'string' && frame.note !== '' ? { note: frame.note } : {}),
-  }
-}
-
-/**
- * The same empty moment `emptyFrame()` builds in useBoard — not imported, to
- * keep the two modules apart. Never reached by a pattern that went through
- * `parsePattern`, which already rejects an empty frames array; this is only
- * a last-resort fallback for a caller that hands `patternToSnapshot` a
- * pattern that skipped that check.
- */
-function emptyFrameData(): Frame {
-  return {
-    counters: [],
-    markers: [],
-    labels: [],
-    balls: [],
-    drawings: [],
-  }
 }
 
 function toPattern(name: string, snap: BoardSnapshot, id: string, createdAt: string): Pattern {
@@ -572,29 +267,19 @@ function allTags(): string[] {
 }
 
 function patternToSnapshot(pattern: Pattern): BoardSnapshot {
-  const copy = structuredClone(pattern) as unknown as Record<string, unknown>
-  const legacy = (copy.drawings ?? []) as Drawing[]
-  const rawFrames = Array.isArray(copy.frames) ? (copy.frames as Record<string, unknown>[]) : []
-  // One id for the drill's single legacy ball, shared by every phase, so
-  // playback can still match it up. Unused once the frames carry their own.
-  const legacyBallId = makeBallId()
-  const frames = rawFrames.map((frame, index) =>
-    // Only the first frame inherits the legacy drawings. A v1 pattern has no
-    // others, and a v2 one has no legacy drawings to inherit.
-    frameWithDefaults(frame, index === 0 ? legacy : [], legacyBallId),
-  )
+  const copy = structuredClone(pattern)
   return {
+    frames: copy.frames,
     // A drill starts at the beginning. Reopening halfway through the
     // animation is never what anyone meant by opening a pattern.
-    frames: frames.length > 0 ? frames : [emptyFrameData()],
     currentFrame: 0,
-    labelsVisible: (copy.labelsVisible as boolean | undefined) ?? true,
-    counterLabelsVisible: (copy.counterLabelsVisible as boolean | undefined) ?? true,
-    ballsVisible: ballsVisibleOf(copy),
-    notes: (copy.notes as string | undefined) ?? '',
-    notesVisible: (copy.notesVisible as boolean | undefined) ?? true,
-    goals: goalsOf(copy),
-    pitch: copy.pitch as BoardSnapshot['pitch'],
+    labelsVisible: copy.labelsVisible ?? true,
+    counterLabelsVisible: copy.counterLabelsVisible ?? true,
+    ballsVisible: copy.ballsVisible ?? true,
+    notes: copy.notes ?? '',
+    notesVisible: copy.notesVisible ?? true,
+    goals: copy.goals ?? [],
+    pitch: copy.pitch,
   }
 }
 
@@ -609,114 +294,28 @@ function readRaw(key: string): unknown {
   return JSON.parse(text)
 }
 
+/**
+ * Autosave the working board. It leaves `lastError` alone: it runs a moment
+ * after every change, including the first one on load, and clearing here
+ * wiped the library's "could not be read" warning before a coach could read
+ * it, let alone act on it. A failed draft write still sets its own message.
+ */
 function saveDraft(snap: BoardSnapshot): void {
-  lastError.value = null
   writeRaw(errors, DRAFT_KEY, snap)
-}
-
-function isValidPitch(value: unknown): boolean {
-  return isObject(value) && typeof value.type === 'string' && typeof value.rotated === 'boolean'
-}
-
-/**
- * Validate a single frame's worth of board data, to the same standard as the
- * library path.
- *
- * Drawings are required, not optional, here: unlike markers and labels
- * (which arrived after this validator did, so a pattern saved before them
- * genuinely has no such array) every draft this app has ever written has
- * always had a drawings array on its one moment. A missing one means the
- * draft is damaged, not old.
- */
-function isValidFrame(value: unknown): boolean {
-  return (
-    isObject(value) &&
-    Array.isArray(value.counters) &&
-    value.counters.every(isValidCounter) &&
-    markersOf(value).every(isValidMarker) &&
-    labelsOf(value).every(isValidLabel) &&
-    // Either shape: a list from version 3, a single ball before it. Only the
-    // list is held to having ids — a legacy ball gets one when it migrates —
-    // and the legacy one is consulted only when there is no list at all, so a
-    // good `ball` cannot excuse a `balls` field that is garbage.
-    (value.balls === undefined
-      ? isValidLegacyBall(value.ball)
-      : Array.isArray(value.balls) && isValidBallList(value.balls)) &&
-    Array.isArray(value.drawings) &&
-    value.drawings.every(isValidDrawing) &&
-    // Optional — the first frame of a draft has none — but a present value
-    // has to be one `durationOf` can actually use, exactly as `parsePattern`
-    // already requires for a saved pattern's frames.
-    (value.duration === undefined ||
-      (typeof value.duration === 'number' && Number.isFinite(value.duration) && value.duration > 0)) &&
-    (value.note === undefined || typeof value.note === 'string')
-  )
-}
-
-/**
- * Validate an untrusted value as a board snapshot, to the same standard the
- * library path applies, reusing the same predicates.
- *
- * A draft that passes a weaker check than the library is worse than no check
- * at all: a draft missing its ball is restored, `ballPosition` throws during
- * render, and because the draft is reloaded on every start the app is
- * bricked with no way back from inside it.
- *
- * A draft written before playback existed is flat — one moment with no
- * `frames` array at all — so both shapes are accepted here and the flat one
- * is wrapped into a single frame on the way out, in `toSnapshot`.
- */
-function isValidSnapshot(value: unknown): boolean {
-  if (!isObject(value)) return false
-  if (!isValidPitch(value.pitch)) return false
-  if (!areValidGoals(value.goals)) return false
-  if (Array.isArray(value.frames)) {
-    return value.frames.length > 0 && value.frames.every(isValidFrame)
-  }
-  return isValidFrame(value)
-}
-
-/**
- * Turn an already-validated draft value into a BoardSnapshot.
- *
- * `currentFrame` is passed through as stored, not clamped here: `apply()` in
- * useBoard already clamps it for every caller — a trimmed pattern, a fresh
- * board, this draft — because it is the one place that must, regardless of
- * where the snapshot came from. Clamping again here would just be a second
- * copy of that rule, free to drift from the first.
- */
-function toSnapshot(value: Record<string, unknown>): BoardSnapshot {
-  const legacyBallId = makeBallId()
-  const frames = Array.isArray(value.frames)
-    ? (value.frames as Record<string, unknown>[]).map((frame) =>
-        frameWithDefaults(frame, [], legacyBallId),
-      )
-    : // A draft from before playback existed: the whole board was one moment.
-      [frameWithDefaults(value, [], legacyBallId)]
-  return {
-    frames,
-    currentFrame: typeof value.currentFrame === 'number' ? value.currentFrame : 0,
-    labelsVisible: (value.labelsVisible as boolean | undefined) ?? true,
-    counterLabelsVisible: (value.counterLabelsVisible as boolean | undefined) ?? true,
-    ballsVisible: ballsVisibleOf(value),
-    notes: (value.notes as string | undefined) ?? '',
-    notesVisible: (value.notesVisible as boolean | undefined) ?? true,
-    goals: goalsOf(value),
-    pitch: value.pitch as BoardSnapshot['pitch'],
-  }
 }
 
 /**
  * The draft is transient working state, not the library, so a draft that
  * fails validation is discarded rather than preserved: starting on an empty
  * board loses at most the last few seconds, while restoring a broken one
- * loses the app.
+ * loses the app. It is held to the same schema as a saved drill's frames:
+ * a draft missing its ball's id would be restored, fail during render, and
+ * be reloaded on every start with no way back from inside the app.
  */
 function loadDraft(): BoardSnapshot | null {
   try {
-    const raw = readRaw(DRAFT_KEY)
-    if (!isValidSnapshot(raw)) return null
-    return toSnapshot(raw as Record<string, unknown>)
+    const result = SnapshotSchema.safeParse(readRaw(DRAFT_KEY))
+    return result.success ? result.data : null
   } catch {
     return null
   }
@@ -863,8 +462,20 @@ function importBundle(json: string): { patterns: Pattern[]; sessions: Session[] 
   return { patterns: added, sessions: addedSessions }
 }
 
+/** The saved patterns the app could not read, as stored, or null if none. */
+function unreadablePatterns(): string | null {
+  return unreadableText(PATTERNS_KEY, parsePattern)
+}
+
+/** Drop the saved patterns the app could not read; every readable one stays. */
+function discardUnreadablePatterns(): boolean {
+  return discardUnreadable(errors, PATTERNS_KEY, parsePattern)
+}
+
 const storage = {
   listPatterns,
+  unreadablePatterns,
+  discardUnreadablePatterns,
   seedStarterLibrary,
   savePattern,
   deletePattern,

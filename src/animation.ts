@@ -14,8 +14,11 @@ export const DEFAULT_FRAME_MS = 1000
 /** Short enough to be a flick, long enough to be seen. */
 export const MIN_FRAME_MS = 100
 
-/** Longer than this is a pause, and a pause wants its own frame. */
+/** Longer than this is a pause, and a pause wants a hold. */
 export const MAX_FRAME_MS = 10_000
+
+/** The longest a phase can be held before the next move starts. */
+export const MAX_HOLD_MS = 10_000
 
 /**
  * A label as drawn. `opacity` is set only mid-move, on a label that is on
@@ -33,11 +36,14 @@ export type FrameView = {
 }
 
 export type Timeline = {
-  /** Milliseconds from the start of the drill to the last frame. */
+  /** Milliseconds from the start of the drill to the end of the last frame's hold. */
   total: number
   /** When a frame is reached, in milliseconds from the start. */
   startOf(index: number): number
-  /** Which move a time falls in, and how far through it is. */
+  /**
+   * Which move a time falls in, and how far through it is. A time inside a
+   * hold is parked on that frame: `t` is 0 until the next move begins.
+   */
   at(ms: number): { index: number; t: number }
 }
 
@@ -94,17 +100,37 @@ export function durationOf(frames: Frame[], index: number): number {
   return raw > 0 ? raw : 0
 }
 
+/**
+ * How long the board rests on `index` once it has arrived, before the move
+ * out of it begins.
+ *
+ * Unlike a duration, every frame can have one — the first holds the set-up
+ * before anything moves, the last holds the final shape before the drill
+ * ends. Zero for anything that is not a positive number, for the same reason
+ * `durationOf` is.
+ */
+export function holdOf(frames: Frame[], index: number): number {
+  const raw = frames[index]?.hold ?? 0
+  return raw > 0 ? raw : 0
+}
+
 export function timelineOf(frames: Frame[]): Timeline {
-  const starts: number[] = [0]
-  for (let i = 1; i < frames.length; i++) starts.push(starts[i - 1] + durationOf(frames, i))
+  // When each frame is reached, and when the board leaves it again once its
+  // hold is over. The two are equal for a frame with no hold.
+  const arrives: number[] = [0]
+  const leaves: number[] = [holdOf(frames, 0)]
+  for (let i = 1; i < frames.length; i++) {
+    arrives.push(leaves[i - 1] + durationOf(frames, i))
+    leaves.push(arrives[i] + holdOf(frames, i))
+  }
 
   const last = Math.max(0, frames.length - 1)
-  const total = starts[last] ?? 0
+  const total = leaves[last] ?? 0
 
   return {
     total,
     startOf(index) {
-      return starts[Math.max(0, Math.min(index, last))] ?? 0
+      return arrives[Math.max(0, Math.min(index, last))] ?? 0
     },
     at(ms) {
       // `ms > 0 ? ms : 0` so NaN and negative times clamp to the start
@@ -113,9 +139,10 @@ export function timelineOf(frames: Frame[]): Timeline {
       const clamped = ms > 0 ? ms : 0
       if (clamped >= total) return { index: last, t: 0 }
       for (let i = 0; i < last; i++) {
-        const span = starts[i + 1] - starts[i]
+        if (clamped < leaves[i]) return { index: i, t: 0 }
+        const span = arrives[i + 1] - leaves[i]
         if (span <= 0) continue
-        if (clamped < starts[i + 1]) return { index: i, t: (clamped - starts[i]) / span }
+        if (clamped < arrives[i + 1]) return { index: i, t: (clamped - leaves[i]) / span }
       }
       return { index: last, t: 0 }
     },
@@ -229,7 +256,23 @@ export const GIF_TAIL_MS = 500
 export type GifSample = { atMs: number; delayMs: number }
 
 /**
+ * The shortest delay a GIF frame can safely ask for. Browsers treat anything
+ * below two hundredths as a mistake and slow it to a tenth of a second.
+ */
+const GIF_MIN_DELAY_MS = 20
+
+/** Rounded to a whole hundredth, GIF's unit, and never below what browsers honour. */
+function gifDelay(ms: number): number {
+  return Math.max(GIF_MIN_DELAY_MS, Math.round(ms / 10) * 10)
+}
+
+/**
  * When to sample the board, and how long each sample is held.
+ *
+ * Moves are sampled at the frame rate. A hold is one sample, held for as long
+ * as the hold lasts: the board is not changing, so sampling it twenty-five
+ * times a second would only add identical frames to the file. The last
+ * frame's hold is added to the tail rather than being a sample of its own.
  *
  * Pure and separate from the rasterising, which is the half that cannot be
  * tested here: jsdom has no canvas.
@@ -238,11 +281,23 @@ export function gifSchedule(frames: Frame[], fps = GIF_FPS): GifSample[] {
   // Rounded to a whole hundredth, because that is GIF's unit; anything else
   // is silently rounded by the encoder and the animation drifts.
   const step = Math.max(10, Math.round(1000 / fps / 10) * 10)
-  const total = timelineOf(frames).total
+  const line = timelineOf(frames)
+  const last = Math.max(0, frames.length - 1)
 
   const samples: GifSample[] = []
-  for (let at = 0; at < total; at += step) samples.push({ atMs: at, delayMs: step })
-  samples.push({ atMs: total, delayMs: GIF_TAIL_MS })
+  for (let i = 0; i < last; i++) {
+    const hold = holdOf(frames, i)
+    const leave = line.startOf(i) + hold
+    if (hold > 0) samples.push({ atMs: line.startOf(i), delayMs: gifDelay(hold) })
+    const arrive = line.startOf(i + 1)
+    // The last sample of a move is cut to what is left of it, so a move that
+    // is not a whole number of steps does not overrun into the next phase.
+    for (let at = leave; at < arrive; at += step) {
+      samples.push({ atMs: at, delayMs: Math.min(step, gifDelay(arrive - at)) })
+    }
+  }
+  const lastHold = holdOf(frames, last)
+  samples.push({ atMs: line.total, delayMs: GIF_TAIL_MS + (lastHold > 0 ? gifDelay(lastHold) : 0) })
   return samples
 }
 

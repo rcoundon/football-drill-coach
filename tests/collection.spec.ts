@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { createCollectionErrors, readCollection, writeCollection } from '../src/composables/collection'
+import {
+  createCollectionErrors,
+  discardUnreadable,
+  readCollection,
+  unreadableText,
+  writeCollection,
+} from '../src/composables/collection'
 
 type Thing = { id: string; n: number }
 
@@ -86,5 +92,38 @@ describe('writeCollection', () => {
 
     expect(a.lastError.value).toBe('Collection A is damaged.')
     expect(b.lastError.value).toBeNull()
+  })
+})
+
+describe('recovering what could not be read', () => {
+  it('hands back the damaged rows exactly as stored, and nothing when all is well', () => {
+    localStorage.setItem(KEY, JSON.stringify([{ id: 'a', n: 1 }, { id: 'b', n: 'two' }]))
+    expect(JSON.parse(unreadableText(KEY, parseThing)!)).toEqual([{ id: 'b', n: 'two' }])
+
+    localStorage.setItem(KEY, JSON.stringify([{ id: 'a', n: 1 }]))
+    expect(unreadableText(KEY, parseThing)).toBeNull()
+  })
+
+  it('hands back the whole stored text when the collection itself cannot be read', () => {
+    localStorage.setItem(KEY, '{not json')
+    expect(unreadableText(KEY, parseThing)).toBe('{not json')
+  })
+
+  it('drops only the damaged rows, and clears the warning', () => {
+    const errors = createCollectionErrors()
+    errors.lastError.value = 'damaged'
+    localStorage.setItem(KEY, JSON.stringify([{ id: 'a', n: 1 }, { id: 'b', n: 'two' }]))
+
+    expect(discardUnreadable(errors, KEY, parseThing)).toBe(true)
+    expect(JSON.parse(localStorage.getItem(KEY)!)).toEqual([{ id: 'a', n: 1 }])
+    expect(errors.lastError.value).toBeNull()
+  })
+
+  it('leaves an unreadable collection empty rather than absent', () => {
+    const errors = createCollectionErrors()
+    localStorage.setItem(KEY, '{not json')
+
+    expect(discardUnreadable(errors, KEY, parseThing)).toBe(true)
+    expect(localStorage.getItem(KEY)).toBe('[]')
   })
 })

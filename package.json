@@ -8,17 +8,21 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "validate": "tsx scripts/validate-drill.ts"
   },
   "dependencies": {
     "jspdf": "4.2.1",
     "modern-gif": "2.1.0",
-    "vue": "3.5.43"
+    "vue": "3.5.43",
+    "zod": "4.6.7"
   },
   "devDependencies": {
+    "@types/node": "26.6.5",
     "@vitejs/plugin-vue": "6.0.9",
     "@vue/test-utils": "2.5.1",
     "jsdom": "30.1.1",
+    "tsx": "4.23.15",
     "typescript": "6.0.3",
     "vite": "8.3.1",
     "vitest": "5.0.2",
