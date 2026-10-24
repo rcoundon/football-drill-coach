@@ -314,6 +314,30 @@ describe('gifSchedule', () => {
     expect(samples.at(-1)!.atMs).toBe(960)
     expect(samples).toHaveLength(Math.floor(960 / STEP) + 1)
   })
+
+  it('keeps the encoded GIF in step with the drill through repeated 1ms holds', () => {
+    // Each 1ms hold has to be encoded as the 20ms minimum. Counting it as 1ms
+    // left every later sample 19ms behind what was actually encoded.
+    const frames = [
+      frame({ hold: 1 }),
+      frame({ duration: 200, hold: 1 }),
+      frame({ duration: 200, hold: 1 }),
+      frame({ duration: 200, hold: 1 }),
+      frame({ duration: 200 }),
+    ]
+    const samples = gifSchedule(frames, GIF_FPS)
+    const total = timelineOf(frames).total
+
+    let encoded = 0
+    for (const sample of samples) {
+      expect(sample.delayMs % 10).toBe(0)
+      expect(sample.delayMs).toBeGreaterThanOrEqual(20)
+      // Never more than one minimum delay out, and never accumulating.
+      expect(Math.abs(encoded - sample.atMs)).toBeLessThanOrEqual(20)
+      encoded += sample.delayMs
+    }
+    expect(Math.abs(encoded - (total + GIF_TAIL_MS))).toBeLessThan(10)
+  })
 })
 
 describe('pointOnCurve', () => {

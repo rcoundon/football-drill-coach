@@ -192,9 +192,11 @@ export function describeIssue(kind: 'pattern' | 'session', issue: z.core.$ZodIss
   if (path.length === 0) return `That is not a saved ${kind}.`
   if (top === 'version') {
     const found = (value as { version?: unknown }).version
-    return kind === 'pattern'
-      ? `That pattern was saved by a different version of this app (version ${String(found)}). Update the app to open it.`
-      : 'That session was saved by a different version of this app.'
+    if (kind === 'session') return 'That session was saved by a different version of this app.'
+    // Only a newer drill is fixed by updating; an older one never will be.
+    return typeof found === 'number' && found > 3
+      ? `That pattern was saved by a newer version of this app (version ${found}). Update the app to open it.`
+      : `That pattern is in an older format (version ${String(found)}) that this app no longer opens.`
   }
   if (top === 'id' || top === 'name') return `That ${kind} is missing its name or id.`
   if (top === 'createdAt' || top === 'updatedAt') return `That ${kind} is missing when it was created or last saved.`

@@ -50,8 +50,14 @@ export function clearImportRequest(): void {
   window.history.replaceState(window.history.state, '', url.toString())
 }
 
+/**
+ * Standard base64 is accepted as well as base64url. The fragment is read with
+ * URLSearchParams, which turns a `+` into a space, so a space goes back to
+ * `+` rather than being thrown away; only the line breaks and tabs a chat app
+ * wraps a long link with are stripped.
+ */
 function fromBase64Url(text: string): Uint8Array {
-  const base64 = text.replace(/-/g, '+').replace(/_/g, '/').replace(/\s/g, '')
+  const base64 = text.replace(/-/g, '+').replace(/_/g, '/').replace(/ /g, '+').replace(/[\r\n\t]/g, '')
   const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4)
   const binary = atob(padded)
   return Uint8Array.from(binary, (c) => c.charCodeAt(0))
@@ -117,9 +123,42 @@ export async function fetchImport(raw: string): Promise<string> {
     throw new Error(`The drills at ${url.host} could not be fetched. The site may not allow it.`)
   }
   if (!response.ok) throw new Error(`The drills at ${url.host} could not be fetched (${response.status}).`)
-  const text = await response.text()
-  if (text.length > MAX_IMPORT_BYTES) throw new Error('That file is too large to be a drill file.')
-  return text
+  return readCapped(response)
+}
+
+const TOO_LARGE = 'That file is too large to be a drill file.'
+
+/**
+ * The body as text, refusing it once it passes MAX_IMPORT_BYTES. Counted in
+ * bytes as they arrive, so a link to something huge is cut off there rather
+ * than read into memory first and measured after.
+ */
+async function readCapped(response: Response): Promise<string> {
+  const declared = Number(response.headers.get('content-length'))
+  if (declared > MAX_IMPORT_BYTES) throw new Error(TOO_LARGE)
+  if (!response.body) return ''
+
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let received = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    received += value.byteLength
+    if (received > MAX_IMPORT_BYTES) {
+      await reader.cancel()
+      throw new Error(TOO_LARGE)
+    }
+    chunks.push(value)
+  }
+
+  const bytes = new Uint8Array(received)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return new TextDecoder().decode(bytes)
 }
 
 /** Summarise and check a file before anything in it is saved. */

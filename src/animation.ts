@@ -274,6 +274,13 @@ function gifDelay(ms: number): number {
  * times a second would only add identical frames to the file. The last
  * frame's hold is added to the tail rather than being a sample of its own.
  *
+ * Each sample is given the moment it should end on the drill's own timeline,
+ * and its delay is whatever takes the GIF from where it has got to so far
+ * to that moment. A delay cannot be what was asked for exactly — it is
+ * rounded to a hundredth, and never under 20ms — so working from the time
+ * already encoded lets the next sample make up the difference, rather than
+ * every short hold adding its rounding to everything after it.
+ *
  * Pure and separate from the rasterising, which is the half that cannot be
  * tested here: jsdom has no canvas.
  */
@@ -285,19 +292,23 @@ export function gifSchedule(frames: Frame[], fps = GIF_FPS): GifSample[] {
   const last = Math.max(0, frames.length - 1)
 
   const samples: GifSample[] = []
+  let encoded = 0
+  const sample = (atMs: number, until: number) => {
+    const delayMs = gifDelay(until - encoded)
+    samples.push({ atMs, delayMs })
+    encoded += delayMs
+  }
+
   for (let i = 0; i < last; i++) {
     const hold = holdOf(frames, i)
     const leave = line.startOf(i) + hold
-    if (hold > 0) samples.push({ atMs: line.startOf(i), delayMs: gifDelay(hold) })
+    if (hold > 0) sample(line.startOf(i), leave)
     const arrive = line.startOf(i + 1)
     // The last sample of a move is cut to what is left of it, so a move that
     // is not a whole number of steps does not overrun into the next phase.
-    for (let at = leave; at < arrive; at += step) {
-      samples.push({ atMs: at, delayMs: Math.min(step, gifDelay(arrive - at)) })
-    }
+    for (let at = leave; at < arrive; at += step) sample(at, Math.min(at + step, arrive))
   }
-  const lastHold = holdOf(frames, last)
-  samples.push({ atMs: line.total, delayMs: GIF_TAIL_MS + (lastHold > 0 ? gifDelay(lastHold) : 0) })
+  sample(line.total, line.total + GIF_TAIL_MS)
   return samples
 }
 

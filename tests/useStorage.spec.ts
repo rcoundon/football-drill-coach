@@ -331,7 +331,15 @@ describe('parsePattern', () => {
     const store = useStorage()
     const saved = store.savePattern('Drill', snap())
     const future = { ...saved, version: 4 }
-    expect(() => parsePattern(future)).toThrow(/different version/i)
+    expect(() => parsePattern(future)).toThrow(/newer version.*Update the app/i)
+  })
+
+  it('does not tell a coach to update the app for an older format', () => {
+    const store = useStorage()
+    const saved = store.savePattern('Drill', snap())
+    for (const version of [1, 2, '3']) {
+      expect(() => parsePattern({ ...saved, version })).toThrow(/older format/i)
+    }
   })
 
   it('rejects a pattern with no frames', () => {

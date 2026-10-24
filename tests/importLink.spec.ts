@@ -41,6 +41,24 @@ describe('import payloads', () => {
     vi.unstubAllGlobals()
   })
 
+  it('reads standard base64, whose + the fragment parser turns into a space', async () => {
+    const json = '{"a":">>>"}'
+    const standard = btoa(json)
+    expect(standard).toContain('+')
+
+    const request = readImportRequest({ hash: `#import=${standard}`, search: '' })
+    expect(request).toMatchObject({ kind: 'inline' })
+    const payload = (request as { payload: string }).payload
+    expect(payload).toContain(' ')
+    expect(await decodeImportPayload(payload)).toBe(json)
+  })
+
+  it('ignores line breaks and tabs a chat app wrapped the link with', async () => {
+    const json = '{"a":">>>"}'
+    const wrapped = btoa(json).replace(/(.{4})/g, '$1\r\n\t')
+    expect(await decodeImportPayload(wrapped)).toBe(json)
+  })
+
   it('round-trips a gzipped file, non-ASCII text included', async () => {
     const json = JSON.stringify({ ...demoDrills, note: 'Coaches’ notes — ½ pitch' })
     const payload = await encodeImportPayload(json)
@@ -69,6 +87,37 @@ describe('fetchImport', () => {
     vi.stubGlobal('fetch', fetchMock)
     expect(await fetchImport('https://example.com/d.json')).toBe('{"patterns":[],"sessions":[]}')
     expect((fetchMock.mock.calls[0] as unknown[])[1]).toEqual({ credentials: 'omit' })
+    vi.unstubAllGlobals()
+  })
+
+  it('refuses a file that says it is too large, without reading it', async () => {
+    const response = new Response('{}', { headers: { 'content-length': '6000000' } })
+    const read = vi.spyOn(response, 'text')
+    vi.stubGlobal('fetch', vi.fn(async () => response))
+    await expect(fetchImport('https://example.com/d.json')).rejects.toThrow('too large')
+    expect(read).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+
+  it('stops reading a file once it passes the limit, counting bytes', async () => {
+    // 2.5 million two-byte characters: under the limit in characters,
+    // over it in bytes, and sent with no length to check up front.
+    const chunk = new TextEncoder().encode('é'.repeat(500_000))
+    let pulled = 0
+    const cancel = vi.fn()
+    const { ReadableStream } = await import('node:stream/web')
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled++
+        if (pulled > 10) controller.close()
+        else controller.enqueue(chunk)
+      },
+      cancel,
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(body as unknown as BodyInit)))
+    await expect(fetchImport('https://example.com/d.json')).rejects.toThrow('too large')
+    expect(cancel).toHaveBeenCalled()
+    expect(pulled).toBeLessThanOrEqual(7)
     vi.unstubAllGlobals()
   })
 })
