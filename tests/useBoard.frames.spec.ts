@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { useBoard, __resetBoardForTests } from '../src/composables/useBoard'
 import type { BoardSnapshot } from '../src/composables/useBoard'
 import type { Frame } from '../src/types'
-import { MAX_FRAME_MS, MIN_FRAME_MS } from '../src/animation'
+import { MAX_FRAME_MS, MAX_HOLD_MS, MIN_FRAME_MS } from '../src/animation'
 
 const board = useBoard()
 
@@ -268,6 +268,37 @@ describe('frame duration', () => {
     expect(board.state.frames[1].duration).toBe(MIN_FRAME_MS)
     board.setFrameDuration(1, 999_999)
     expect(board.state.frames[1].duration).toBe(MAX_FRAME_MS)
+  })
+})
+
+describe('frame hold', () => {
+  it('is stored on the frame, the first included', () => {
+    board.setFrameHold(0, 800)
+    expect(board.state.frames[0].hold).toBe(800)
+  })
+
+  it('is removed rather than stored as zero', () => {
+    board.setFrameHold(0, 800)
+    board.setFrameHold(0, 0)
+    expect(board.state.frames[0]).not.toHaveProperty('hold')
+  })
+
+  it('is capped', () => {
+    board.setFrameHold(0, 999_999)
+    expect(board.state.frames[0].hold).toBe(MAX_HOLD_MS)
+  })
+
+  it('moves where later phases begin, and keeps the playhead on the phase', () => {
+    board.addFrame()
+    board.setFrameHold(0, 500)
+    expect(board.timeline.value.startOf(1)).toBe(1500)
+    expect(board.playback.at).toBe(1500)
+  })
+
+  it('can be undone', () => {
+    board.setFrameHold(0, 500)
+    board.undo()
+    expect(board.state.frames[0].hold).toBeUndefined()
   })
 })
 

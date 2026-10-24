@@ -216,6 +216,57 @@ describe('the duration field', () => {
   })
 })
 
+describe('the pause field', () => {
+  beforeEach(() => {
+    board.addFrame()
+  })
+
+  it('is offered on the first phase too', () => {
+    board.goToFrame(0)
+    const wrapper = mount(PhaseTimeline)
+    expect(wrapper.find('[data-frame="0"] [data-frame-hold]').exists()).toBe(true)
+  })
+
+  it('sets it, in seconds', async () => {
+    const wrapper = mount(PhaseTimeline)
+    const field = wrapper.find('[data-frame="1"] [data-frame-hold]')
+    await field.setValue('1.5')
+    await field.trigger('change')
+    expect(board.state.frames[1].hold).toBe(1500)
+  })
+
+  it('takes a pause away when set to zero', async () => {
+    board.setFrameHold(1, 1500)
+    const wrapper = mount(PhaseTimeline)
+    const field = wrapper.find('[data-frame="1"] [data-frame-hold]')
+    await field.setValue('0')
+    await field.trigger('change')
+    expect(board.state.frames[1].hold).toBeUndefined()
+  })
+
+  it('leaves the hold alone when the field is emptied', async () => {
+    board.setFrameHold(1, 1500)
+    const wrapper = mount(PhaseTimeline)
+    const field = wrapper.find('[data-frame="1"] [data-frame-hold]')
+    await field.setValue('')
+    await field.trigger('change')
+    expect(board.state.frames[1].hold).toBe(1500)
+  })
+
+  it('badges a phase that has one, without a second field on the card', () => {
+    board.setFrameHold(0, 2000)
+    const wrapper = mount(PhaseTimeline)
+    const badge = wrapper.find('[data-frame="0"] .badge--hold')
+    expect(badge.text()).toContain('2s')
+    expect(badge.find('input').exists()).toBe(false)
+  })
+
+  it('badges nothing on a phase without one', () => {
+    const wrapper = mount(PhaseTimeline)
+    expect(wrapper.find('[data-frame="0"] .badge--hold').exists()).toBe(false)
+  })
+})
+
 describe('the transport', () => {
   beforeEach(() => {
     board.addFrame()

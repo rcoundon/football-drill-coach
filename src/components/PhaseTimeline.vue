@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { DEFAULT_FRAME_MS, MAX_FRAME_MS, MIN_FRAME_MS } from '../animation'
+import { DEFAULT_FRAME_MS, MAX_FRAME_MS, MAX_HOLD_MS, MIN_FRAME_MS } from '../animation'
 import { useBoard } from '../composables/useBoard'
 import BoardView from './BoardView.vue'
 
@@ -46,6 +46,26 @@ function setDuration(index: number, event: Event): void {
   const seconds = Number(raw)
   if (!Number.isFinite(seconds)) return
   board.setFrameDuration(index, seconds * 1000)
+}
+
+/** The pause on a phase, in seconds. Zero when it has none. */
+function holdSecondsOf(index: number): string {
+  const ms = board.state.frames[index]?.hold ?? 0
+  return String(Math.round(ms) / 1000)
+}
+
+function hasHold(index: number): boolean {
+  return (board.state.frames[index]?.hold ?? 0) > 0
+}
+
+function setHold(index: number, event: Event): void {
+  const raw = (event.target as HTMLInputElement).value
+  // An emptied field is an edit in progress, exactly as it is for the
+  // duration. Typing 0 is how a pause is taken away.
+  if (raw.trim() === '') return
+  const seconds = Number(raw)
+  if (!Number.isFinite(seconds)) return
+  board.setFrameHold(index, seconds * 1000)
 }
 
 function onScrub(event: Event): void {
@@ -110,7 +130,7 @@ const menuStyle = computed(() =>
 )
 
 const MENU_WIDTH = 160
-const MENU_HEIGHT = 148
+const MENU_HEIGHT = 196
 const MENU_GAP = 6
 
 function toggleMenu(index: number, event: MouseEvent): void {
@@ -390,6 +410,22 @@ onBeforeUnmount(() => {
           <span class="badge badge--number">{{ index + 1 }}</span>
 
           <!--
+            The pause on arriving at a phase, read-only here: two bare number
+            fields side by side on a card this small could not be told apart.
+            It is edited from the phase's menu, where it can be labelled.
+            Shown only when there is one, so a drill without pauses looks
+            exactly as it did.
+          -->
+          <span
+            v-if="hasHold(index)"
+            class="badge badge--hold"
+            :title="`Pauses here for ${holdSecondsOf(index)}s before the next move`"
+          >
+            <svg viewBox="0 0 24 24" width="9" height="9" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
+            {{ holdSecondsOf(index) }}s
+          </span>
+
+          <!--
             Hidden on the first phase: a duration is how long the move INTO a
             moment takes, and nothing moves into the start of a drill.
           -->
@@ -431,6 +467,27 @@ onBeforeUnmount(() => {
           </button>
 
           <div v-show="openMenu === index" class="menu" :style="menuStyle" role="menu">
+            <!--
+              First in the menu, and available on the first phase too: it
+              can hold the set-up before anything moves.
+            -->
+            <label class="menu-field" :title="board.isDerived.value ? lockedTitle : undefined">
+              <span>Pause here</span>
+              <input
+                data-frame-hold
+                class="menu-number"
+                type="number"
+                min="0"
+                :max="MAX_HOLD_MS / 1000"
+                step="0.1"
+                :value="holdSecondsOf(index)"
+                :disabled="board.isDerived.value"
+                aria-label="Pause on this phase before the next move, in seconds"
+                @change="setHold(index, $event)"
+              />
+              <span aria-hidden="true">s</span>
+            </label>
+            <div class="menu-divider"></div>
             <button
               data-duplicate-frame
               class="menu-item"
@@ -631,11 +688,18 @@ onBeforeUnmount(() => {
 }
 .badge--number { top: 3px; left: 3px; }
 .badge--duration { bottom: 3px; right: 3px; gap: 0; pointer-events: auto; }
+.badge--hold { bottom: 3px; left: 3px; gap: 0.15rem; }
 
+/*
+ * Boxed rather than bare, and sized for a thumb: a field that looked like the
+ * read-only badges on the other cards was not obviously something to type in.
+ */
 .duration-field {
-  width: 1.7rem; text-align: right;
-  border: none; background: transparent; color: inherit;
-  font: inherit; padding: 0;
+  width: 2.4rem; height: 1.3rem; text-align: right;
+  border: 1px solid #ffffff40; border-radius: 0.25rem;
+  background: #00000040; color: inherit;
+  font: inherit; font-size: 0.8rem; padding: 0 0.2rem;
+  margin-right: 0.1rem;
   -moz-appearance: textfield;
 }
 .duration-field::-webkit-outer-spin-button,
@@ -674,6 +738,19 @@ onBeforeUnmount(() => {
 .menu-item:hover:not(:disabled) { background: var(--surface-4); }
 .menu-item:disabled { opacity: 0.4; cursor: default; }
 .menu-item--danger { color: var(--error-ink); }
+.menu-field {
+  display: flex; align-items: center; gap: 0.3rem;
+  padding: 0.3rem 0.5rem; font-size: 0.8rem; white-space: nowrap;
+}
+.menu-field > span:first-child { flex: 1; }
+.menu-number {
+  width: 4rem; height: 1.8rem; text-align: right;
+  border: 1px solid var(--border); border-radius: 0.3rem;
+  background: var(--surface-1); color: inherit;
+  font: inherit; font-size: 0.9rem; font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  padding: 0.2rem 0.4rem;
+}
+.menu-number:disabled { opacity: 0.5; }
 .menu-divider { height: 1px; margin: 0.2rem; background: var(--border); }
 
 /*
@@ -705,7 +782,9 @@ onBeforeUnmount(() => {
 @media (pointer: coarse) {
   .overflow { opacity: 1; width: 28px; height: 28px; }
   .transport-button { width: 44px; height: 44px; }
-  .menu-item { min-height: 44px; }
+  .menu-item, .menu-field { min-height: 44px; }
+  .menu-number { height: 2.2rem; }
+  .duration-field { height: 1.6rem; }
   .scrub-wrap { height: 44px; }
 }
 

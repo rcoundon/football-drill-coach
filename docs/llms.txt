@@ -1,0 +1,16 @@
+# Tactics Board
+
+> A browser tactics board for football (soccer) coaches. Drills are coloured counters, cones, arrows and text on a pitch, in phases that animate one into the next; sessions run several drills in order. Everything is stored in the coach's browser: there is no server, account or API.
+
+An AI agent can write drills and sessions as one JSON file and hand them to a coach as a link. Opening the link shows the coach what it contains, checks it, and imports it once they confirm.
+
+## Docs
+
+- [Writing drills](/agents.md): the file format (coordinates, phases, players, balls, sessions) and how to build an import link
+- [Drill file JSON Schema](/drill.schema.json): the exact shape the import accepts, for structured output
+- [Example drills](/demo-drills.json): six valid drills and one session to copy from
+
+## Import link
+
+- `/#import=<base64url of the JSON file, optionally gzipped>`: the drills travel inside the link
+- `/?import=<https URL of a JSON file>`: the app fetches the file (the host must allow CORS)

@@ -980,6 +980,74 @@ describe('the session store error', () => {
 })
 
 /**
+ * The banner says unreadable rows were "left untouched so they can be
+ * recovered"; these are the two ways it offers to do that from the app.
+ */
+describe('recovering saved patterns that could not be read', () => {
+  function storeWithOldRow() {
+    const storage = useStorage()
+    useBoard().loadSnapshot(sampleSnapshot())
+    storage.savePattern('Kept drill', useBoard().snapshot())
+    const rows = JSON.parse(localStorage.getItem(PATTERNS_KEY)!)
+    rows.push({ id: 'old', name: 'Old drill', version: 1 })
+    localStorage.setItem(PATTERNS_KEY, JSON.stringify(rows))
+    storage.listPatterns()
+  }
+
+  it('offers no buttons for an error that is not about unreadable rows', async () => {
+    wrapper = mountApp()
+    useStorage().lastError.value = 'The browser is out of space.'
+    await nextTick()
+
+    expect(wrapper.find('.error').exists()).toBe(true)
+    expect(wrapper.find('[data-download-unreadable]').exists()).toBe(false)
+  })
+
+  it('downloads the unreadable rows as stored, without dismissing the banner', async () => {
+    const downloads: { text: string; name: string }[] = []
+    vi.spyOn(useExport(), 'downloadText').mockImplementation((text, name) => { downloads.push({ text, name }) })
+    storeWithOldRow()
+    wrapper = mountApp()
+    await nextTick()
+
+    await wrapper.find('[data-download-unreadable]').trigger('click')
+
+    expect(downloads).toHaveLength(1)
+    expect(downloads[0].name).toMatch(/^unreadable-patterns-\d{4}-\d{2}-\d{2}\.json$/)
+    expect(JSON.parse(downloads[0].text)).toEqual([{ id: 'old', name: 'Old drill', version: 1 }])
+    expect(wrapper.find('.error').exists()).toBe(true)
+  })
+
+  it('removes only the unreadable rows once confirmed', async () => {
+    storeWithOldRow()
+    wrapper = mountApp()
+    await nextTick()
+
+    await wrapper.find('[data-discard-unreadable]').trigger('click')
+    expect(wrapper.find('.error').exists()).toBe(true)
+    await wrapper.find('[data-confirm-discard-unreadable]').trigger('click')
+    await nextTick()
+
+    const rows = JSON.parse(localStorage.getItem(PATTERNS_KEY)!)
+    expect(rows.map((r: { name: string }) => r.name)).toEqual(['Kept drill'])
+    expect(wrapper.find('.error').exists()).toBe(false)
+    expect(wrapper.find('.notice').text()).toMatch(/could not be read/)
+  })
+
+  it('removes nothing when the prompt is cancelled', async () => {
+    storeWithOldRow()
+    wrapper = mountApp()
+    await nextTick()
+
+    await wrapper.find('[data-discard-unreadable]').trigger('click')
+    await wrapper.find('[role="dialog"][aria-label="Remove what could not be read"] .chip:not(.chip--danger)').trigger('click')
+
+    expect(JSON.parse(localStorage.getItem(PATTERNS_KEY)!)).toHaveLength(2)
+    expect(wrapper.find('[data-download-unreadable]').exists()).toBe(true)
+  })
+})
+
+/**
  * Unlike the GIF, exporting a session never touches the live board: the
  * boards it prints are rasterised off-screen by `renderFrameToDataUrl`, so a
  * coach can keep working, and a failure halfway through cannot strand them
@@ -1177,8 +1245,10 @@ describe('importing the JSON bundle', () => {
 
     await wrapper.find('[data-import-json]').trigger('click')
     await vi.waitFor(() => {
-      expect(wrapper!.find('.notice').exists()).toBe(true)
+      expect(wrapper!.find('[data-confirm-import]').exists()).toBe(true)
     })
+    await wrapper.find('[data-confirm-import]').trigger('click')
+    await nextTick()
 
     expect(wrapper.find('.notice').text()).toBe('Imported 1 pattern(s) and 1 session(s).')
   })
@@ -1197,10 +1267,77 @@ describe('importing the JSON bundle', () => {
 
     await wrapper.find('[data-import-json]').trigger('click')
     await vi.waitFor(() => {
-      expect(wrapper!.find('.notice').exists()).toBe(true)
+      expect(wrapper!.find('[data-confirm-import]').exists()).toBe(true)
     })
+    await wrapper.find('[data-confirm-import]').trigger('click')
+    await nextTick()
 
     expect(wrapper.find('.notice').text()).toBe('Imported 0 pattern(s) and 1 session(s).')
+  })
+})
+
+describe('reviewing an import before it is saved', () => {
+  function bundleJson() {
+    const storage = useStorage()
+    const pattern = storage.savePattern('Rondo', sampleSnapshot())
+    const session = useSessions().createSession('Tuesday U12')
+    useSessions().saveSession({ ...session, entries: [useSessions().newEntry(pattern.id, 12)] })
+    const json = storage.exportBundleJson(storage.listPatterns(), useSessions().listSessions())
+    localStorage.clear()
+    localStorage.setItem(TUTORIAL_KEY, JSON.stringify({ seen: true }))
+    localStorage.setItem(PATTERNS_KEY, '[]')
+    return json
+  }
+
+  it('shows what a file holds and saves nothing until Import is pressed', async () => {
+    vi.spyOn(useExport(), 'pickJsonFile').mockResolvedValue(bundleJson())
+    wrapper = mountApp()
+
+    await wrapper.find('[data-import-json]').trigger('click')
+    await vi.waitFor(() => expect(wrapper!.find('[data-import-drill]').exists()).toBe(true))
+
+    expect(wrapper.find('[data-import-drill]').text()).toContain('Rondo')
+    expect(wrapper.find('[data-import-session]').text()).toContain('Tuesday U12')
+    expect(useStorage().listPatterns()).toHaveLength(0)
+
+    await wrapper.find('[data-cancel-import]').trigger('click')
+    expect(useStorage().listPatterns()).toHaveLength(0)
+  })
+
+  it('will not import a file the import refuses', async () => {
+    vi.spyOn(useExport(), 'pickJsonFile').mockResolvedValue('{"patterns": [{"id": "x"}], "sessions": []}')
+    wrapper = mountApp()
+
+    await wrapper.find('[data-import-json]').trigger('click')
+    await vi.waitFor(() => expect(wrapper!.find('[data-import-errors]').exists()).toBe(true))
+
+    expect(wrapper.find('[data-confirm-import]').attributes('disabled')).toBeDefined()
+  })
+
+  it('opens a drill link, clears it from the address bar, and shows the session once imported', async () => {
+    const json = bundleJson()
+    const payload = btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    window.history.replaceState(null, '', `/#import=${payload}`)
+    wrapper = mountApp()
+
+    await vi.waitFor(() => expect(wrapper!.find('[data-confirm-import]').exists()).toBe(true))
+    expect(window.location.hash).toBe('')
+
+    await wrapper.find('[data-confirm-import]').trigger('click')
+    await nextTick()
+
+    expect(useStorage().listPatterns()).toHaveLength(1)
+    expect(wrapper.find('[role="dialog"][aria-label="Tuesday U12"]').exists()).toBe(true)
+  })
+
+  it('does not start the tour over a drill link on a first visit', async () => {
+    const json = bundleJson()
+    localStorage.removeItem(TUTORIAL_KEY)
+    window.history.replaceState(null, '', `/#import=${btoa(json)}`)
+    wrapper = mountApp()
+
+    await vi.waitFor(() => expect(wrapper!.find('[data-confirm-import]').exists()).toBe(true))
+    expect(useTutorial().active.value).toBe(false)
   })
 })
 
@@ -3197,5 +3334,162 @@ describe('the tutorial', () => {
 
     expect(wrapper.find('[data-tour-card]').exists()).toBe(false)
     expect(wrapper.find('[aria-label="Help"][role="dialog"]').exists()).toBe(true)
+  })
+})
+
+/**
+ * Checking a session over before training: open it, press Review, and work
+ * through its drills on the board one at a time, fixing each as it comes.
+ */
+describe('reviewing a session drill by drill', () => {
+  function snapshotWith(x: number): BoardSnapshot {
+    const snap = sampleSnapshot()
+    snap.frames[0].counters[0].pos = { x, y: 10 }
+    return snap
+  }
+
+  function seedSession() {
+    const store = useStorage()
+    const rondo = store.savePattern('Rondo', snapshotWith(10))
+    const press = store.savePattern('Pressing', snapshotWith(40))
+    const finish = store.savePattern('Finishing', snapshotWith(70))
+    const created = useSessions().createSession('Tuesday U12')
+    const session = {
+      ...created,
+      entries: [
+        { id: 'e1', patternId: rondo.id, minutes: 10 },
+        { id: 'e2', patternId: press.id, minutes: 15 },
+        { id: 'e3', patternId: finish.id, minutes: 20 },
+      ],
+    }
+    useSessions().saveSession(session)
+    return { rondo, press, finish }
+  }
+
+  async function openPlan(app: VueWrapper) {
+    await openSessions(app)
+    await app.find('[data-session] [data-open]').trigger('click')
+    await nextTick()
+  }
+
+  function dockNames(app: VueWrapper) {
+    return app.findAll('[data-dock-entry]').map((b) => b.text())
+  }
+
+  function current(app: VueWrapper) {
+    return app.find('[data-dock-entry].is-current').text()
+  }
+
+  it('opens the first drill on the board with the running order docked beside it', async () => {
+    seedSession()
+    wrapper = mountApp()
+    await openPlan(wrapper)
+
+    await wrapper.find('[data-review]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.find('[role="dialog"][aria-label="Tuesday U12"]').exists()).toBe(false)
+    expect(dockNames(wrapper)).toHaveLength(3)
+    expect(current(wrapper)).toContain('Rondo')
+    expect(drillName(wrapper)).toBe('Rondo')
+    expect(useBoard().state.counters[0].pos.x).toBe(10)
+  })
+
+  it('opens whichever drill is pressed in the plan', async () => {
+    seedSession()
+    wrapper = mountApp()
+    await openPlan(wrapper)
+
+    await wrapper.findAll('[data-open-drill]')[1].trigger('click')
+    await nextTick()
+
+    expect(drillName(wrapper)).toBe('Pressing')
+    expect(current(wrapper)).toContain('Pressing')
+  })
+
+  it('steps to the next and previous drill, and jumps to any drill pressed', async () => {
+    seedSession()
+    wrapper = mountApp()
+    await openPlan(wrapper)
+    await wrapper.find('[data-review]').trigger('click')
+    await nextTick()
+
+    await wrapper.find('[data-dock-next]').trigger('click')
+    await nextTick()
+    expect(drillName(wrapper)).toBe('Pressing')
+
+    await wrapper.findAll('[data-dock-entry]')[2].trigger('click')
+    await nextTick()
+    expect(drillName(wrapper)).toBe('Finishing')
+    expect(wrapper.find('[data-dock-next]').attributes('disabled')).toBeDefined()
+
+    await wrapper.find('[data-dock-previous]').trigger('click')
+    await nextTick()
+    expect(drillName(wrapper)).toBe('Pressing')
+    expect(useBoard().state.counters[0].pos.x).toBe(40)
+  })
+
+  it('keeps an edit made a moment before moving on to the next drill', async () => {
+    const { rondo } = seedSession()
+    wrapper = mountApp()
+    await openPlan(wrapper)
+    await wrapper.find('[data-review]').trigger('click')
+    await nextTick()
+
+    useBoard().addCounter('blue')
+    await nextTick()
+    // Well inside the autosave's one-second debounce.
+    await wrapper.find('[data-dock-next]').trigger('click')
+    await nextTick()
+
+    const saved = useStorage().listPatterns().find((p) => p.id === rondo.id)!
+    expect(saved.frames[0].counters).toHaveLength(2)
+    expect(drillName(wrapper)).toBe('Pressing')
+  })
+
+  it('skips a drill that is no longer in the library', async () => {
+    const { press } = seedSession()
+    useStorage().deletePattern(press.id)
+    wrapper = mountApp()
+    await openPlan(wrapper)
+    await wrapper.find('[data-review]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.find('[data-dock-missing]').exists()).toBe(true)
+    await wrapper.find('[data-dock-next]').trigger('click')
+    await nextTick()
+    expect(drillName(wrapper)).toBe('Finishing')
+  })
+
+  it('goes back to the plan and picks up a reorder made there', async () => {
+    seedSession()
+    wrapper = mountApp()
+    await openPlan(wrapper)
+    await wrapper.find('[data-review]').trigger('click')
+    await nextTick()
+
+    await wrapper.find('[data-dock-edit-plan]').trigger('click')
+    await nextTick()
+    await wrapper.findAll('[data-entry]')[0].find('[data-down]').trigger('click')
+    await wrapper.find('[role="dialog"][aria-label="Tuesday U12"] .head .chip').trigger('click')
+    await nextTick()
+
+    expect(dockNames(wrapper)[0]).toContain('Pressing')
+    // Still the same drill on the board, so still the one highlighted.
+    expect(current(wrapper)).toContain('Rondo')
+  })
+
+  it('stops reviewing and leaves the drill on the board', async () => {
+    seedSession()
+    wrapper = mountApp()
+    await openPlan(wrapper)
+    await wrapper.find('[data-review]').trigger('click')
+    await nextTick()
+
+    await wrapper.find('[data-dock-close]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.find('[data-session-dock]').exists()).toBe(false)
+    expect(drillName(wrapper)).toBe('Rondo')
   })
 })

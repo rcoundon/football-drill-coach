@@ -119,3 +119,34 @@ export function recordWrite(errors: CollectionErrors, ok: boolean, damaged: unkn
   errors.lastWriteSucceeded.value = ok
   return ok && damaged.length > 0
 }
+
+/**
+ * The rows the app could not read, exactly as they are stored, for the coach
+ * to keep as a file. The whole stored text when the collection itself could
+ * not be read; the damaged rows alone otherwise; null when there are none.
+ *
+ * This is what "left untouched so they can be recovered" points at: without
+ * it the only way to get at them was the browser's developer console.
+ */
+export function unreadableText<T>(key: string, parse: (value: unknown) => T): string | null {
+  const { unreadable, damaged } = readCollection(key, parse)
+  if (unreadable) return localStorage.getItem(key)
+  return damaged.length > 0 ? JSON.stringify(damaged, null, 2) : null
+}
+
+/**
+ * Let go of what could not be read, keeping every row that could.
+ *
+ * The one write that deliberately drops damaged rows, and only ever after the
+ * coach has asked for it. An unreadable collection becomes an empty one
+ * rather than an absent key: absent means "never used", and the library
+ * would seed its starter drill into it.
+ */
+export function discardUnreadable<T>(errors: CollectionErrors, key: string, parse: (value: unknown) => T): boolean {
+  const { items, unreadable, damaged } = readCollection(key, parse)
+  if (!unreadable && damaged.length === 0) return true
+  const ok = writeRaw(errors, key, items)
+  errors.lastWriteSucceeded.value = ok
+  if (ok) errors.lastError.value = null
+  return ok
+}

@@ -188,6 +188,15 @@ export type Frame = {
    * Optional so a pattern saved before playback existed needs no rewriting.
    */
   duration?: number
+  /**
+   * How long the board rests on this frame once it arrives, in milliseconds,
+   * before the move out of it begins. Absent means no pause. Unlike
+   * `duration`, the first frame's counts: it holds the set-up before anything
+   * moves.
+   *
+   * Optional so a pattern saved before holds existed plays as it always did.
+   */
+  hold?: number
 }
 
 export type Pattern = {
@@ -195,11 +204,6 @@ export type Pattern = {
   name: string
   version: 3
   pitch: { type: PitchType; rotated: boolean }
-  /**
-   * Where drawings lived before they belonged to a moment. Read into the
-   * first frame when a v1 pattern is opened, and never written again.
-   */
-  drawings?: Drawing[]
   labelsVisible?: boolean
   counterLabelsVisible?: boolean
   /**

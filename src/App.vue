@@ -13,6 +13,17 @@ import PresentationBar from './components/PresentationBar.vue'
 import PatternLibrary from './components/PatternLibrary.vue'
 import SessionLibrary from './components/SessionLibrary.vue'
 import SessionPlan from './components/SessionPlan.vue'
+import SessionDock from './components/SessionDock.vue'
+import ImportReviewDialog from './components/ImportReview.vue'
+import {
+  clearImportRequest,
+  decodeImportPayload,
+  fetchImport,
+  readImportRequest,
+  reviewImport,
+  type ImportRequest,
+  type ImportReview,
+} from './importLink'
 import HelpPanel from './components/HelpPanel.vue'
 import Inspector from './components/Inspector.vue'
 import LabelEditor from './components/LabelEditor.vue'
@@ -193,11 +204,71 @@ function onSessionOpened(session: Session) {
 /** The library renamed the session that is open here — keep its title in step. */
 function onSessionRenamed(session: Session) {
   if (openSession.value?.id === session.id) openSession.value = session
+  if (reviewSession.value?.id === session.id) reviewSession.value = session
 }
 
 /** The library deleted the session that is open here — there is nothing left to edit. */
 function onSessionDeleted(id: string) {
   if (openSession.value?.id === id) openSession.value = null
+  if (reviewSession.value?.id === id) stopReview()
+}
+
+/**
+ * The session being worked through on the board, and which of its entries
+ * is up. Kept apart from `openSession`: the plan is a dialog over the board,
+ * while reviewing is the board itself with the running order docked beside
+ * it, and the coach moves between the two with Edit plan.
+ *
+ * The entry is held by its own id, not by position, so reordering the plan
+ * mid-review leaves the same drill highlighted rather than whichever one
+ * slid into its slot.
+ */
+const reviewSession = ref<Session | null>(null)
+const reviewEntryId = ref<string | null>(null)
+
+function startReview(session: Session, entryId: string): void {
+  openSession.value = null
+  reviewSession.value = session
+  goToReviewEntry(entryId)
+}
+
+function goToReviewEntry(entryId: string): void {
+  const entry = reviewSession.value?.entries.find((e) => e.id === entryId)
+  if (!entry) return
+  const pattern = storage.listPatterns().find((p) => p.id === entry.patternId)
+  if (!pattern) return
+  // A board mid-play or scrubbed between phases refuses a load, which would
+  // leave the old drill on the board under the new drill's name. Settling
+  // it on its phase first is what the coach pressing a drill expects.
+  if (board.isDerived.value) board.goToFrame(board.state.currentFrame)
+  if (board.isDerived.value) return
+  onPatternLoaded(pattern)
+  reviewEntryId.value = entryId
+}
+
+function stopReview(): void {
+  reviewSession.value = null
+  reviewEntryId.value = null
+}
+
+/** Back to the full plan, with the dock left where it was underneath. */
+function editReviewPlan(): void {
+  if (reviewSession.value) openSession.value = reviewSession.value
+}
+
+/**
+ * The plan closed — pick up whatever it changed. It writes every edit
+ * straight through, so the stored copy is the truth; an entry removed while
+ * it was on the board leaves the drill there but nothing highlighted.
+ */
+function onSessionPlanClosed(): void {
+  openSession.value = null
+  const reviewing = reviewSession.value
+  if (!reviewing) return
+  const fresh = sessions.listSessions().find((s) => s.id === reviewing.id)
+  if (!fresh) return stopReview()
+  reviewSession.value = fresh
+  if (!fresh.entries.some((e) => e.id === reviewEntryId.value)) reviewEntryId.value = null
 }
 
 /**
@@ -262,6 +333,13 @@ function autosavePattern(): void {
 }
 
 let autosaveTimer: ReturnType<typeof setTimeout> | undefined
+
+/** Write a pending autosave now rather than when its debounce runs out. */
+function flushAutosave(): void {
+  if (saveStatus.value !== 'dirty') return
+  clearTimeout(autosaveTimer)
+  autosavePattern()
+}
 
 /**
  * Debounced, because a drag is hundreds of changes and the library is a
@@ -487,6 +565,10 @@ function confirmSave() {
 }
 
 function onPatternLoaded(pattern: Pattern) {
+  // An edit made in the last second is still waiting on its debounce, and
+  // the load below re-arms that timer for the incoming drill — so without
+  // this, stepping straight to the next drill drops the edit to this one.
+  flushAutosave()
   board.loadSnapshot(storage.patternToSnapshot(pattern))
   currentPatternId.value = pattern.id
   currentName.value = pattern.name
@@ -549,6 +631,9 @@ function startTour(): void {
   helpOpen.value = false
   const started = tutorial.start({ patternId: currentPatternId.value, name: currentName.value })
   if (!started) return
+  // The tour runs on its own empty board; a dock left up would load a drill
+  // over it with one press.
+  stopReview()
   currentPatternId.value = null
   currentName.value = ''
   saveStatus.value = 'unsaved'
@@ -864,14 +949,47 @@ function exportDrill() {
   )
 }
 
+/**
+ * A file or link waiting on the coach's say-so. Nothing in it is saved until
+ * they press Import in the review.
+ */
+const pendingImport = ref<ImportReview | null>(null)
+
 async function importJson() {
   try {
-    const text = await exporter.pickJsonFile()
-    const added = storage.importBundle(text)
+    pendingImport.value = reviewImport(await exporter.pickJsonFile(), 'file')
+  } catch (error) {
+    notice.value = error instanceof Error ? error.message : 'That file could not be imported.'
+  }
+}
+
+/** A drill link opened the app: fetch or decode what it carries, then review it. */
+async function openImportRequest(request: ImportRequest) {
+  try {
+    const text =
+      request.kind === 'inline' ? await decodeImportPayload(request.payload) : await fetchImport(request.url)
+    pendingImport.value = reviewImport(text, 'link')
+  } catch (error) {
+    notice.value = error instanceof Error ? error.message : 'That link could not be imported.'
+  }
+}
+
+function confirmImport() {
+  const review = pendingImport.value
+  pendingImport.value = null
+  if (!review) return
+  try {
+    const added = storage.importBundle(review.json)
     // importBundle returns both collections, so a file carrying sessions —
     // with or without any new patterns — has to be reported on both counts,
     // not just the one this used to mention.
     notice.value = `Imported ${added.patterns.length} pattern(s) and ${added.sessions.length} session(s).`
+    // Someone who opened a drill link came to see it, so show it: the
+    // session's plan, one press from Review, or else the first drill. A
+    // file is as often a whole backup, where there is no one thing to show.
+    if (review.source !== 'link') return
+    if (added.sessions.length > 0) openSession.value = added.sessions[0]
+    else if (added.patterns.length > 0) onPatternLoaded(added.patterns[0])
   } catch (error) {
     notice.value = error instanceof Error ? error.message : 'That file could not be imported.'
   }
@@ -923,6 +1041,44 @@ function dismissStoreError(): void {
 }
 
 /**
+ * What the banner's message is about, when it is about rows the app could
+ * not read: which store, and the rows as stored. The banner then offers the
+ * two ways out its message promises — keep them as a file, or let them go —
+ * rather than leaving the developer console as the only one.
+ *
+ * Read from storage when the message changes, not on every render: the
+ * rows only change through a write, and every write sets the message.
+ */
+const unreadableRows = ref<{ store: 'patterns' | 'sessions'; text: string } | null>(null)
+watch(
+  storeError,
+  () => {
+    const store = storage.lastError.value ? 'patterns' : sessions.lastError.value ? 'sessions' : null
+    const text =
+      store === 'patterns' ? storage.unreadablePatterns() : store === 'sessions' ? sessions.unreadableSessions() : null
+    unreadableRows.value = store && text ? { store, text } : null
+  },
+  { immediate: true },
+)
+
+const discardPromptOpen = ref(false)
+
+function downloadUnreadable(): void {
+  const rows = unreadableRows.value
+  if (!rows) return
+  const day = new Date().toISOString().slice(0, 10)
+  exporter.downloadText(rows.text, `unreadable-${rows.store}-${day}.json`)
+}
+
+function confirmDiscardUnreadable(): void {
+  discardPromptOpen.value = false
+  const rows = unreadableRows.value
+  if (!rows) return
+  const ok = rows.store === 'patterns' ? storage.discardUnreadablePatterns() : sessions.discardUnreadableSessions()
+  if (ok) notice.value = `Removed the saved ${rows.store} that could not be read.`
+}
+
+/**
  * Whether one of App's own dialogs is up — the only thing the shortcut gate
  * in `onKeydown` reads this for.
  *
@@ -938,6 +1094,8 @@ function dismissStoreError(): void {
  */
 const isDialogOpen = computed(
   () =>
+    pendingImport.value !== null ||
+    discardPromptOpen.value ||
     savePromptOpen.value ||
     deleteDrillPromptOpen.value ||
     resetPromptOpen.value ||
@@ -963,6 +1121,7 @@ const isDialogOpen = computed(
  */
 const tourBlockedByDialog = computed(
   () =>
+    discardPromptOpen.value ||
     savePromptOpen.value ||
     deleteDrillPromptOpen.value ||
     resetPromptOpen.value ||
@@ -991,6 +1150,15 @@ const tourBlockedByDialog = computed(
  * screen" for everything that is not one of the board's own dialogs.
  */
 function closeTopmostDialog(): boolean {
+  // Above everything, the tour included: it can open over a first visit.
+  if (pendingImport.value !== null) {
+    pendingImport.value = null
+    return true
+  }
+  if (discardPromptOpen.value) {
+    discardPromptOpen.value = false
+    return true
+  }
   if (savePromptOpen.value) {
     savePromptOpen.value = false
     return true
@@ -1018,7 +1186,7 @@ function closeTopmostDialog(): boolean {
   // The editor before the library it was opened from: closing both on one
   // press would take away the list a coach was about to go back to.
   if (openSession.value !== null) {
-    openSession.value = null
+    onSessionPlanClosed()
     return true
   }
   if (sessionsOpen.value) {
@@ -1196,12 +1364,22 @@ onMounted(() => {
    * that saved drill. The next stray edit would then autosave over it. The
    * name still costs nothing to show on an empty board, so it is kept.
    */
+  // A drill link: take it out of the address bar straight away, so a reload
+  // does not offer the same import twice, then show what it carries.
+  const importRequest = readImportRequest(window.location)
+  if (importRequest) {
+    clearImportRequest()
+    void openImportRequest(importRequest)
+  }
+
   const park = tutorial.takePark()
   if (park) {
     currentPatternId.value = draft ? park.patternId : null
     currentName.value = park.name
     saveStatus.value = draft && park.patternId ? 'saved' : 'unsaved'
-  } else if (!draft && !tutorial.hasSeen()) {
+  } else if (!draft && !tutorial.hasSeen() && !importRequest) {
+    // Not over a drill link: someone who followed one came to see the
+    // drill, and the tour would bury it.
     startTour()
   }
   window.addEventListener('keydown', onKeydown)
@@ -1288,6 +1466,20 @@ watch(
         v-model:tool="tool"
         v-model:drawColor="drawColor"
         @add-label="promptCentreLabel"
+      />
+
+      <!--
+        On the left, beside the rail, so it never sits under the inspector's
+        tab on the right edge. Gone while presenting: the dock is for
+        checking a session over, not for showing it.
+      -->
+      <SessionDock
+        v-if="reviewSession && !presenting"
+        :session="reviewSession"
+        :current-entry-id="reviewEntryId"
+        @go="goToReviewEntry"
+        @editPlan="editReviewPlan"
+        @close="stopReview"
       />
 
       <div class="stage">
@@ -1390,9 +1582,12 @@ watch(
     <SessionPlan
       :session="openSession"
       :exporting="exporting"
-      @close="openSession = null"
+      @close="onSessionPlanClosed"
       @exportPdf="exportSessionPdf"
+      @review="startReview"
     />
+
+    <ImportReviewDialog :review="pendingImport" @confirm="confirmImport" @cancel="pendingImport = null" />
 
     <HelpPanel :open="helpOpen" @close="helpOpen = false" @startTour="startTour" />
 
@@ -1478,7 +1673,26 @@ watch(
 
     <!-- Both messages dismiss on click; an error the coach cannot clear is worse than a notice. -->
     <p v-if="notice" class="notice" role="status" @click="notice = null">{{ notice }}</p>
-    <p v-if="storeError" class="error" role="status" title="Dismiss" @click="dismissStoreError">{{ storeError }}</p>
+    <div v-if="storeError" class="error" role="status" title="Dismiss" @click="dismissStoreError">
+      <span class="error-text">{{ storeError }}</span>
+      <span v-if="unreadableRows" class="error-actions">
+        <button data-download-unreadable class="chip" @click.stop="downloadUnreadable">Download them</button>
+        <button data-discard-unreadable class="chip" @click.stop="discardPromptOpen = true">Remove them</button>
+      </span>
+    </div>
+
+    <div v-if="discardPromptOpen && unreadableRows" class="overlay" @click.self="discardPromptOpen = false">
+      <div class="prompt" role="dialog" aria-label="Remove what could not be read">
+        <p class="prompt-text">Remove the saved {{ unreadableRows.store }} that could not be read?</p>
+        <p class="hint">Everything that can be read stays. Download them first to keep a copy: once removed, they do not come back.</p>
+        <div class="prompt-actions">
+          <button data-confirm-discard-unreadable class="chip chip--danger" @click="confirmDiscardUnreadable">
+            Remove
+          </button>
+          <button class="chip" @click="discardPromptOpen = false">Cancel</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1647,7 +1861,10 @@ body { font-family: var(--font-ui); background: var(--bg-app); }
  */
 .error {
   margin: 0; padding: 0.6rem 0.9rem; background: var(--error); color: #fff; font-size: 0.85rem; cursor: pointer;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.75rem;
 }
+.error-text { flex: 1 1 16rem; }
+.error-actions { display: flex; gap: 0.4rem; }
 .hint { margin: 0; font-size: 0.8rem; opacity: 0.7; }
 /* Quieter than the error bar beneath it: this one is only ever good news. */
 .notice {

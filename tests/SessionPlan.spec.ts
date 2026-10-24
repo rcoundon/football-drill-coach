@@ -198,3 +198,37 @@ describe('SessionPlan', () => {
     expect(wrapper.find('[data-export-pdf]').attributes('disabled')).toBeDefined()
   })
 })
+
+describe('SessionPlan review', () => {
+  it('starts a review at the first drill still in the library', async () => {
+    const gone = storage.savePattern('Gone', useBoard().snapshot())
+    const kept = storage.savePattern('Rondo', useBoard().snapshot())
+    const session = sessionWith([
+      { patternId: gone.id, minutes: 5 },
+      { patternId: kept.id, minutes: 10 },
+    ])
+    storage.deletePattern(gone.id)
+
+    const wrapper = mount(SessionPlan, { props: { session } })
+    await wrapper.find('[data-review]').trigger('click')
+
+    const [[emitted, entryId]] = wrapper.emitted('review') as [[Session, string]]
+    expect(emitted.id).toBe(session.id)
+    expect(entryId).toBe('e1')
+  })
+
+  it('cannot start a review with no drills to show', () => {
+    const wrapper = mount(SessionPlan, { props: { session: sessionWith([]) } })
+    expect(wrapper.find('[data-review]').attributes('disabled')).toBeDefined()
+  })
+
+  it('opens a drill from its name', async () => {
+    const a = storage.savePattern('Rondo', useBoard().snapshot())
+    const session = sessionWith([{ patternId: a.id, minutes: 10 }])
+
+    const wrapper = mount(SessionPlan, { props: { session } })
+    await wrapper.find('[data-open-drill]').trigger('click')
+
+    expect(wrapper.emitted('review')![0][1]).toBe('e0')
+  })
+})

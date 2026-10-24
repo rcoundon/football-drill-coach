@@ -9,6 +9,7 @@ import {
   durationOf,
   easeInOut,
   gifSchedule,
+  holdOf,
   interpolateFrames,
   lerp,
   pointOnCurve,
@@ -117,6 +118,26 @@ describe('timelineOf', () => {
     expect(line.at(250)).toEqual({ index: 1, t: 0.5 })
   })
 
+  it('parks on a held frame before the move out of it starts', () => {
+    const line = timelineOf([frame({ hold: 300 }), frame({ duration: 400, hold: 200 }), frame({ duration: 600 })])
+    expect(line.total).toBe(1500)
+    expect(line.startOf(0)).toBe(0)
+    expect(line.startOf(1)).toBe(700)
+    expect(line.startOf(2)).toBe(1500)
+    expect(line.at(0)).toEqual({ index: 0, t: 0 })
+    expect(line.at(299)).toEqual({ index: 0, t: 0 })
+    expect(line.at(500)).toEqual({ index: 0, t: 0.5 })
+    expect(line.at(800)).toEqual({ index: 1, t: 0 })
+    expect(line.at(1200)).toEqual({ index: 1, t: 0.5 })
+  })
+
+  it('counts the last frame’s hold, so the drill rests on its final shape', () => {
+    const line = timelineOf([frame(), frame({ duration: 400, hold: 1000 })])
+    expect(line.total).toBe(1400)
+    expect(line.startOf(1)).toBe(400)
+    expect(line.at(1000)).toEqual({ index: 1, t: 0 })
+  })
+
   it('survives an empty frame list rather than throwing', () => {
     const line = timelineOf([])
     expect(line.total).toBe(0)
@@ -207,6 +228,20 @@ describe('interpolateFrames', () => {
   })
 })
 
+describe('holdOf', () => {
+  it('is zero when a frame has none', () => {
+    expect(holdOf([frame()], 0)).toBe(0)
+  })
+
+  it('counts on the first frame, unlike a duration', () => {
+    expect(holdOf([frame({ hold: 500 })], 0)).toBe(500)
+  })
+
+  it('treats a non-positive hold as none', () => {
+    expect(holdOf([frame({ hold: -5 })], 0)).toBe(0)
+  })
+})
+
 describe('gifSchedule', () => {
   /**
    * Derived from GIF_FPS rather than written out. These assertions were
@@ -256,10 +291,52 @@ describe('gifSchedule', () => {
     expect(samples).toEqual([{ atMs: 0, delayMs: GIF_TAIL_MS }])
   })
 
+  it('holds a paused phase as one long sample rather than many identical ones', () => {
+    const samples = gifSchedule([frame({ hold: 1500 }), frame({ duration: 200 })], GIF_FPS)
+    expect(samples[0]).toEqual({ atMs: 0, delayMs: 1500 })
+    expect(samples[1]).toEqual({ atMs: 1500, delayMs: STEP })
+    expect(samples.at(-1)!.atMs).toBe(1700)
+  })
+
+  it('adds the last phase’s hold to the tail', () => {
+    const samples = gifSchedule([frame(), frame({ duration: 200, hold: 1000 })], GIF_FPS)
+    expect(samples.at(-1)).toEqual({ atMs: 1200, delayMs: GIF_TAIL_MS + 1000 })
+  })
+
+  it('cuts a move’s last sample short rather than overrunning into the hold', () => {
+    const samples = gifSchedule([frame(), frame({ duration: 270, hold: 500 }), frame({ duration: 200 })], GIF_FPS)
+    const move = samples.filter((sample) => sample.atMs < 270)
+    expect(move.reduce((sum, sample) => sum + sample.delayMs, 0)).toBe(270)
+  })
+
   it('follows the durations rather than assuming they are equal', () => {
     const samples = gifSchedule([frame(), frame({ duration: 160 }), frame({ duration: 800 })], GIF_FPS)
     expect(samples.at(-1)!.atMs).toBe(960)
     expect(samples).toHaveLength(Math.floor(960 / STEP) + 1)
+  })
+
+  it('keeps the encoded GIF in step with the drill through repeated 1ms holds', () => {
+    // Each 1ms hold has to be encoded as the 20ms minimum. Counting it as 1ms
+    // left every later sample 19ms behind what was actually encoded.
+    const frames = [
+      frame({ hold: 1 }),
+      frame({ duration: 200, hold: 1 }),
+      frame({ duration: 200, hold: 1 }),
+      frame({ duration: 200, hold: 1 }),
+      frame({ duration: 200 }),
+    ]
+    const samples = gifSchedule(frames, GIF_FPS)
+    const total = timelineOf(frames).total
+
+    let encoded = 0
+    for (const sample of samples) {
+      expect(sample.delayMs % 10).toBe(0)
+      expect(sample.delayMs).toBeGreaterThanOrEqual(20)
+      // Never more than one minimum delay out, and never accumulating.
+      expect(Math.abs(encoded - sample.atMs)).toBeLessThanOrEqual(20)
+      encoded += sample.delayMs
+    }
+    expect(Math.abs(encoded - (total + GIF_TAIL_MS))).toBeLessThan(10)
   })
 })
 
